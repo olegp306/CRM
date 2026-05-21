@@ -74,7 +74,7 @@ Estimated coverage of first four cards: 100%.
 - [x] Multi-user session integration for assistant persistence
 - [x] Platform feedback CSV export
 - [x] Platform feedback admin bulk actions
-- [x] Platform feedback release version triage, release notes export, and release planning actions
+- [x] Platform feedback release version triage, release notes export, release planning actions, and release workflow checklist
 - [x] Schedule follow-up assistant action preview and execution
 - [x] Project task update assistant action preview and execution
 - [x] KP document generation assistant action preview and execution

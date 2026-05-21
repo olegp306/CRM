@@ -66,6 +66,21 @@ export type PlatformReleaseActionPlan = PlatformFeedbackBulkUpdatePlan & {
   skippedCount: number;
 };
 
+export type PlatformReleaseWorkflowStep = {
+  label: string;
+  status: "todo" | "active" | "ready" | "done";
+  detail: string;
+};
+
+export type PlatformReleaseWorkflow = {
+  appVersion: string;
+  title: string;
+  totalCount: number;
+  actionableCount: number;
+  plannedCount: number;
+  steps: PlatformReleaseWorkflowStep[];
+};
+
 export function createPlatformInboxSummary({
   feedback,
   actions
@@ -176,6 +191,44 @@ export function createPlatformReleaseActionPlan(
     ...plan,
     appVersion,
     skippedCount: versionFeedback.length - actionableFeedback.length
+  };
+}
+
+export function createPlatformReleaseWorkflow(appVersion: string, feedback: FeedbackItemDraft[]): PlatformReleaseWorkflow {
+  const versionFeedback = feedback.filter((item) => item.appVersion === appVersion);
+  const actionPlan = createPlatformReleaseActionPlan(feedback, { appVersion, event: "plan" });
+  const draft = createPlatformReleaseNotesDraft(appVersion, feedback);
+  const draftItemCount = draft.sections.reduce((count, section) => count + section.items.length, 0);
+  const plannedCount = versionFeedback.filter((item) => item.status === "planned").length;
+
+  return {
+    appVersion,
+    title: `v${appVersion} release workflow`,
+    totalCount: versionFeedback.length,
+    actionableCount: actionPlan.count,
+    plannedCount,
+    steps: [
+      {
+        label: "Capture versioned feedback",
+        status: versionFeedback.length > 0 ? "done" : "todo",
+        detail: `${versionFeedback.length} signals captured`
+      },
+      {
+        label: "Plan actionable items",
+        status: actionPlan.count > 0 ? "active" : "done",
+        detail: actionPlan.count > 0 ? `${actionPlan.count} signals still need planning` : "All actionable signals planned"
+      },
+      {
+        label: "Review release notes draft",
+        status: draftItemCount > 0 ? "active" : "todo",
+        detail: `${draftItemCount} draft items ready`
+      },
+      {
+        label: "Export Markdown notes",
+        status: draftItemCount > 0 ? "ready" : "todo",
+        detail: draftItemCount > 0 ? "Draft can be downloaded" : "Draft needs feedback first"
+      }
+    ]
   };
 }
 

@@ -13,6 +13,7 @@ import {
   filterAuditEvents,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseTriage,
+  createPlatformReleaseWorkflow,
   type AuditReviewFilters,
   type AssistantContext,
   type FeedbackTriageEvent,
@@ -98,7 +99,8 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
       actions
     }),
     releaseTriage: releaseTriage,
-    releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback))
+    releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),
+    releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback))
   };
 }
 

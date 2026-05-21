@@ -23,6 +23,8 @@ export default async function PlatformFeedbackPage({
   );
   const selectedReleaseNotes =
     inbox.releaseNotesDrafts.find((draft) => draft.appVersion === filters.appVersion) ?? inbox.releaseNotesDrafts[0];
+  const selectedReleaseWorkflow =
+    inbox.releaseWorkflows.find((workflow) => workflow.appVersion === filters.appVersion) ?? inbox.releaseWorkflows[0];
 
   return (
     <section className="grid gap-4">
@@ -140,6 +142,27 @@ export default async function PlatformFeedbackPage({
                 <p className="text-sm text-neutral-500">No versioned feedback captured yet.</p>
               )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Release workflow</h3>
+            </div>
+            {selectedReleaseWorkflow ? (
+              <div className="grid gap-3 p-4 text-sm md:grid-cols-4">
+                {selectedReleaseWorkflow.steps.map((step) => (
+                  <div key={step.label} className="rounded-lg border border-neutral-800 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase text-neutral-400">{step.label}</h4>
+                      <span className="rounded-md border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">{step.status}</span>
+                    </div>
+                    <p className="mt-3 text-xs text-neutral-500">{step.detail}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="p-4 text-sm text-neutral-500">No release workflow yet.</p>
+            )}
           </div>
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">

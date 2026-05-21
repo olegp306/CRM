@@ -8,8 +8,10 @@ describe("platform feedback release triage action", () => {
   it("returns release triage data from the platform inbox action", () => {
     expect(actionsSource).toContain("createPlatformReleaseTriage");
     expect(actionsSource).toContain("createPlatformReleaseNotesDraft");
+    expect(actionsSource).toContain("createPlatformReleaseWorkflow");
     expect(actionsSource).toContain("releaseTriage:");
     expect(actionsSource).toContain("releaseNotesDrafts:");
+    expect(actionsSource).toContain("releaseWorkflows:");
   });
 
   it("plans actionable feedback for a selected release version", () => {

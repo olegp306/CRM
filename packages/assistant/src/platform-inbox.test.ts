@@ -9,6 +9,7 @@ import {
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
   createPlatformReleaseTriage,
+  createPlatformReleaseWorkflow,
   filterPlatformFeedback
 } from "./platform-inbox";
 
@@ -171,6 +172,37 @@ describe("platform inbox summary", () => {
       items: [
         { workspaceId: "workspace-1", sourceMessageId: "message-1" },
         { workspaceId: "workspace-1", sourceMessageId: "message-2" }
+      ]
+    });
+  });
+
+  it("creates a release workflow checklist for one app version", () => {
+    expect(
+      createPlatformReleaseWorkflow("0.1.0", [
+        ...feedback,
+        {
+          workspaceId: "workspace-1",
+          sourceThreadId: "thread-4",
+          sourceMessageId: "message-4",
+          type: "support_request",
+          status: "planned",
+          priority: "normal",
+          moduleContext: "documents",
+          role: "member",
+          appVersion: "0.1.0"
+        }
+      ])
+    ).toEqual({
+      appVersion: "0.1.0",
+      title: "v0.1.0 release workflow",
+      totalCount: 3,
+      actionableCount: 2,
+      plannedCount: 1,
+      steps: [
+        { label: "Capture versioned feedback", status: "done", detail: "3 signals captured" },
+        { label: "Plan actionable items", status: "active", detail: "2 signals still need planning" },
+        { label: "Review release notes draft", status: "active", detail: "3 draft items ready" },
+        { label: "Export Markdown notes", status: "ready", detail: "Draft can be downloaded" }
       ]
     });
   });
