@@ -94,3 +94,9 @@ git push origin v0.2.0
 Support, bug, UX feedback, feature requests, and permission-blocked signals store `appVersion`.
 
 This makes it possible to connect a request such as "please add this feature" to the product version where the message was created.
+
+## Release Triage
+
+The platform feedback inbox includes release triage grouped by `appVersion`.
+
+Use it to see which product versions generated the most open support, bug, UX, and feature-request signals before planning the next minor or patch release.

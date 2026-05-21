@@ -109,31 +109,62 @@ export default async function PlatformFeedbackPage({
           </div>
         </aside>
 
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900">
-          <div className="border-b border-neutral-800 px-4 py-3">
-            <h3 className="text-sm font-semibold">Queue</h3>
+        <div className="grid gap-4">
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Release triage</h3>
+            </div>
+            <div className="grid gap-2 p-4 text-sm md:grid-cols-2 xl:grid-cols-3">
+              {inbox.releaseTriage.length > 0 ? (
+                inbox.releaseTriage.map((release) => (
+                  <a
+                    key={release.appVersion}
+                    href={buildFeedbackHref({ ...filters, appVersion: release.appVersion })}
+                    className={`rounded-lg border px-3 py-2 ${filters.appVersion === release.appVersion ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">v{release.appVersion}</span>
+                      <span className="text-xs text-neutral-500">{release.openCount} open</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-neutral-500">
+                      <span>{release.totalCount} total</span>
+                      <span>{release.byType.feature_request ?? 0} feature</span>
+                      <span>{release.byType.bug_report ?? 0} bugs</span>
+                    </div>
+                  </a>
+                ))
+              ) : (
+                <p className="text-sm text-neutral-500">No versioned feedback captured yet.</p>
+              )}
+            </div>
           </div>
-          <div className="divide-y divide-neutral-800">
-            {inbox.rows.length > 0 ? (
-              inbox.rows.map((row) => (
-                <div key={row.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_120px_90px_110px_220px] md:items-center">
-                  <span className="w-fit rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">{row.kind}</span>
-                  <span className="font-medium">{row.label}</span>
-                  <span className="text-neutral-400">{row.moduleContext}</span>
-                  <span className="text-xs font-semibold text-neutral-500">v{row.appVersion}</span>
-                  <span className="text-neutral-400">{row.status}</span>
-                  {row.kind === "feedback" ? (
-                    <FeedbackTriageControls workspaceId={session.workspaceId} sourceMessageId={row.sourceMessageId} />
-                  ) : (
-                    <span className="text-xs text-neutral-600">Action preview</span>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="px-4 py-10 text-center text-sm text-neutral-500">
-                Submit assistant feedback or an action preview from the app shell to populate this queue.
-              </p>
-            )}
+
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Queue</h3>
+            </div>
+            <div className="divide-y divide-neutral-800">
+              {inbox.rows.length > 0 ? (
+                inbox.rows.map((row) => (
+                  <div key={row.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_120px_90px_110px_220px] md:items-center">
+                    <span className="w-fit rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">{row.kind}</span>
+                    <span className="font-medium">{row.label}</span>
+                    <span className="text-neutral-400">{row.moduleContext}</span>
+                    <span className="text-xs font-semibold text-neutral-500">v{row.appVersion}</span>
+                    <span className="text-neutral-400">{row.status}</span>
+                    {row.kind === "feedback" ? (
+                      <FeedbackTriageControls workspaceId={session.workspaceId} sourceMessageId={row.sourceMessageId} />
+                    ) : (
+                      <span className="text-xs text-neutral-600">Action preview</span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="px-4 py-10 text-center text-sm text-neutral-500">
+                  Submit assistant feedback or an action preview from the app shell to populate this queue.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>

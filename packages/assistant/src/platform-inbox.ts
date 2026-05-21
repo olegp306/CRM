@@ -27,6 +27,14 @@ export type PlatformInboxSummary = {
   rows: PlatformInboxRow[];
 };
 
+export type PlatformReleaseTriageRow = {
+  appVersion: string;
+  totalCount: number;
+  openCount: number;
+  byType: Record<string, number>;
+  byStatus: Record<string, number>;
+};
+
 export type PlatformFeedbackBulkUpdatePlan = {
   event: FeedbackTriageEvent;
   count: number;
@@ -126,4 +134,57 @@ export function createPlatformFeedbackBulkUpdatePlan(
       sourceMessageId: item.sourceMessageId
     }))
   };
+}
+
+export function createPlatformReleaseTriage(feedback: FeedbackItemDraft[]): PlatformReleaseTriageRow[] {
+  const rowsByVersion = new Map<string, PlatformReleaseTriageRow>();
+
+  for (const item of feedback) {
+    const appVersion = item.appVersion || "unknown";
+    const row =
+      rowsByVersion.get(appVersion) ??
+      {
+        appVersion,
+        totalCount: 0,
+        openCount: 0,
+        byType: {},
+        byStatus: {}
+      };
+
+    row.totalCount += 1;
+    if (item.status === "new" || item.status === "triaged" || item.status === "planned") {
+      row.openCount += 1;
+    }
+    row.byType[item.type] = (row.byType[item.type] ?? 0) + 1;
+    row.byStatus[item.status] = (row.byStatus[item.status] ?? 0) + 1;
+    rowsByVersion.set(appVersion, row);
+  }
+
+  return Array.from(rowsByVersion.values()).sort((left, right) => compareVersionsDesc(left.appVersion, right.appVersion));
+}
+
+function compareVersionsDesc(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === "unknown") {
+    return 1;
+  }
+
+  if (right === "unknown") {
+    return -1;
+  }
+
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (rightParts[index] ?? 0) - (leftParts[index] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+
+  return left.localeCompare(right);
 }

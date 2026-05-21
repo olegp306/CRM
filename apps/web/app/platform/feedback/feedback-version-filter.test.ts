@@ -10,6 +10,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("appVersion");
     expect(pageSource).toContain("Version");
     expect(pageSource).toContain("currentAppMetadata.version");
+    expect(pageSource).toContain("Release triage");
+    expect(pageSource).toContain("inbox.releaseTriage");
     expect(exportRouteSource).toContain("appVersion: url.searchParams.get(\"appVersion\")");
   });
 });

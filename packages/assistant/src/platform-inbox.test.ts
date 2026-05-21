@@ -5,6 +5,7 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
+  createPlatformReleaseTriage,
   filterPlatformFeedback
 } from "./platform-inbox";
 
@@ -127,5 +128,39 @@ describe("platform inbox summary", () => {
         { workspaceId: "workspace-1", sourceMessageId: "message-2" }
       ]
     });
+  });
+
+  it("groups feedback into release triage summaries by app version", () => {
+    const triage = createPlatformReleaseTriage([
+      ...feedback,
+      {
+        workspaceId: "workspace-1",
+        sourceThreadId: "thread-4",
+        sourceMessageId: "message-4",
+        type: "feature_request",
+        status: "planned",
+        priority: "normal",
+        moduleContext: "projects",
+        role: "admin",
+        appVersion: "0.2.0"
+      }
+    ]);
+
+    expect(triage).toEqual([
+      {
+        appVersion: "0.2.0",
+        totalCount: 1,
+        openCount: 1,
+        byType: { feature_request: 1 },
+        byStatus: { planned: 1 }
+      },
+      {
+        appVersion: "0.1.0",
+        totalCount: 2,
+        openCount: 2,
+        byType: { bug_report: 1, feature_request: 1 },
+        byStatus: { new: 2 }
+      }
+    ]);
   });
 });

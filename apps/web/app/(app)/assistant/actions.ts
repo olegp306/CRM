@@ -10,6 +10,7 @@ import {
   createPlatformFeedbackCsv,
   executeAssistantAction,
   filterAuditEvents,
+  createPlatformReleaseTriage,
   type AuditReviewFilters,
   type AssistantContext,
   type FeedbackTriageEvent,
@@ -81,15 +82,19 @@ export async function listAssistantWorkspaceMemoryAction(workspaceId: string) {
 
 export async function getPlatformInboxSummaryAction(workspaceId: string, filters: PlatformFeedbackFilters = {}) {
   const repository = getAssistantRepository();
-  const [feedback, actions] = await Promise.all([
+  const [feedback, allFeedback, actions] = await Promise.all([
     repository.listFeedback(workspaceId, filters),
+    repository.listFeedback(workspaceId),
     repository.listActions(workspaceId)
   ]);
 
-  return createPlatformInboxSummary({
-    feedback,
-    actions
-  });
+  return {
+    ...createPlatformInboxSummary({
+      feedback,
+      actions
+    }),
+    releaseTriage: createPlatformReleaseTriage(allFeedback)
+  };
 }
 
 export async function exportPlatformFeedbackCsvAction(workspaceId: string, filters: PlatformFeedbackFilters = {}) {
