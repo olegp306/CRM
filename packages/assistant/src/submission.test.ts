@@ -45,7 +45,8 @@ describe("assistant submission orchestration", () => {
       status: "new",
       priority: "normal",
       moduleContext: "assistant",
-      role: "admin"
+      role: "admin",
+      appVersion: "0.1.0"
     });
     expect(result.response).toBe("Captured as feature_request feedback for the platform team.");
   });

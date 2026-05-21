@@ -102,10 +102,11 @@ export default async function PlatformFeedbackPage({
           <div className="divide-y divide-neutral-800">
             {inbox.rows.length > 0 ? (
               inbox.rows.map((row) => (
-                <div key={row.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_120px_110px_220px] md:items-center">
+                <div key={row.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_120px_90px_110px_220px] md:items-center">
                   <span className="w-fit rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">{row.kind}</span>
                   <span className="font-medium">{row.label}</span>
                   <span className="text-neutral-400">{row.moduleContext}</span>
+                  <span className="text-xs font-semibold text-neutral-500">v{row.appVersion}</span>
                   <span className="text-neutral-400">{row.status}</span>
                   {row.kind === "feedback" ? (
                     <FeedbackTriageControls workspaceId={session.workspaceId} sourceMessageId={row.sourceMessageId} />

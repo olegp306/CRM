@@ -56,7 +56,8 @@ describe("assistant persistence draft", () => {
       status: "new",
       priority: "normal",
       moduleContext: "leads",
-      role: "admin"
+      role: "admin",
+      appVersion: "0.1.0"
     });
   });
 

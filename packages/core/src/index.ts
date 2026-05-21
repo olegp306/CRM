@@ -1,5 +1,6 @@
 export * from "./attachments/generated-document-attachment";
 export * from "./attachments/template-attachment";
+export * from "./app/app-metadata";
 export * from "./clients/client-matching";
 export * from "./clients/client-validation";
 export * from "./crm/dictionaries";
