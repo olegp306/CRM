@@ -17,6 +17,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("inbox.releaseNotesDrafts");
     expect(pageSource).toContain("Release workflow");
     expect(pageSource).toContain("inbox.releaseWorkflows");
+    expect(pageSource).toContain("Release readiness");
+    expect(pageSource).toContain("inbox.releaseReadiness");
     expect(pageSource).toContain("Download Markdown");
     expect(pageSource).toContain("ReleaseNotesActions");
     expect(pageSource).toContain("/platform/feedback/release-notes/export");

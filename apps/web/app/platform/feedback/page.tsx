@@ -25,6 +25,8 @@ export default async function PlatformFeedbackPage({
     inbox.releaseNotesDrafts.find((draft) => draft.appVersion === filters.appVersion) ?? inbox.releaseNotesDrafts[0];
   const selectedReleaseWorkflow =
     inbox.releaseWorkflows.find((workflow) => workflow.appVersion === filters.appVersion) ?? inbox.releaseWorkflows[0];
+  const selectedReleaseReadiness =
+    inbox.releaseReadiness.find((readiness) => readiness.appVersion === filters.appVersion) ?? inbox.releaseReadiness[0];
 
   return (
     <section className="grid gap-4">
@@ -142,6 +144,43 @@ export default async function PlatformFeedbackPage({
                 <p className="text-sm text-neutral-500">No versioned feedback captured yet.</p>
               )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Release readiness</h3>
+            </div>
+            {selectedReleaseReadiness ? (
+              <div className="grid gap-4 p-4 text-sm lg:grid-cols-[minmax(0,1fr)_280px]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">
+                      {selectedReleaseReadiness.status}
+                    </span>
+                    <p className="font-semibold">{selectedReleaseReadiness.summary}</p>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {selectedReleaseReadiness.blockers.length > 0 ? (
+                      selectedReleaseReadiness.blockers.map((blocker) => (
+                        <p key={blocker} className="rounded-md bg-neutral-950 px-3 py-2 text-xs text-neutral-400">
+                          {blocker}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="rounded-md bg-neutral-950 px-3 py-2 text-xs text-neutral-400">No release blockers detected.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <Metric label="Signals" value={selectedReleaseReadiness.signals.totalCount} />
+                  <Metric label="Actionable" value={selectedReleaseReadiness.signals.actionableCount} />
+                  <Metric label="Planned" value={selectedReleaseReadiness.signals.plannedCount} />
+                  <Metric label="Draft items" value={selectedReleaseReadiness.signals.draftItemCount} />
+                </div>
+              </div>
+            ) : (
+              <p className="p-4 text-sm text-neutral-500">No release readiness yet.</p>
+            )}
           </div>
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">

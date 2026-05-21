@@ -81,6 +81,19 @@ export type PlatformReleaseWorkflow = {
   steps: PlatformReleaseWorkflowStep[];
 };
 
+export type PlatformReleaseReadiness = {
+  appVersion: string;
+  status: "blocked" | "ready";
+  summary: string;
+  blockers: string[];
+  signals: {
+    totalCount: number;
+    actionableCount: number;
+    plannedCount: number;
+    draftItemCount: number;
+  };
+};
+
 export function createPlatformInboxSummary({
   feedback,
   actions
@@ -229,6 +242,35 @@ export function createPlatformReleaseWorkflow(appVersion: string, feedback: Feed
         detail: draftItemCount > 0 ? "Draft can be downloaded" : "Draft needs feedback first"
       }
     ]
+  };
+}
+
+export function createPlatformReleaseReadiness(appVersion: string, feedback: FeedbackItemDraft[]): PlatformReleaseReadiness {
+  const workflow = createPlatformReleaseWorkflow(appVersion, feedback);
+  const draft = createPlatformReleaseNotesDraft(appVersion, feedback);
+  const draftItemCount = draft.sections.reduce((count, section) => count + section.items.length, 0);
+  const blockers = [
+    ...(workflow.totalCount === 0 ? ["Capture feedback for this version before release review"] : []),
+    ...(workflow.actionableCount > 0 ? ["Plan actionable feedback before release review"] : []),
+    ...(draftItemCount === 0 ? ["Create release note draft items before export"] : [])
+  ];
+
+  return {
+    appVersion,
+    status: blockers.length > 0 ? "blocked" : "ready",
+    summary:
+      workflow.actionableCount > 0
+        ? `${workflow.actionableCount} feedback signals need planning`
+        : blockers.length > 0
+          ? blockers[0]!
+          : "Ready for release note review",
+    blockers,
+    signals: {
+      totalCount: workflow.totalCount,
+      actionableCount: workflow.actionableCount,
+      plannedCount: workflow.plannedCount,
+      draftItemCount
+    }
   };
 }
 

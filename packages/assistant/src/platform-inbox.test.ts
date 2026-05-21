@@ -8,6 +8,7 @@ import {
   createPlatformReleaseActionPlan,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
+  createPlatformReleaseReadiness,
   createPlatformReleaseTriage,
   createPlatformReleaseWorkflow,
   filterPlatformFeedback
@@ -204,6 +205,32 @@ describe("platform inbox summary", () => {
         { label: "Review release notes draft", status: "active", detail: "3 draft items ready" },
         { label: "Export Markdown notes", status: "ready", detail: "Draft can be downloaded" }
       ]
+    });
+  });
+
+  it("summarizes release readiness for one app version", () => {
+    expect(
+      createPlatformReleaseReadiness("0.1.0", [
+        { ...feedback[0]!, status: "planned" },
+        { ...feedback[1]!, status: "planned" }
+      ])
+    ).toEqual({
+      appVersion: "0.1.0",
+      status: "ready",
+      summary: "Ready for release note review",
+      blockers: [],
+      signals: {
+        totalCount: 2,
+        actionableCount: 0,
+        plannedCount: 2,
+        draftItemCount: 2
+      }
+    });
+
+    expect(createPlatformReleaseReadiness("0.1.0", feedback)).toMatchObject({
+      status: "blocked",
+      summary: "2 feedback signals need planning",
+      blockers: ["Plan actionable feedback before release review"]
     });
   });
 
