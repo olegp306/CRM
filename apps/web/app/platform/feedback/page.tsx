@@ -210,7 +210,10 @@ export default async function PlatformFeedbackPage({
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3">
-              <h3 className="text-sm font-semibold">Release history</h3>
+              <div>
+                <h3 className="text-sm font-semibold">Release history</h3>
+                <p className="mt-1 text-xs text-neutral-500">Release history and CSV export follow the selected version filter.</p>
+              </div>
               <a
                 className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
                 href={`/platform/feedback/release-history/export?${releaseHistoryExportParams.toString()}`}

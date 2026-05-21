@@ -117,6 +117,8 @@ The feedback inbox also shows a `Release history` panel sourced from those audit
 
 Use `Export CSV` in the `Release history` panel to download prior release planning actions with version, actor, planned count, and skipped count. When a version filter is selected, the panel and export are scoped to that same `appVersion`.
 
+The panel header states that release history and CSV export follow the selected version filter, so operators can tell when they are looking at a scoped history view.
+
 The same panel summarizes planning event count, total planned items, total skipped items, and planning actor counts for the current history scope.
 
 When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
