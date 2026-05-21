@@ -231,6 +231,14 @@ export default async function PlatformFeedbackPage({
                     View all history
                   </a>
                 ) : null}
+                {filters.appVersion !== currentAppMetadata.version ? (
+                  <a
+                    className="mt-2 inline-flex text-xs font-semibold text-neutral-300 hover:text-white"
+                    href={buildFeedbackHref({ ...filters, appVersion: currentAppMetadata.version })}
+                  >
+                    Current version history
+                  </a>
+                ) : null}
               </div>
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />

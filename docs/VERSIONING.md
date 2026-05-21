@@ -123,6 +123,8 @@ The same panel summarizes the active history scope, planning event count, total 
 
 When a version filter is active, the history scope metric includes `View all history` to clear the version and return to the full release planning timeline.
 
+When another scope is active, the same metric includes `Current version history` to jump to release planning events for `currentAppMetadata.version`.
+
 When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.

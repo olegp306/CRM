@@ -32,6 +32,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("releaseHistoryScope");
     expect(pageSource).toContain("View all history");
     expect(pageSource).toContain("appVersion: undefined");
+    expect(pageSource).toContain("Current version history");
+    expect(pageSource).toContain("appVersion: currentAppMetadata.version");
     expect(pageSource).toContain("/platform/feedback/release-history/export");
     expect(pageSource).toContain("releaseHistoryExportParams");
     expect(pageSource).toContain("filters.appVersion");
