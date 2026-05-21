@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   const csv = await exportPlatformFeedbackCsvAction(session.workspaceId, {
     ...parsePlatformFeedbackFilters({
       status: url.searchParams.get("status") ?? undefined,
-      type: url.searchParams.get("type") ?? undefined
+      type: url.searchParams.get("type") ?? undefined,
+      appVersion: url.searchParams.get("appVersion") ?? undefined
     })
   });
 

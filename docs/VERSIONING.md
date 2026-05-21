@@ -32,6 +32,20 @@ codex/lead-table-inline-editing
 codex/telegram-lead-attachments
 ```
 
+When features are being prepared as a sequence of pull requests, use stacked branches:
+
+1. Finish and push the current feature branch.
+2. Create the next feature branch from the tip of the previous feature branch.
+3. Keep each branch focused so PRs can be merged into `main` in order.
+
+Example:
+
+```text
+main
+  -> codex/feedback-version-filter
+    -> codex/next-feedback-feature
+```
+
 ## Verification Before Merge
 
 Before merging a feature branch into `main`, run:

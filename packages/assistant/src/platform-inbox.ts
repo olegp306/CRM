@@ -5,6 +5,7 @@ import type { AssistantActionWriteDraft } from "./persistence";
 export type PlatformFeedbackFilters = {
   status?: FeedbackItemStatus;
   type?: FeedbackItemIntent;
+  appVersion?: string;
 };
 
 export type PlatformInboxRow = {
@@ -87,6 +88,10 @@ export function filterPlatformFeedback(
     }
 
     if (filters.type && item.type !== filters.type) {
+      return false;
+    }
+
+    if (filters.appVersion && item.appVersion !== filters.appVersion) {
       return false;
     }
 

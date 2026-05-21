@@ -1,5 +1,6 @@
 import { getPlatformInboxSummaryAction } from "@/app/(app)/assistant/actions";
 import { getWorkspaceSession } from "@/app/workspace-session";
+import { currentAppMetadata } from "@app/core";
 import { FeedbackBulkControls } from "./feedback-bulk-controls";
 import { FeedbackTriageControls } from "./feedback-triage-controls";
 import { parsePlatformFeedbackFilters, type PlatformFeedbackSearchParams } from "./filters";
@@ -16,6 +17,9 @@ export default async function PlatformFeedbackPage({
   const filters = parsePlatformFeedbackFilters((await searchParams) ?? {});
   const inbox = await getPlatformInboxSummaryAction(session.workspaceId, filters);
   const feedbackTypes = Object.entries(inbox.feedbackByType);
+  const versionFilters = Array.from(
+    new Set([currentAppMetadata.version, ...inbox.rows.map((row) => row.appVersion).filter((version) => version !== "unknown")])
+  );
 
   return (
     <section className="grid gap-4">
@@ -43,20 +47,17 @@ export default async function PlatformFeedbackPage({
               All feedback
             </a>
             <a
-              href={`/platform/feedback/export?${new URLSearchParams({
-                ...(filters.status ? { status: filters.status } : {}),
-                ...(filters.type ? { type: filters.type } : {})
-              }).toString()}`}
+              href={`/platform/feedback/export?${new URLSearchParams(filters).toString()}`}
               className="rounded-lg border border-neutral-700 px-3 py-2 font-semibold text-neutral-100"
             >
               Export CSV
             </a>
             {statusFilters.map((status) => (
-              <a
-                key={status}
-                href={`/platform/feedback?status=${status}${filters.type ? `&type=${filters.type}` : ""}`}
-                className={`rounded-lg border px-3 py-2 ${filters.status === status ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
-              >
+                <a
+                  key={status}
+                  href={buildFeedbackHref({ ...filters, status })}
+                  className={`rounded-lg border px-3 py-2 ${filters.status === status ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
+                >
                 {status}
               </a>
             ))}
@@ -65,12 +66,25 @@ export default async function PlatformFeedbackPage({
           <h3 className="mt-5 text-sm font-semibold">Signal types</h3>
           <div className="mt-3 grid gap-2 text-sm">
             {typeFilters.map((type) => (
-              <a
-                key={type}
-                href={`/platform/feedback?type=${type}${filters.status ? `&status=${filters.status}` : ""}`}
-                className={`rounded-lg border px-3 py-2 ${filters.type === type ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
-              >
+                <a
+                  key={type}
+                  href={buildFeedbackHref({ ...filters, type })}
+                  className={`rounded-lg border px-3 py-2 ${filters.type === type ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
+                >
                 {type}
+              </a>
+            ))}
+          </div>
+
+          <h3 className="mt-5 text-sm font-semibold">Version</h3>
+          <div className="mt-3 grid gap-2 text-sm">
+            {versionFilters.map((appVersion) => (
+              <a
+                key={appVersion}
+                href={buildFeedbackHref({ ...filters, appVersion })}
+                className={`rounded-lg border px-3 py-2 ${filters.appVersion === appVersion ? "border-neutral-500 bg-neutral-800 text-white" : "border-neutral-800 text-neutral-300"}`}
+              >
+                v{appVersion}
               </a>
             ))}
           </div>
@@ -134,4 +148,15 @@ function Metric({ label, value }: { label: string; value: number }) {
       <p className="text-xs text-neutral-500">{label}</p>
     </div>
   );
+}
+
+function buildFeedbackHref(filters: { status?: string; type?: string; appVersion?: string }) {
+  const params = new URLSearchParams({
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.appVersion ? { appVersion: filters.appVersion } : {})
+  });
+
+  const query = params.toString();
+  return query ? `/platform/feedback?${query}` : "/platform/feedback";
 }

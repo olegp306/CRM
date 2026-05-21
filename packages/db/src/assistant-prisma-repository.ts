@@ -85,7 +85,8 @@ export function createAssistantPrismaRepository(client: AssistantPrismaClientLik
         where: {
           workspaceId,
           ...(filters.status ? { status: filters.status } : {}),
-          ...(filters.type ? { type: filters.type } : {})
+          ...(filters.type ? { type: filters.type } : {}),
+          ...(filters.appVersion ? { appVersion: filters.appVersion } : {})
         },
         orderBy: { updatedAt: "desc" }
       });

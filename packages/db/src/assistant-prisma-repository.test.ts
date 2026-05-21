@@ -207,14 +207,16 @@ describe("assistant Prisma repository", () => {
 
     await repository.listFeedback("workspace-1", {
       status: "planned",
-      type: "feature_request"
+      type: "feature_request",
+      appVersion: "0.1.0"
     });
 
     expect(calls[0]?.args).toEqual({
       where: {
         workspaceId: "workspace-1",
         status: "planned",
-        type: "feature_request"
+        type: "feature_request",
+        appVersion: "0.1.0"
       },
       orderBy: { updatedAt: "desc" }
     });

@@ -98,9 +98,15 @@ describe("platform inbox summary", () => {
     expect(
       filterPlatformFeedback(feedback, {
         status: "new",
-        type: "bug_report"
+        type: "bug_report",
+        appVersion: "0.1.0"
       })
     ).toEqual([expect.objectContaining({ sourceMessageId: "message-2", type: "bug_report" })]);
+  });
+
+  it("filters feedback by app version", () => {
+    expect(filterPlatformFeedback(feedback, { appVersion: "0.1.0" })).toHaveLength(2);
+    expect(filterPlatformFeedback(feedback, { appVersion: "0.2.0" })).toEqual([]);
   });
 
   it("exports feedback rows as CSV", () => {
