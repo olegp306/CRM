@@ -15,6 +15,7 @@ export type PlatformInboxRow = {
   status: string;
   sourceThreadId: string;
   sourceMessageId: string;
+  appVersion: string;
 };
 
 export type PlatformInboxSummary = {
@@ -59,7 +60,8 @@ export function createPlatformInboxSummary({
         moduleContext: item.moduleContext ?? "other",
         status: item.status,
         sourceThreadId: item.sourceThreadId,
-        sourceMessageId: item.sourceMessageId
+        sourceMessageId: item.sourceMessageId,
+        appVersion: item.appVersion
       })),
       ...actions.map((action) => ({
         id: `action-${action.messageId}`,
@@ -68,7 +70,8 @@ export function createPlatformInboxSummary({
         moduleContext: "assistant",
         status: action.status,
         sourceThreadId: action.threadId,
-        sourceMessageId: action.messageId
+        sourceMessageId: action.messageId,
+        appVersion: "unknown"
       }))
     ]
   };
@@ -93,9 +96,9 @@ export function filterPlatformFeedback(
 
 export function createPlatformFeedbackCsv(feedback: FeedbackItemDraft[]): string {
   return [
-    "sourceMessageId,type,status,moduleContext,role",
+    "sourceMessageId,type,status,moduleContext,role,appVersion",
     ...feedback.map((item) =>
-      [item.sourceMessageId, item.type, item.status, item.moduleContext ?? "", item.role ?? ""]
+      [item.sourceMessageId, item.type, item.status, item.moduleContext ?? "", item.role ?? "", item.appVersion]
         .map(escapeCsvCell)
         .join(",")
     )

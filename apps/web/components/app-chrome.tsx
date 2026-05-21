@@ -14,9 +14,10 @@ type AppChromeProps = {
   workspaceName: string;
   workspaceDescription: string;
   userName: string;
+  appVersion: string;
 };
 
-export function AppChrome({ children, primaryStyle, workspaceName, workspaceDescription, userName }: AppChromeProps) {
+export function AppChrome({ children, primaryStyle, workspaceName, workspaceDescription, userName, appVersion }: AppChromeProps) {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const isPending = pendingHref !== null;
@@ -32,7 +33,7 @@ export function AppChrome({ children, primaryStyle, workspaceName, workspaceDesc
       className="grid min-h-screen grid-cols-1 bg-background text-foreground lg:grid-cols-[248px_minmax(0,1fr)]"
       style={primaryStyle}
     >
-      <AppSidebar pathname={pathname} pendingHref={pendingHref} onNavigate={setPendingHref} locale="en" />
+      <AppSidebar pathname={pathname} pendingHref={pendingHref} appVersion={appVersion} onNavigate={setPendingHref} locale="en" />
       <div className="min-w-0">
         <header className="flex h-14 items-center justify-between border-b border-border bg-white px-4 lg:px-6">
           <div>

@@ -30,6 +30,7 @@ export type AssistantPrismaWritePlan = {
     status: string;
     priority: string;
     moduleContext?: string;
+    appVersion: string;
   } | null;
   actionCreate: {
     workspaceId: string;
@@ -81,7 +82,8 @@ export function createAssistantPrismaWritePlan(draft: AssistantPersistenceDraft)
           type: draft.feedback.type,
           status: draft.feedback.status,
           priority: draft.feedback.priority,
-          moduleContext: draft.feedback.moduleContext
+          moduleContext: draft.feedback.moduleContext,
+          appVersion: draft.feedback.appVersion
         }
       : null,
     actionCreate: draft.action

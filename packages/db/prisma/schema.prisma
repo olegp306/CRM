@@ -558,6 +558,7 @@ model FeedbackItem {
   status          FeedbackStatus @default(new)
   priority        String @default("normal")
   moduleContext   String?
+  appVersion      String?
   internalNotes   String?
   externalTaskUrl String?
   createdAt       DateTime @default(now())

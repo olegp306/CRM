@@ -10,10 +10,11 @@ type AppSidebarProps = {
   locale?: SupportedLocale;
   pathname: string;
   pendingHref: string | null;
+  appVersion: string;
   onNavigate: (href: string) => void;
 };
 
-export function AppSidebar({ locale = "en", pathname, pendingHref, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ locale = "en", pathname, pendingHref, appVersion, onNavigate }: AppSidebarProps) {
   const items = getAppNavigationItems(locale);
   const pendingItem = items.find((item) => item.href === pendingHref);
   const displayHref = getNavigationDisplayHref(pathname, pendingHref);
@@ -58,6 +59,7 @@ export function AppSidebar({ locale = "en", pathname, pendingHref, onNavigate }:
           );
         })}
       </nav>
+      <div className="mt-6 border-t border-border pt-4 text-xs font-medium text-muted-foreground">v{appVersion}</div>
     </aside>
   );
 }

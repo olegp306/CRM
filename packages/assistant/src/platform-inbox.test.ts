@@ -17,7 +17,8 @@ const feedback: FeedbackItemDraft[] = [
     status: "new",
     priority: "normal",
     moduleContext: "leads",
-    role: "admin"
+    role: "admin",
+    appVersion: "0.1.0"
   },
   {
     workspaceId: "workspace-1",
@@ -27,7 +28,8 @@ const feedback: FeedbackItemDraft[] = [
     status: "new",
     priority: "normal",
     moduleContext: "clients",
-    role: "manager"
+    role: "manager",
+    appVersion: "0.1.0"
   }
 ];
 
@@ -72,7 +74,8 @@ describe("platform inbox summary", () => {
         kind: "feedback",
         label: "feature_request",
         moduleContext: "leads",
-        status: "new"
+        status: "new",
+        appVersion: "0.1.0"
       }),
       expect.objectContaining({
         id: "feedback-message-2",
@@ -103,8 +106,8 @@ describe("platform inbox summary", () => {
   it("exports feedback rows as CSV", () => {
     expect(createPlatformFeedbackCsv([feedback[0]!])).toBe(
       [
-        "sourceMessageId,type,status,moduleContext,role",
-        "message-1,feature_request,new,leads,admin"
+        "sourceMessageId,type,status,moduleContext,role,appVersion",
+        "message-1,feature_request,new,leads,admin,0.1.0"
       ].join("\n")
     );
   });

@@ -1,4 +1,5 @@
 import type { AssistantIntent } from "./classify-intent";
+import { currentAppMetadata } from "@app/core";
 
 export type FeedbackItemIntent = Extract<
   AssistantIntent,
@@ -23,6 +24,7 @@ export type FeedbackItemDraft = {
   priority: "normal";
   moduleContext?: string;
   role?: string;
+  appVersion: string;
 };
 
 export type FeedbackItemStatus = "new" | "triaged" | "planned" | "transferred" | "declined" | "archived";
@@ -52,6 +54,7 @@ export function createFeedbackItemFromMessage(input: CreateFeedbackItemInput): F
     status: "new",
     priority: "normal",
     moduleContext: input.moduleContext,
-    role: input.role
+    role: input.role,
+    appVersion: currentAppMetadata.version
   };
 }

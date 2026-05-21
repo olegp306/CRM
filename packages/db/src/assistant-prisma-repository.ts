@@ -182,6 +182,7 @@ function toFeedbackItemDraft(row: JsonRow): FeedbackItemDraft {
     status: row.status as FeedbackItemStatus,
     priority: "normal",
     ...(typeof row.moduleContext === "string" ? { moduleContext: row.moduleContext } : {}),
-    ...(typeof row.role === "string" ? { role: row.role } : {})
+    ...(typeof row.role === "string" ? { role: row.role } : {}),
+    appVersion: typeof row.appVersion === "string" ? row.appVersion : "unknown"
   };
 }

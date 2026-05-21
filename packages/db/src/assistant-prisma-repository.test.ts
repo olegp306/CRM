@@ -122,7 +122,8 @@ describe("assistant Prisma repository", () => {
         sourceThreadId: "thread-1",
         sourceMessageId: "message-1",
         type: "feature_request",
-        status: "new"
+        status: "new",
+        appVersion: "0.1.0"
       }
     });
   });
@@ -148,7 +149,8 @@ describe("assistant Prisma repository", () => {
           sourceMessageId: "message-1",
           type: "feature_request",
           status: "new",
-          priority: "normal"
+          priority: "normal",
+          appVersion: "0.1.0"
         }
       ],
       assistantAction: [
@@ -178,9 +180,17 @@ describe("assistant Prisma repository", () => {
 
     await repository.listThreads("workspace-1");
     await repository.listMessages("thread-1");
-    await repository.listFeedback("workspace-1");
+    const listedFeedback = await repository.listFeedback("workspace-1");
     await repository.listActions("workspace-1");
     await repository.listAuditEvents("workspace-1");
+
+    expect(listedFeedback).toEqual([
+      expect.objectContaining({
+        sourceMessageId: "message-1",
+        type: "feature_request",
+        appVersion: "0.1.0"
+      })
+    ]);
 
     expect(calls.map((call) => call.args)).toEqual([
       { where: { workspaceId: "workspace-1" }, orderBy: { updatedAt: "desc" } },
