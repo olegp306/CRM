@@ -209,6 +209,20 @@ export function createPlatformReleaseNotesDraft(
   };
 }
 
+export function createPlatformReleaseNotesMarkdown(draft: PlatformReleaseNotesDraft): string {
+  return [
+    `# ${draft.title}`,
+    "",
+    ...draft.sections.flatMap((section, index) => [
+      `## ${section.title}`,
+      ...(section.items.length > 0
+        ? section.items.map((item) => `- ${item.label} (${item.status}, ${item.sourceMessageId})`)
+        : ["- No items"]),
+      ...(index === draft.sections.length - 1 ? [] : [""])
+    ])
+  ].join("\n");
+}
+
 function toReleaseNotesItem(item: FeedbackItemDraft): PlatformReleaseNotesItem {
   return {
     label: `${item.moduleContext ?? "other"} ${item.type.replace("_", " ")}`,

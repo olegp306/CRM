@@ -106,3 +106,5 @@ The same inbox also shows a release notes draft for the selected version. Draft 
 - feature requests become `Features`;
 - bug reports become `Fixes`;
 - support, UX, and permission-blocked signals become `Support and UX`.
+
+Use `Download Markdown` in the release notes draft panel to export the selected version draft as a Markdown file for planning, support replies, or release notes review.

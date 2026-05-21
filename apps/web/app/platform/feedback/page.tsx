@@ -147,9 +147,17 @@ export default async function PlatformFeedbackPage({
             </div>
             {selectedReleaseNotes ? (
               <div className="grid gap-4 p-4 text-sm">
-                <div>
-                  <p className="font-semibold">{selectedReleaseNotes.title}</p>
-                  <p className="mt-1 text-xs text-neutral-500">Generated from feedback captured for v{selectedReleaseNotes.appVersion}.</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{selectedReleaseNotes.title}</p>
+                    <p className="mt-1 text-xs text-neutral-500">Generated from feedback captured for v{selectedReleaseNotes.appVersion}.</p>
+                  </div>
+                  <a
+                    className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
+                    href={`/platform/feedback/release-notes/export?appVersion=${selectedReleaseNotes.appVersion}`}
+                  >
+                    Download Markdown
+                  </a>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-3">
                   {selectedReleaseNotes.sections.map((section) => (

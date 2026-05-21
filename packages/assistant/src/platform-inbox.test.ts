@@ -6,6 +6,7 @@ import {
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
   createPlatformReleaseNotesDraft,
+  createPlatformReleaseNotesMarkdown,
   createPlatformReleaseTriage,
   filterPlatformFeedback
 } from "./platform-inbox";
@@ -210,5 +211,41 @@ describe("platform inbox summary", () => {
         }
       ]
     });
+  });
+
+  it("renders release notes draft as Markdown", () => {
+    expect(
+      createPlatformReleaseNotesMarkdown({
+        appVersion: "0.1.0",
+        title: "v0.1.0 release notes draft",
+        sections: [
+          {
+            title: "Features",
+            items: [{ label: "leads feature request", sourceMessageId: "message-1", status: "planned" }]
+          },
+          {
+            title: "Fixes",
+            items: []
+          },
+          {
+            title: "Support and UX",
+            items: [{ label: "documents support request", sourceMessageId: "message-5", status: "triaged" }]
+          }
+        ]
+      })
+    ).toBe(
+      [
+        "# v0.1.0 release notes draft",
+        "",
+        "## Features",
+        "- leads feature request (planned, message-1)",
+        "",
+        "## Fixes",
+        "- No items",
+        "",
+        "## Support and UX",
+        "- documents support request (triaged, message-5)"
+      ].join("\n")
+    );
   });
 });
