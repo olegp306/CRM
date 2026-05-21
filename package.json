@@ -1,0 +1,30 @@
+{
+  "name": "crm-saas-v1",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @app/web dev",
+    "dev:turbo": "pnpm --filter @app/web dev -- --turbo",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @app/web build",
+    "build:packages": "pnpm --filter \"./packages/**\" build",
+    "typecheck": "pnpm -r typecheck",
+    "typecheck:web": "pnpm --filter @app/web typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:assistant": "pnpm --filter @app/assistant test",
+    "test:core": "pnpm --filter @app/core test",
+    "worker:telegram": "pnpm --filter @app/integrations worker:telegram",
+    "worker:telegram:loop": "pnpm --filter @app/integrations worker:telegram:loop",
+    "db:up": "docker compose up -d postgres",
+    "db:generate": "pnpm --filter @app/db prisma:generate",
+    "db:migrate": "pnpm --filter @app/db prisma:migrate",
+    "db:deploy": "pnpm --filter @app/db exec prisma migrate deploy --schema prisma/schema.prisma",
+    "db:status": "pnpm --filter @app/db exec prisma migrate status --schema prisma/schema.prisma",
+    "db:seed": "pnpm --filter @app/db seed",
+    "verify:fast": "pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

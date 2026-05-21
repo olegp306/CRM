@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+.env
+.env.*
+!.env.example
+dev-server.log
+dev-server-*.log
+dev-server.*.log
+.local-logs/
+.codex_tmp_content_factory/
+*.tsbuildinfo

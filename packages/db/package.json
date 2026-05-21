@@ -1,0 +1,30 @@
+{
+  "name": "@app/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@app/assistant": "workspace:*",
+    "@app/core": "workspace:*",
+    "@app/documents": "workspace:*",
+    "@prisma/client": "^6.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "prisma": "^6.8.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-crm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_crm
+      POSTGRES_USER: ai_crm
+      POSTGRES_PASSWORD: ai_crm_local_password
+    ports:
+      - "55432:5432"
+    volumes:
+      - ai_crm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_crm -d ai_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ai_crm_postgres_data:

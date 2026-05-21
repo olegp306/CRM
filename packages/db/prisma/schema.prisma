@@ -1,0 +1,602 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkspaceRole {
+  owner
+  admin
+  manager
+  member
+  viewer
+}
+
+enum PlatformRole {
+  platform_admin
+}
+
+enum AssistantIntent {
+  crm_action
+  support_request
+  bug_report
+  feature_request
+  ux_feedback
+  business_process_note
+  permission_blocked
+  other
+}
+
+enum FeedbackStatus {
+  new
+  triaged
+  planned
+  transferred
+  declined
+  archived
+}
+
+enum AttachmentStatus {
+  draft
+  in_review
+  approved
+  sent
+  signed
+  current
+  obsolete
+  archived
+}
+
+model Workspace {
+  id                 String   @id @default(cuid())
+  name               String
+  brandName          String?
+  logoAttachmentId   String?
+  primaryColor       String?
+  plan               String?
+  subscriptionStatus String?
+  trialEndsAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  memberships        WorkspaceMembership[]
+  invites            Invite[]
+  clients            Client[]
+  leads              Lead[]
+  projects           Project[]
+  priceTableRows     PriceTableRow[]
+  coldTargets        ColdTarget[]
+  outreachTouches    OutreachTouch[]
+  contentCases       ContentCase[]
+  contentPublications ContentPublication[]
+  attachments        Attachment[]
+  documentTemplates  DocumentTemplate[]
+  generatedDocuments GeneratedDocument[]
+  assistantThreads   AssistantThread[]
+  assistantActions   AssistantAction[]
+  feedbackItems      FeedbackItem[]
+  integrationAccounts IntegrationAccount[]
+
+  @@index([createdAt])
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String?
+  imageUrl          String?
+  platformRole      PlatformRole?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  memberships       WorkspaceMembership[]
+  assistantMessages AssistantMessage[]
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@unique([userId])
+  @@unique([workspaceId, userId])
+  @@index([workspaceId, role])
+}
+
+model Invite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole
+  token       String        @unique
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, email])
+  @@index([expiresAt])
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  workspaceId String
+  clientId    String
+  createdDate DateTime @default(now())
+  name        String
+  clientType  String
+  language    String?
+  whatsapp    String?
+  email       String?
+  phone       String?
+  address     String?
+  source      String?
+  referredBy  String?
+  notes       String?
+  status      String   @default("active")
+  archivedAt  DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  leads       Lead[]
+  projects    Project[]
+
+  @@unique([workspaceId, clientId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdDate])
+}
+
+model Lead {
+  id                  String   @id @default(cuid())
+  workspaceId         String
+  leadId              String
+  clientRecordId      String?
+  createdDate         DateTime @default(now())
+  temperature         String?
+  requestType         String?
+  urgency             String?
+  budgetEur           Decimal?
+  desiredStart        DateTime?
+  desiredMoveIn       DateTime?
+  bgfM2               Decimal?
+  wohnflaecheM2       Decimal?
+  projectAddress      String?
+  isStandard          Boolean?
+  status              String
+  rawInput            String?
+  missingData         Json?
+  kpGeneratedDocumentId String?
+  kpSentDate          DateTime?
+  followup1Date       DateTime?
+  followupStatus      String?
+  outcome             String?
+  outcomeReason       String?
+  projectRecordId     String?
+  archivedAt          DateTime?
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id])
+  client              Client?   @relation(fields: [clientRecordId], references: [id])
+
+  @@unique([workspaceId, leadId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, followup1Date])
+  @@index([clientRecordId])
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  projectId       String
+  clientRecordId  String?
+  leadRecordId    String?
+  projectName     String
+  projectAddress  String?
+  cadastralNr     String?
+  bgfM2           Decimal?
+  wohnflaecheM2   Decimal?
+  projectType     String?
+  lphScope        String?
+  hasBauvoranfrage Boolean @default(false)
+  hasDenkmalschutz Boolean @default(false)
+  hasBefreiung    Boolean @default(false)
+  totalNetEur      Decimal?
+  totalGrossEur    Decimal?
+  contractDate     DateTime?
+  contractGeneratedDocumentId String?
+  milestone1Status String?
+  milestone2Status String?
+  milestone3Status String?
+  currentPhase     String?
+  status           String   @default("active")
+  notes            String?
+  archivedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+  client           Client?   @relation(fields: [clientRecordId], references: [id])
+  phases           ProjectPhase[]
+  tasks            ProjectTask[]
+  decisions        ProjectDecision[]
+
+  @@unique([workspaceId, projectId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, currentPhase])
+}
+
+model ProjectPhase {
+  id          String @id @default(cuid())
+  projectId   String
+  name        String
+  sortOrder   Int
+  status      String @default("not_started")
+
+  project     Project @relation(fields: [projectId], references: [id])
+  tasks       ProjectTask[]
+
+  @@index([projectId, sortOrder])
+}
+
+model ProjectTask {
+  id              String   @id @default(cuid())
+  projectId       String
+  phaseId         String?
+  title           String
+  description     String?
+  status          String   @default("todo")
+  assigneeUserId  String?
+  dueDate         DateTime?
+  priority        String   @default("normal")
+  blockedByTaskId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project  @relation(fields: [projectId], references: [id])
+  phase           ProjectPhase? @relation(fields: [phaseId], references: [id])
+  checklistItems  ProjectChecklistItem[]
+
+  @@index([projectId, status])
+  @@index([assigneeUserId])
+  @@index([dueDate])
+}
+
+model ProjectChecklistItem {
+  id        String  @id @default(cuid())
+  taskId    String
+  label     String
+  isDone    Boolean @default(false)
+  sortOrder Int
+
+  task      ProjectTask @relation(fields: [taskId], references: [id])
+
+  @@index([taskId, sortOrder])
+}
+
+model ProjectDecision {
+  id                   String   @id @default(cuid())
+  projectId            String
+  title                String
+  decisionText         String
+  context              String?
+  status               String   @default("approved")
+  source               String
+  decidedByUserId      String?
+  decisionDate         DateTime @default(now())
+  relatedPhase         String?
+  relatedTaskId        String?
+  supersedesDecisionId String?
+  createdAt            DateTime @default(now())
+
+  project              Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, decisionDate])
+}
+
+model PriceTableRow {
+  id          String   @id @default(cuid())
+  workspaceId String
+  bgfFromM2   Int
+  bgfToM2     Int
+  wohnflaecheApprox String?
+  lp3NetEur   Decimal?
+  lp4NetEur   Decimal?
+  netEur      Decimal
+  mwst19Eur   Decimal?
+  grossEur    Decimal
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, isActive])
+}
+
+model ColdTarget {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  targetId        String?
+  clientRecordId  String?
+  leadRecordId    String?
+  companyName     String
+  website         String?
+  region          String?
+  address         String?
+  contactPerson   String?
+  contactRole     String?
+  email           String?
+  phone           String?
+  linkedinUrl     String?
+  fitScore        Int?
+  priority        String?
+  notesResearch   String?
+  currentTouch    Int?
+  nextActionDate  DateTime?
+  nextActionType  String?
+  lastTouchDate   DateTime?
+  lastResponse    String?
+  outcome         String?
+  nextReviewDate  DateTime?
+  convertedAt     DateTime?
+  archivedAt      DateTime?
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  touches         OutreachTouch[]
+
+  @@index([workspaceId, nextActionDate])
+  @@index([workspaceId, outcome])
+}
+
+model OutreachTouch {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  coldTargetId  String
+  touchNumber   Int
+  channel       String
+  status        String   @default("pending")
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  coldTarget    ColdTarget @relation(fields: [coldTargetId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([coldTargetId, touchNumber])
+}
+
+model ContentCase {
+  id          String   @id @default(cuid())
+  workspaceId String
+  title       String
+  caseType    String
+  sourceText  String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  drafts      ContentDraft[]
+  publications ContentPublication[]
+
+  @@index([workspaceId, status])
+}
+
+model ContentDraft {
+  id          String   @id @default(cuid())
+  contentCaseId String
+  channel     String
+  body        String
+  status      String   @default("draft")
+  scheduledAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  contentCase ContentCase @relation(fields: [contentCaseId], references: [id])
+  publications ContentPublication[]
+
+  @@index([contentCaseId, channel])
+  @@index([status])
+}
+
+model ContentPublication {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contentCaseId String
+  draftId     String?
+  channel     String
+  status      String   @default("scheduled")
+  externalUrl String?
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  contentCase ContentCase @relation(fields: [contentCaseId], references: [id])
+  draft       ContentDraft? @relation(fields: [draftId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([publishedAt])
+}
+
+model Attachment {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  storageKey      String
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  status          AttachmentStatus @default(draft)
+  source          String
+  createdByUserId String?
+  createdAt       DateTime         @default(now())
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, status])
+}
+
+model DocumentTemplate {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  name             String
+  documentType     String
+  language         String
+  isActive         Boolean @default(true)
+  currentVersionId String?
+  createdAt        DateTime @default(now())
+
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+  versions         DocumentTemplateVersion[]
+
+  @@index([workspaceId, documentType])
+}
+
+model DocumentTemplateVersion {
+  id                   String   @id @default(cuid())
+  templateId            String
+  version               Int
+  attachmentId          String
+  detectedPlaceholders  Json
+  unknownPlaceholders   Json
+  validationStatus      String
+  uploadedByUserId      String?
+  uploadedAt            DateTime @default(now())
+  changeNote            String?
+
+  template              DocumentTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([templateId, version])
+}
+
+model GeneratedDocument {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  documentType      String
+  templateId        String
+  templateVersionId String
+  sourceType        String
+  sourceId          String
+  docxAttachmentId  String?
+  pdfAttachmentId   String?
+  status            String   @default("generated")
+  inputSnapshot     Json
+  warnings          Json?
+  generatedByUserId String?
+  generatedAt       DateTime @default(now())
+
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId, sourceType, sourceId])
+}
+
+model AssistantThread {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  createdByUserId String
+  title           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  messages        AssistantMessage[]
+
+  @@index([workspaceId, updatedAt])
+}
+
+model AssistantMessage {
+  id          String   @id @default(cuid())
+  threadId    String
+  userId      String?
+  role        String
+  content     String
+  context     Json
+  intent      AssistantIntent?
+  createdAt   DateTime @default(now())
+
+  thread      AssistantThread @relation(fields: [threadId], references: [id])
+  user        User? @relation(fields: [userId], references: [id])
+
+  @@index([threadId, createdAt])
+  @@index([intent])
+}
+
+model AssistantAction {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  threadId          String
+  messageId         String?
+  actionType        String
+  preview           Json
+  status            String
+  result            Json?
+  requestedByUserId String
+  confirmedByUserId String?
+  createdAt         DateTime @default(now())
+  executedAt        DateTime?
+
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, messageId])
+  @@index([workspaceId, status])
+  @@index([threadId])
+}
+
+model FeedbackItem {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  sourceThreadId  String
+  sourceMessageId String
+  type            AssistantIntent
+  status          FeedbackStatus @default(new)
+  priority        String @default("normal")
+  moduleContext   String?
+  internalNotes   String?
+  externalTaskUrl String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([sourceThreadId, sourceMessageId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, type])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  actorUserId String?
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model IntegrationAccount {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  provider          String
+  connectedByUserId String
+  encryptedTokens   Json
+  status            String   @default("connected")
+  lastSyncAt        DateTime?
+  lastError         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, provider])
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@app/integrations",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
+    "worker:telegram": "tsx src/telegram/telegram-worker.ts",
+    "worker:telegram:loop": "tsx src/telegram/telegram-worker-loop.ts"
+  },
+  "dependencies": {
+    "@app/core": "workspace:*",
+    "@app/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

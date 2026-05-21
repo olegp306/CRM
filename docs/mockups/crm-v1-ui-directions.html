@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM v1 UI Directions</title>
+  <style>
+    :root {
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --surface-soft: #f0f2ee;
+      --ink: #20211f;
+      --muted: #6f746d;
+      --line: #e2e4df;
+      --accent: #ff5a5f;
+      --accent-2: #0f766e;
+      --accent-3: #d97706;
+      --shadow: 0 18px 48px rgba(32, 33, 31, .10);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      letter-spacing: 0;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 248px minmax(0, 1fr);
+    }
+
+    aside {
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, .78);
+      backdrop-filter: blur(18px);
+      padding: 24px 18px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 720;
+      margin-bottom: 28px;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+    }
+
+    nav { display: grid; gap: 6px; }
+    nav button, .icon-button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      min-height: 40px;
+      border-radius: 8px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font: inherit;
+      cursor: default;
+    }
+    nav button.active {
+      background: var(--surface-soft);
+      color: var(--ink);
+      font-weight: 680;
+    }
+
+    .main {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      max-width: 1420px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.12;
+      font-weight: 760;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .primary, .secondary, .chip {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      min-height: 40px;
+      border-radius: 8px;
+      padding: 0 14px;
+      font: inherit;
+      font-weight: 650;
+      color: var(--ink);
+    }
+    .primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .chip {
+      min-height: 32px;
+      padding: 0 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      min-width: 0;
+    }
+
+    .panel-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 12px;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .lane {
+      background: #fafaf8;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      min-height: 360px;
+    }
+
+    .lane-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .lead-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .lead-card strong {
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border-radius: 999px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    .tag.hot { color: #991b1b; background: #fee2e2; }
+    .tag.ok { color: #115e59; background: #ccfbf1; }
+    .tag.warn { color: #92400e; background: #fef3c7; }
+
+    .side-stack {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .task-list {
+      padding: 8px 18px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .task {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .task:last-child { border-bottom: 0; }
+
+    .dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--surface-soft);
+      color: var(--accent-2);
+      font-size: 14px;
+      font-weight: 740;
+    }
+
+    .task-title {
+      font-weight: 650;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .task-sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .modules {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .module {
+      padding: 16px;
+      min-height: 142px;
+      display: grid;
+      align-content: space-between;
+    }
+
+    .module small {
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .module h3 {
+      margin: 10px 0 8px;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .module p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .design-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .design {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .swatches {
+      display: flex;
+      gap: 6px;
+    }
+    .swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,.08);
+    }
+
+    .mobile-preview {
+      width: 220px;
+      max-width: 100%;
+      margin: 0 auto;
+      border: 8px solid #242424;
+      border-radius: 28px;
+      background: #fff;
+      overflow: hidden;
+      min-height: 430px;
+    }
+
+    .mobile-top {
+      padding: 18px 14px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .mobile-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      gap: 7px;
+    }
+
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      aside {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 14px;
+      }
+      nav {
+        grid-auto-flow: column;
+        overflow-x: auto;
+        justify-content: start;
+      }
+      nav button { white-space: nowrap; }
+      .dashboard, .modules, .design-options { grid-template-columns: 1fr; }
+      .pipeline { grid-template-columns: repeat(4, 78vw); }
+      .topbar { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; }
+      h1 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand"><div class="brand-mark">CRM</div><span>Studio OS</span></div>
+      <nav aria-label="Main navigation">
+        <button class="active">Today</button>
+        <button>Clients</button>
+        <button>Leads</button>
+        <button>Projects</button>
+        <button>Outreach</button>
+        <button>Content</button>
+        <button>Settings</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h1>Рабочий центр архитектурного агентства</h1>
+          <div class="sub">No-name CRM v1: лиды, КП, холодные касания, проектная экосистема и контент в одном аккуратном интерфейсе.</div>
+        </div>
+        <div class="actions">
+          <button class="secondary">Тема</button>
+          <button class="secondary">Импорт</button>
+          <button class="primary">+ Новый intake</button>
+        </div>
+      </section>
+
+      <section class="modules">
+        <article class="panel module">
+          <div><small>L01</small><h3>Lead Intake</h3><p>Сырой вход из Telegram превращается в Client, Lead, КП и follow-up.</p></div>
+          <span class="tag hot">3 follow-up</span>
+        </article>
+        <article class="panel module">
+          <div><small>L02</small><h3>Cold Outreach</h3><p>8 касаний за 6 недель, AI-персонализация и правила возврата.</p></div>
+          <span class="tag warn">12 active</span>
+        </article>
+        <article class="panel module">
+          <div><small>L03</small><h3>Project Ecosystem</h3><p>Запуск проекта: роли, Drive, Telegram topics, Hubstaff, checklist.</p></div>
+          <span class="tag ok">2 running</span>
+        </article>
+        <article class="panel module">
+          <div><small>L04</small><h3>Content Factory</h3><p>Голосовой кейс превращается в черновики для Instagram, Threads, Telegram, LinkedIn.</p></div>
+          <span class="tag">4 drafts</span>
+        </article>
+      </section>
+
+      <section class="dashboard">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Lead pipeline</h2>
+            <div class="meta"><span class="chip">RU / DE</span><span class="chip">BGF lookup</span><span class="chip">KP status</span></div>
+          </div>
+          <div class="pipeline">
+            <div class="lane">
+              <div class="lane-title"><span>Raw</span><span>2</span></div>
+              <div class="lead-card">
+                <strong>Голосовое: EFH в Chiemgau</strong>
+                <div class="meta"><span class="tag">Telegram</span><span class="tag warn">missing BGF</span></div>
+              </div>
+              <div class="lead-card">
+                <strong>PDF от клиента Schmidt</strong>
+                <div class="meta"><span class="tag">DE</span><span class="tag">needs parse</span></div>
+              </div>
+            </div>
+            <div class="lane">
+              <div class="lane-title"><span>Qualified</span><span>3</span></div>
+              <div class="lead-card">
+                <strong>Fam. Ivanov · EFH 145 m²</strong>
+                <div class="meta"><span class="tag ok">standard</span><span class="tag">9.970 €</span></div>
+              </div>
+              <div class="lead-card">
+                <strong>Projektbau Chiemgau</strong>
+                <div class="meta"><span class="tag hot">Bauträger</span><span class="tag">manual KP</span></div>
+              </div>
+            </div>
+            <div class="lane">
+              <div class="lane-title"><span>KP sent</span><span>2</span></div>
+              <div class="lead-card">
+                <strong>Fam. Müller · LP 1–4</strong>
+                <div class="meta"><span class="tag">sent 14.05</span><span class="tag hot">follow-up today</span></div>
+              </div>
+            </div>
+            <div class="lane">
+              <div class="lane-title"><span>Project</span><span>1</span></div>
+              <div class="lead-card">
+                <strong>Heinrich_Fam. Weber</strong>
+                <div class="meta"><span class="tag ok">contract</span><span class="tag">LP 3</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <div class="side-stack">
+          <article class="panel">
+            <div class="panel-head"><h2>Today</h2><span class="chip">21 May</span></div>
+            <div class="task-list">
+              <div class="task"><div class="dot">1</div><div><div class="task-title">Follow-up по КП</div><div class="task-sub">Черновик письма RU/DE готов</div></div><span class="tag hot">now</span></div>
+              <div class="task"><div class="dot">2</div><div><div class="task-title">Cold touch 4</div><div class="task-sub">Email: useful material, Chiemgau</div></div><span class="tag">L02</span></div>
+              <div class="task"><div class="dot">3</div><div><div class="task-title">Проверить черновики постов</div><div class="task-sub">Instagram, Threads, Telegram</div></div><span class="tag">L04</span></div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head"><h2>Mobile first</h2><span class="chip">preview</span></div>
+            <div style="padding:16px">
+              <div class="mobile-preview">
+                <div class="mobile-top">Today · Studio OS</div>
+                <div class="mobile-body">
+                  <div class="mobile-card"><strong>KP follow-up</strong><span class="tag hot">today</span><small>Fam. Müller · DE draft ready</small></div>
+                  <div class="mobile-card"><strong>New voice intake</strong><span class="tag warn">needs BGF</span><small>Ask 2 missing questions</small></div>
+                  <div class="mobile-card"><strong>Start project</strong><span class="tag ok">ready</span><small>Create Drive + Telegram topics</small></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="design-options">
+        <article class="panel design">
+          <div class="swatches"><span class="swatch" style="background:#ff5a5f"></span><span class="swatch" style="background:#f7f7f4"></span><span class="swatch" style="background:#20211f"></span></div>
+          <h2>Option A · Airbnb Calm</h2>
+          <p class="sub">Светлый, воздушный, дружелюбный. Хорош для CRM, которой будут пользоваться каждый день без ощущения “корпоративной системы”.</p>
+        </article>
+        <article class="panel design">
+          <div class="swatches"><span class="swatch" style="background:#0f766e"></span><span class="swatch" style="background:#eef6f4"></span><span class="swatch" style="background:#1f2933"></span></div>
+          <h2>Option B · Studio Desk</h2>
+          <p class="sub">Более профессиональный SaaS-вид: много таблиц, фильтров, задач, статусов. Лучше, если CRM быстро станет операционным центром команды.</p>
+        </article>
+        <article class="panel design">
+          <div class="swatches"><span class="swatch" style="background:#d97706"></span><span class="swatch" style="background:#fafaf8"></span><span class="swatch" style="background:#334155"></span></div>
+          <h2>Option C · Editorial OS</h2>
+          <p class="sub">Чуть более авторский и “архитектурный”: хорошо для контент-фабрики и проектных карточек, но требует аккуратности с плотными таблицами.</p>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

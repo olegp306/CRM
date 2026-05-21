@@ -1,0 +1,5 @@
+ALTER TABLE "PriceTableRow"
+ADD COLUMN "wohnflaecheApprox" TEXT,
+ADD COLUMN "lp3NetEur" DECIMAL(65,30),
+ADD COLUMN "lp4NetEur" DECIMAL(65,30),
+ADD COLUMN "mwst19Eur" DECIMAL(65,30);
