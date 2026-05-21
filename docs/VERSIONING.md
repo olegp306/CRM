@@ -117,7 +117,7 @@ The feedback inbox also shows a `Release history` panel sourced from those audit
 
 Use `Export CSV` in the `Release history` panel to download prior release planning actions with version, actor, planned count, and skipped count. When a version filter is selected, the panel and export are scoped to that same `appVersion`.
 
-The same panel summarizes planning event count, total planned items, and total skipped items for the current history scope.
+The same panel summarizes planning event count, total planned items, total skipped items, and planning actor counts for the current history scope.
 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 

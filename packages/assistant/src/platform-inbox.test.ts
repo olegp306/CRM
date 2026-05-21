@@ -357,7 +357,11 @@ describe("platform inbox summary", () => {
     ).toEqual({
       planningEventCount: 2,
       plannedCount: 4,
-      skippedCount: 1
+      skippedCount: 1,
+      actorCounts: {
+        "user-1": 1,
+        system: 1
+      }
     });
   });
 

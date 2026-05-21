@@ -265,7 +265,7 @@ Previous R3 verification:
   - `/platform/audit` parsing and action filters include release planning events.
 - Release planning history:
   - `/platform/feedback` now includes a `Release history` panel sourced from `platform.release.planned` audit events.
-  - The platform inbox summary returns `releaseHistory` with version, actor, planned count, skipped count, and `releaseHistorySummary` totals.
+  - The platform inbox summary returns `releaseHistory` with version, actor, planned count, skipped count, and `releaseHistorySummary` totals plus actor counts.
   - `/platform/feedback/release-history/export` exports release planning history as CSV and follows the selected `appVersion` filter.
 - `pnpm --filter @app/core typecheck`: passed.
 - `pnpm --filter @app/assistant typecheck`: passed.

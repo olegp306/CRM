@@ -106,6 +106,7 @@ export type PlatformReleaseHistorySummary = {
   planningEventCount: number;
   plannedCount: number;
   skippedCount: number;
+  actorCounts: Record<string, number>;
 };
 
 export function createPlatformInboxSummary({
@@ -315,10 +316,17 @@ export function createPlatformReleaseHistoryCsv(history: PlatformReleaseHistoryI
 }
 
 export function createPlatformReleaseHistorySummary(history: PlatformReleaseHistoryItem[]): PlatformReleaseHistorySummary {
+  const actorCounts = history.reduce<Record<string, number>>((counts, item) => {
+    const actor = item.actorUserId ?? "system";
+    counts[actor] = (counts[actor] ?? 0) + 1;
+    return counts;
+  }, {});
+
   return {
     planningEventCount: history.length,
     plannedCount: history.reduce((count, item) => count + item.plannedCount, 0),
-    skippedCount: history.reduce((count, item) => count + item.skippedCount, 0)
+    skippedCount: history.reduce((count, item) => count + item.skippedCount, 0),
+    actorCounts
   };
 }
 

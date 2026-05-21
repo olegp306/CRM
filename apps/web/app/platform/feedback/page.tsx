@@ -30,6 +30,7 @@ export default async function PlatformFeedbackPage({
   const releaseHistoryExportParams = new URLSearchParams({
     ...(filters.appVersion ? { appVersion: filters.appVersion } : {})
   });
+  const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
 
   return (
     <section className="grid gap-4">
@@ -221,6 +222,20 @@ export default async function PlatformFeedbackPage({
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
               <Metric label="Skipped" value={inbox.releaseHistorySummary.skippedCount} />
+            </div>
+            <div className="border-b border-neutral-800 px-4 py-3 text-xs">
+              <h4 className="font-semibold uppercase text-neutral-400">Planning actors</h4>
+              {releaseHistoryActors.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {releaseHistoryActors.map(([actor, count]) => (
+                    <span key={actor} className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300">
+                      {actor}: {count}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-neutral-500">No planning actors yet.</p>
+              )}
             </div>
             <div className="divide-y divide-neutral-800">
               {inbox.releaseHistory.length > 0 ? (
