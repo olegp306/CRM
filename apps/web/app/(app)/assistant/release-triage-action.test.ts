@@ -18,7 +18,9 @@ describe("platform feedback release triage action", () => {
     expect(actionsSource).toContain("releaseReadiness:");
     expect(actionsSource).toContain("releaseWorkflows:");
     expect(actionsSource).toContain("releaseHistory:");
+    expect(actionsSource).toContain("createPlatformReleaseHistory(auditEvents, filters.appVersion");
     expect(actionsSource).toContain("exportPlatformReleaseHistoryCsvAction");
+    expect(actionsSource).toContain("createPlatformReleaseHistory(auditEvents, filters)");
   });
 
   it("plans actionable feedback for a selected release version", () => {

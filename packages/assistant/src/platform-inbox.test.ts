@@ -279,6 +279,39 @@ describe("platform inbox summary", () => {
     ]);
   });
 
+  it("filters release planning history by app version", () => {
+    expect(
+      createPlatformReleaseHistory(
+        [
+          {
+            workspaceId: "workspace-1",
+            actorUserId: "user-1",
+            action: "platform.release.planned",
+            targetType: "PlatformRelease",
+            targetId: "0.2.0",
+            metadata: { appVersion: "0.2.0", plannedCount: 1, skippedCount: 0 }
+          },
+          {
+            workspaceId: "workspace-1",
+            actorUserId: "user-2",
+            action: "platform.release.planned",
+            targetType: "PlatformRelease",
+            targetId: "0.1.0",
+            metadata: { appVersion: "0.1.0", plannedCount: 2, skippedCount: 1 }
+          }
+        ],
+        { appVersion: "0.1.0" }
+      )
+    ).toEqual([
+      {
+        appVersion: "0.1.0",
+        actorUserId: "user-2",
+        plannedCount: 2,
+        skippedCount: 1
+      }
+    ]);
+  });
+
   it("exports release planning history as CSV", () => {
     expect(
       createPlatformReleaseHistoryCsv([

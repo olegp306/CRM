@@ -27,6 +27,9 @@ export default async function PlatformFeedbackPage({
     inbox.releaseWorkflows.find((workflow) => workflow.appVersion === filters.appVersion) ?? inbox.releaseWorkflows[0];
   const selectedReleaseReadiness =
     inbox.releaseReadiness.find((readiness) => readiness.appVersion === filters.appVersion) ?? inbox.releaseReadiness[0];
+  const releaseHistoryExportParams = new URLSearchParams({
+    ...(filters.appVersion ? { appVersion: filters.appVersion } : {})
+  });
 
   return (
     <section className="grid gap-4">
@@ -209,7 +212,7 @@ export default async function PlatformFeedbackPage({
               <h3 className="text-sm font-semibold">Release history</h3>
               <a
                 className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
-                href="/platform/feedback/release-history/export"
+                href={`/platform/feedback/release-history/export?${releaseHistoryExportParams.toString()}`}
               >
                 Export CSV
               </a>

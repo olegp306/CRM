@@ -115,7 +115,7 @@ Release planning writes a `platform.release.planned` audit event with the select
 
 The feedback inbox also shows a `Release history` panel sourced from those audit events, making prior planning actions visible alongside triage, readiness, workflow, and release notes draft panels.
 
-Use `Export CSV` in the `Release history` panel to download prior release planning actions with version, actor, planned count, and skipped count.
+Use `Export CSV` in the `Release history` panel to download prior release planning actions with version, actor, planned count, and skipped count. When a version filter is selected, the panel and export are scoped to that same `appVersion`.
 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 

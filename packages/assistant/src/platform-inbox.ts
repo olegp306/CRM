@@ -282,7 +282,10 @@ export function createPlatformReleaseReadiness(appVersion: string, feedback: Fee
   };
 }
 
-export function createPlatformReleaseHistory(events: AssistantAuditEventDraft[]): PlatformReleaseHistoryItem[] {
+export function createPlatformReleaseHistory(
+  events: AssistantAuditEventDraft[],
+  filters: Pick<PlatformFeedbackFilters, "appVersion"> = {}
+): PlatformReleaseHistoryItem[] {
   return events
     .filter((event) => event.action === "platform.release.planned")
     .map((event) => ({
@@ -290,7 +293,8 @@ export function createPlatformReleaseHistory(events: AssistantAuditEventDraft[])
       actorUserId: event.actorUserId,
       plannedCount: typeof event.metadata.plannedCount === "number" ? event.metadata.plannedCount : 0,
       skippedCount: typeof event.metadata.skippedCount === "number" ? event.metadata.skippedCount : 0
-    }));
+    }))
+    .filter((item) => (filters.appVersion ? item.appVersion === filters.appVersion : true));
 }
 
 export function createPlatformReleaseHistoryCsv(history: PlatformReleaseHistoryItem[]): string {

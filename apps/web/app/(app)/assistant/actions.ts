@@ -107,7 +107,7 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),
     releaseReadiness: releaseTriage.map((release) => createPlatformReleaseReadiness(release.appVersion, allFeedback)),
     releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback)),
-    releaseHistory: createPlatformReleaseHistory(auditEvents)
+    releaseHistory: createPlatformReleaseHistory(auditEvents, filters.appVersion ? { appVersion: filters.appVersion } : {})
   };
 }
 
@@ -117,10 +117,13 @@ export async function exportPlatformFeedbackCsvAction(workspaceId: string, filte
   return createPlatformFeedbackCsv(feedback);
 }
 
-export async function exportPlatformReleaseHistoryCsvAction(workspaceId: string) {
+export async function exportPlatformReleaseHistoryCsvAction(
+  workspaceId: string,
+  filters: Pick<PlatformFeedbackFilters, "appVersion"> = {}
+) {
   const auditEvents = await getAssistantRepository().listAuditEvents(workspaceId);
 
-  return createPlatformReleaseHistoryCsv(createPlatformReleaseHistory(auditEvents));
+  return createPlatformReleaseHistoryCsv(createPlatformReleaseHistory(auditEvents, filters));
 }
 
 export async function bulkUpdateFeedbackStatusAction({

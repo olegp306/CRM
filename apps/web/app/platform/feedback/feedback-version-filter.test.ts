@@ -23,6 +23,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("Release history");
     expect(pageSource).toContain("inbox.releaseHistory");
     expect(pageSource).toContain("/platform/feedback/release-history/export");
+    expect(pageSource).toContain("releaseHistoryExportParams");
+    expect(pageSource).toContain("filters.appVersion");
     expect(pageSource).toContain("Download Markdown");
     expect(pageSource).toContain("ReleaseNotesActions");
     expect(pageSource).toContain("/platform/feedback/release-notes/export");
@@ -32,6 +34,7 @@ describe("platform feedback version filter wiring", () => {
     expect(releaseActionsSource).toContain("router.refresh");
     expect(exportRouteSource).toContain("appVersion: url.searchParams.get(\"appVersion\")");
     expect(historyExportRouteSource).toContain("exportPlatformReleaseHistoryCsvAction");
+    expect(historyExportRouteSource).toContain("appVersion: url.searchParams.get(\"appVersion\")");
     expect(historyExportRouteSource).toContain("text/csv; charset=utf-8");
   });
 });
