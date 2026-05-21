@@ -223,7 +223,15 @@ export default async function PlatformFeedbackPage({
               </a>
             </div>
             <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-4 text-xs md:grid-cols-4">
-              <TextMetric label="History scope" value={releaseHistoryScope} />
+              <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+                <p className="truncate text-sm font-semibold">{releaseHistoryScope}</p>
+                <p className="text-xs text-neutral-500">History scope</p>
+                {filters.appVersion ? (
+                  <a className="mt-2 inline-flex text-xs font-semibold text-neutral-300 hover:text-white" href={buildFeedbackHref({ ...filters, appVersion: undefined })}>
+                    View all history
+                  </a>
+                ) : null}
+              </div>
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
               <Metric label="Skipped" value={inbox.releaseHistorySummary.skippedCount} />
@@ -344,15 +352,6 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-lg font-semibold">{value}</p>
-      <p className="text-xs text-neutral-500">{label}</p>
-    </div>
-  );
-}
-
-function TextMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
-      <p className="truncate text-sm font-semibold">{value}</p>
       <p className="text-xs text-neutral-500">{label}</p>
     </div>
   );
