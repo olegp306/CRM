@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const pageSource = readFileSync(join(__dirname, "page.tsx"), "utf8");
+const releaseActionsSource = readFileSync(join(__dirname, "release-notes-actions.tsx"), "utf8");
 const exportRouteSource = readFileSync(join(__dirname, "export", "route.ts"), "utf8");
 
 describe("platform feedback version filter wiring", () => {
@@ -15,7 +16,11 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("Release notes draft");
     expect(pageSource).toContain("inbox.releaseNotesDrafts");
     expect(pageSource).toContain("Download Markdown");
+    expect(pageSource).toContain("ReleaseNotesActions");
     expect(pageSource).toContain("/platform/feedback/release-notes/export");
+    expect(releaseActionsSource).toContain("Plan release items");
+    expect(releaseActionsSource).toContain("planReleaseFeedbackAction");
+    expect(releaseActionsSource).toContain("router.refresh");
     expect(exportRouteSource).toContain("appVersion: url.searchParams.get(\"appVersion\")");
   });
 });

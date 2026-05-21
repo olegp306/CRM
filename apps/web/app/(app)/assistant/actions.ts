@@ -8,6 +8,7 @@ import {
   createOpenAIAssistantSubmissionResult,
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
+  createPlatformReleaseActionPlan,
   executeAssistantAction,
   filterAuditEvents,
   createPlatformReleaseNotesDraft,
@@ -127,6 +128,27 @@ export async function bulkUpdateFeedbackStatusAction({
     plan,
     updatedCount: updates.filter(Boolean).length,
     summary: await getPlatformInboxSummaryAction(workspaceId, filters)
+  };
+}
+
+export async function planReleaseFeedbackAction({
+  workspaceId,
+  appVersion
+}: {
+  workspaceId: string;
+  appVersion: string;
+}) {
+  const repository = getAssistantRepository();
+  const feedback = await repository.listFeedback(workspaceId);
+  const plan = createPlatformReleaseActionPlan(feedback, { appVersion, event: "plan" });
+  const updates = await Promise.all(
+    plan.items.map((item) => repository.updateFeedbackStatus(item.workspaceId, item.sourceMessageId, plan.event))
+  );
+
+  return {
+    plan,
+    updatedCount: updates.filter(Boolean).length,
+    summary: await getPlatformInboxSummaryAction(workspaceId, { appVersion })
   };
 }
 

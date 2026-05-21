@@ -11,4 +11,11 @@ describe("platform feedback release triage action", () => {
     expect(actionsSource).toContain("releaseTriage:");
     expect(actionsSource).toContain("releaseNotesDrafts:");
   });
+
+  it("plans actionable feedback for a selected release version", () => {
+    expect(actionsSource).toContain("createPlatformReleaseActionPlan");
+    expect(actionsSource).toContain("planReleaseFeedbackAction");
+    expect(actionsSource).toContain("appVersion");
+    expect(actionsSource).toContain("plan.items.map");
+  });
 });

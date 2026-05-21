@@ -4,6 +4,7 @@ import { currentAppMetadata } from "@app/core";
 import { FeedbackBulkControls } from "./feedback-bulk-controls";
 import { FeedbackTriageControls } from "./feedback-triage-controls";
 import { parsePlatformFeedbackFilters, type PlatformFeedbackSearchParams } from "./filters";
+import { ReleaseNotesActions } from "./release-notes-actions";
 
 const statusFilters = ["new", "triaged", "planned", "transferred", "declined", "archived"] as const;
 const typeFilters = ["support_request", "bug_report", "feature_request", "ux_feedback", "permission_blocked"] as const;
@@ -152,12 +153,15 @@ export default async function PlatformFeedbackPage({
                     <p className="font-semibold">{selectedReleaseNotes.title}</p>
                     <p className="mt-1 text-xs text-neutral-500">Generated from feedback captured for v{selectedReleaseNotes.appVersion}.</p>
                   </div>
-                  <a
-                    className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
-                    href={`/platform/feedback/release-notes/export?appVersion=${selectedReleaseNotes.appVersion}`}
-                  >
-                    Download Markdown
-                  </a>
+                  <div className="flex flex-wrap gap-2">
+                    <ReleaseNotesActions workspaceId={session.workspaceId} appVersion={selectedReleaseNotes.appVersion} />
+                    <a
+                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
+                      href={`/platform/feedback/release-notes/export?appVersion=${selectedReleaseNotes.appVersion}`}
+                    >
+                      Download Markdown
+                    </a>
+                  </div>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-3">
                   {selectedReleaseNotes.sections.map((section) => (

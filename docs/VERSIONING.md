@@ -108,3 +108,5 @@ The same inbox also shows a release notes draft for the selected version. Draft 
 - support, UX, and permission-blocked signals become `Support and UX`.
 
 Use `Download Markdown` in the release notes draft panel to export the selected version draft as a Markdown file for planning, support replies, or release notes review.
+
+Use `Plan release items` in the same panel to move actionable `new` and `triaged` feedback for the selected version into `planned` without touching already planned, transferred, declined, archived, or other-version signals.

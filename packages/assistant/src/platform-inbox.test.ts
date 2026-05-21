@@ -5,6 +5,7 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
+  createPlatformReleaseActionPlan,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
   createPlatformReleaseTriage,
@@ -125,6 +126,48 @@ describe("platform inbox summary", () => {
     expect(createPlatformFeedbackBulkUpdatePlan(feedback, "archive")).toEqual({
       event: "archive",
       count: 2,
+      items: [
+        { workspaceId: "workspace-1", sourceMessageId: "message-1" },
+        { workspaceId: "workspace-1", sourceMessageId: "message-2" }
+      ]
+    });
+  });
+
+  it("creates a release action plan for actionable feedback in one app version", () => {
+    expect(
+      createPlatformReleaseActionPlan(
+        [
+          ...feedback,
+          {
+            workspaceId: "workspace-1",
+            sourceThreadId: "thread-4",
+            sourceMessageId: "message-4",
+            type: "feature_request",
+            status: "planned",
+            priority: "normal",
+            moduleContext: "projects",
+            role: "admin",
+            appVersion: "0.1.0"
+          },
+          {
+            workspaceId: "workspace-1",
+            sourceThreadId: "thread-5",
+            sourceMessageId: "message-5",
+            type: "feature_request",
+            status: "new",
+            priority: "normal",
+            moduleContext: "projects",
+            role: "admin",
+            appVersion: "0.2.0"
+          }
+        ],
+        { appVersion: "0.1.0", event: "plan" }
+      )
+    ).toEqual({
+      event: "plan",
+      appVersion: "0.1.0",
+      count: 2,
+      skippedCount: 1,
       items: [
         { workspaceId: "workspace-1", sourceMessageId: "message-1" },
         { workspaceId: "workspace-1", sourceMessageId: "message-2" }

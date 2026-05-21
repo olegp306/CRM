@@ -1,5 +1,5 @@
 import type { FeedbackItemDraft, FeedbackItemIntent, FeedbackItemStatus } from "./feedback-item";
-import type { FeedbackTriageEvent } from "./feedback-triage";
+import { canTransitionFeedbackStatus, type FeedbackTriageEvent } from "./feedback-triage";
 import type { AssistantActionWriteDraft } from "./persistence";
 
 export type PlatformFeedbackFilters = {
@@ -59,6 +59,11 @@ export type PlatformFeedbackBulkUpdatePlan = {
     workspaceId: string;
     sourceMessageId: string;
   }>;
+};
+
+export type PlatformReleaseActionPlan = PlatformFeedbackBulkUpdatePlan & {
+  appVersion: string;
+  skippedCount: number;
 };
 
 export function createPlatformInboxSummary({
@@ -150,6 +155,27 @@ export function createPlatformFeedbackBulkUpdatePlan(
       workspaceId: item.workspaceId,
       sourceMessageId: item.sourceMessageId
     }))
+  };
+}
+
+export function createPlatformReleaseActionPlan(
+  feedback: FeedbackItemDraft[],
+  {
+    appVersion,
+    event
+  }: {
+    appVersion: string;
+    event: FeedbackTriageEvent;
+  }
+): PlatformReleaseActionPlan {
+  const versionFeedback = feedback.filter((item) => item.appVersion === appVersion);
+  const actionableFeedback = versionFeedback.filter((item) => canTransitionFeedbackStatus(item.status, event));
+  const plan = createPlatformFeedbackBulkUpdatePlan(actionableFeedback, event);
+
+  return {
+    ...plan,
+    appVersion,
+    skippedCount: versionFeedback.length - actionableFeedback.length
   };
 }
 
