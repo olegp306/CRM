@@ -11,6 +11,7 @@ import {
   createPlatformReleaseActionPlan,
   createPlatformReleaseHistory,
   createPlatformReleaseHistoryCsv,
+  createPlatformReleaseHistorySummary,
   createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
@@ -97,6 +98,7 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
   ]);
 
   const releaseTriage = createPlatformReleaseTriage(allFeedback);
+  const releaseHistory = createPlatformReleaseHistory(auditEvents, filters.appVersion ? { appVersion: filters.appVersion } : {});
 
   return {
     ...createPlatformInboxSummary({
@@ -107,7 +109,8 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),
     releaseReadiness: releaseTriage.map((release) => createPlatformReleaseReadiness(release.appVersion, allFeedback)),
     releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback)),
-    releaseHistory: createPlatformReleaseHistory(auditEvents, filters.appVersion ? { appVersion: filters.appVersion } : {})
+    releaseHistory: releaseHistory,
+    releaseHistorySummary: createPlatformReleaseHistorySummary(releaseHistory)
   };
 }
 

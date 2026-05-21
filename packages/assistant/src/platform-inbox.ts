@@ -102,6 +102,12 @@ export type PlatformReleaseHistoryItem = {
   skippedCount: number;
 };
 
+export type PlatformReleaseHistorySummary = {
+  planningEventCount: number;
+  plannedCount: number;
+  skippedCount: number;
+};
+
 export function createPlatformInboxSummary({
   feedback,
   actions
@@ -306,6 +312,14 @@ export function createPlatformReleaseHistoryCsv(history: PlatformReleaseHistoryI
         .join(",")
     )
   ].join("\n");
+}
+
+export function createPlatformReleaseHistorySummary(history: PlatformReleaseHistoryItem[]): PlatformReleaseHistorySummary {
+  return {
+    planningEventCount: history.length,
+    plannedCount: history.reduce((count, item) => count + item.plannedCount, 0),
+    skippedCount: history.reduce((count, item) => count + item.skippedCount, 0)
+  };
 }
 
 export function createPlatformReleaseTriage(feedback: FeedbackItemDraft[]): PlatformReleaseTriageRow[] {

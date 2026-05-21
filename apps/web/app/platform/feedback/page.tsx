@@ -217,6 +217,11 @@ export default async function PlatformFeedbackPage({
                 Export CSV
               </a>
             </div>
+            <div className="grid grid-cols-3 gap-2 border-b border-neutral-800 p-4 text-xs">
+              <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
+              <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
+              <Metric label="Skipped" value={inbox.releaseHistorySummary.skippedCount} />
+            </div>
             <div className="divide-y divide-neutral-800">
               {inbox.releaseHistory.length > 0 ? (
                 inbox.releaseHistory.map((item, index) => (

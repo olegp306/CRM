@@ -8,6 +8,7 @@ import {
   createPlatformReleaseActionPlan,
   createPlatformReleaseHistory,
   createPlatformReleaseHistoryCsv,
+  createPlatformReleaseHistorySummary,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
   createPlatformReleaseReadiness,
@@ -335,6 +336,29 @@ describe("platform inbox summary", () => {
         "0.1.0,system,3,1"
       ].join("\n")
     );
+  });
+
+  it("summarizes release planning history totals", () => {
+    expect(
+      createPlatformReleaseHistorySummary([
+        {
+          appVersion: "0.2.0",
+          actorUserId: "user-1",
+          plannedCount: 1,
+          skippedCount: 0
+        },
+        {
+          appVersion: "0.1.0",
+          actorUserId: undefined,
+          plannedCount: 3,
+          skippedCount: 1
+        }
+      ])
+    ).toEqual({
+      planningEventCount: 2,
+      plannedCount: 4,
+      skippedCount: 1
+    });
   });
 
   it("groups feedback into release triage summaries by app version", () => {

@@ -22,6 +22,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("inbox.releaseReadiness");
     expect(pageSource).toContain("Release history");
     expect(pageSource).toContain("inbox.releaseHistory");
+    expect(pageSource).toContain("inbox.releaseHistorySummary");
+    expect(pageSource).toContain("Planning events");
     expect(pageSource).toContain("/platform/feedback/release-history/export");
     expect(pageSource).toContain("releaseHistoryExportParams");
     expect(pageSource).toContain("filters.appVersion");
