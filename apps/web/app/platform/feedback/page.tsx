@@ -20,6 +20,8 @@ export default async function PlatformFeedbackPage({
   const versionFilters = Array.from(
     new Set([currentAppMetadata.version, ...inbox.rows.map((row) => row.appVersion).filter((version) => version !== "unknown")])
   );
+  const selectedReleaseNotes =
+    inbox.releaseNotesDrafts.find((draft) => draft.appVersion === filters.appVersion) ?? inbox.releaseNotesDrafts[0];
 
   return (
     <section className="grid gap-4">
@@ -137,6 +139,41 @@ export default async function PlatformFeedbackPage({
                 <p className="text-sm text-neutral-500">No versioned feedback captured yet.</p>
               )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Release notes draft</h3>
+            </div>
+            {selectedReleaseNotes ? (
+              <div className="grid gap-4 p-4 text-sm">
+                <div>
+                  <p className="font-semibold">{selectedReleaseNotes.title}</p>
+                  <p className="mt-1 text-xs text-neutral-500">Generated from feedback captured for v{selectedReleaseNotes.appVersion}.</p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {selectedReleaseNotes.sections.map((section) => (
+                    <div key={section.title} className="rounded-lg border border-neutral-800 p-3">
+                      <h4 className="text-xs font-semibold uppercase text-neutral-400">{section.title}</h4>
+                      <div className="mt-3 grid gap-2">
+                        {section.items.length > 0 ? (
+                          section.items.map((item) => (
+                            <div key={item.sourceMessageId} className="rounded-md bg-neutral-950 px-2 py-1">
+                              <p className="text-neutral-200">{item.label}</p>
+                              <p className="text-xs text-neutral-600">{item.status}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-neutral-600">No items</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="p-4 text-sm text-neutral-500">No release notes draft yet.</p>
+            )}
           </div>
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">

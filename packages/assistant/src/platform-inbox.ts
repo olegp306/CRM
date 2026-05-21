@@ -35,6 +35,23 @@ export type PlatformReleaseTriageRow = {
   byStatus: Record<string, number>;
 };
 
+export type PlatformReleaseNotesItem = {
+  label: string;
+  sourceMessageId: string;
+  status: FeedbackItemStatus;
+};
+
+export type PlatformReleaseNotesSection = {
+  title: "Features" | "Fixes" | "Support and UX";
+  items: PlatformReleaseNotesItem[];
+};
+
+export type PlatformReleaseNotesDraft = {
+  appVersion: string;
+  title: string;
+  sections: PlatformReleaseNotesSection[];
+};
+
 export type PlatformFeedbackBulkUpdatePlan = {
   event: FeedbackTriageEvent;
   count: number;
@@ -161,6 +178,43 @@ export function createPlatformReleaseTriage(feedback: FeedbackItemDraft[]): Plat
   }
 
   return Array.from(rowsByVersion.values()).sort((left, right) => compareVersionsDesc(left.appVersion, right.appVersion));
+}
+
+export function createPlatformReleaseNotesDraft(
+  appVersion: string,
+  feedback: FeedbackItemDraft[]
+): PlatformReleaseNotesDraft {
+  const versionFeedback = feedback.filter((item) => item.appVersion === appVersion);
+  const sections: PlatformReleaseNotesSection[] = [
+    {
+      title: "Features",
+      items: versionFeedback.filter((item) => item.type === "feature_request").map(toReleaseNotesItem)
+    },
+    {
+      title: "Fixes",
+      items: versionFeedback.filter((item) => item.type === "bug_report").map(toReleaseNotesItem)
+    },
+    {
+      title: "Support and UX",
+      items: versionFeedback
+        .filter((item) => item.type === "support_request" || item.type === "ux_feedback" || item.type === "permission_blocked")
+        .map(toReleaseNotesItem)
+    }
+  ];
+
+  return {
+    appVersion,
+    title: `v${appVersion} release notes draft`,
+    sections
+  };
+}
+
+function toReleaseNotesItem(item: FeedbackItemDraft): PlatformReleaseNotesItem {
+  return {
+    label: `${item.moduleContext ?? "other"} ${item.type.replace("_", " ")}`,
+    sourceMessageId: item.sourceMessageId,
+    status: item.status
+  };
 }
 
 function compareVersionsDesc(left: string, right: string): number {

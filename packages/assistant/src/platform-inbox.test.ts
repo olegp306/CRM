@@ -5,6 +5,7 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
+  createPlatformReleaseNotesDraft,
   createPlatformReleaseTriage,
   filterPlatformFeedback
 } from "./platform-inbox";
@@ -162,5 +163,52 @@ describe("platform inbox summary", () => {
         byStatus: { new: 2 }
       }
     ]);
+  });
+
+  it("creates release notes draft sections from versioned feedback", () => {
+    const notes = createPlatformReleaseNotesDraft("0.1.0", [
+      ...feedback,
+      {
+        workspaceId: "workspace-1",
+        sourceThreadId: "thread-5",
+        sourceMessageId: "message-5",
+        type: "support_request",
+        status: "triaged",
+        priority: "normal",
+        moduleContext: "documents",
+        role: "member",
+        appVersion: "0.1.0"
+      },
+      {
+        workspaceId: "workspace-1",
+        sourceThreadId: "thread-6",
+        sourceMessageId: "message-6",
+        type: "feature_request",
+        status: "new",
+        priority: "normal",
+        moduleContext: "projects",
+        role: "admin",
+        appVersion: "0.2.0"
+      }
+    ]);
+
+    expect(notes).toEqual({
+      appVersion: "0.1.0",
+      title: "v0.1.0 release notes draft",
+      sections: [
+        {
+          title: "Features",
+          items: [{ label: "leads feature request", sourceMessageId: "message-1", status: "new" }]
+        },
+        {
+          title: "Fixes",
+          items: [{ label: "clients bug report", sourceMessageId: "message-2", status: "new" }]
+        },
+        {
+          title: "Support and UX",
+          items: [{ label: "documents support request", sourceMessageId: "message-5", status: "triaged" }]
+        }
+      ]
+    });
   });
 });

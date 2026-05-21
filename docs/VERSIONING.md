@@ -100,3 +100,9 @@ This makes it possible to connect a request such as "please add this feature" to
 The platform feedback inbox includes release triage grouped by `appVersion`.
 
 Use it to see which product versions generated the most open support, bug, UX, and feature-request signals before planning the next minor or patch release.
+
+The same inbox also shows a release notes draft for the selected version. Draft sections are generated from feedback signals:
+
+- feature requests become `Features`;
+- bug reports become `Fixes`;
+- support, UX, and permission-blocked signals become `Support and UX`.

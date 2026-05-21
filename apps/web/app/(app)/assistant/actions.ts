@@ -10,6 +10,7 @@ import {
   createPlatformFeedbackCsv,
   executeAssistantAction,
   filterAuditEvents,
+  createPlatformReleaseNotesDraft,
   createPlatformReleaseTriage,
   type AuditReviewFilters,
   type AssistantContext,
@@ -88,12 +89,15 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     repository.listActions(workspaceId)
   ]);
 
+  const releaseTriage = createPlatformReleaseTriage(allFeedback);
+
   return {
     ...createPlatformInboxSummary({
       feedback,
       actions
     }),
-    releaseTriage: createPlatformReleaseTriage(allFeedback)
+    releaseTriage: releaseTriage,
+    releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback))
   };
 }
 
