@@ -9,6 +9,7 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformReleaseActionPlan,
+  createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
   createPlatformReleaseNotesDraft,
@@ -137,9 +138,11 @@ export async function bulkUpdateFeedbackStatusAction({
 
 export async function planReleaseFeedbackAction({
   workspaceId,
+  actorUserId,
   appVersion
 }: {
   workspaceId: string;
+  actorUserId?: string;
   appVersion: string;
 }) {
   const repository = getAssistantRepository();
@@ -148,10 +151,21 @@ export async function planReleaseFeedbackAction({
   const updates = await Promise.all(
     plan.items.map((item) => repository.updateFeedbackStatus(item.workspaceId, item.sourceMessageId, plan.event))
   );
+  const updatedCount = updates.filter(Boolean).length;
+
+  await repository.saveAuditEvent(
+    createPlatformReleasePlanningAuditEvent({
+      workspaceId,
+      actorUserId,
+      appVersion,
+      plannedCount: updatedCount,
+      skippedCount: plan.skippedCount
+    })
+  );
 
   return {
     plan,
-    updatedCount: updates.filter(Boolean).length,
+    updatedCount,
     summary: await getPlatformInboxSummaryAction(workspaceId, { appVersion })
   };
 }

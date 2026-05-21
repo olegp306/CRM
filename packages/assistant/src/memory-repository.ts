@@ -26,6 +26,7 @@ export type AssistantMemoryRepository = {
     messageId: string,
     update: Pick<AssistantActionWriteDraft, "status" | "result">
   ): AssistantActionWriteDraft | null;
+  saveAuditEvent(event: AssistantAuditEventDraft): void;
   listAuditEvents(workspaceId: string): AssistantAuditEventDraft[];
   clear(): void;
 };
@@ -100,6 +101,9 @@ export function createAssistantMemoryRepository(): AssistantMemoryRepository {
         );
       }
       return action;
+    },
+    saveAuditEvent(event) {
+      auditEvents.push(event);
     },
     listAuditEvents(workspaceId) {
       return auditEvents.filter((event) => event.workspaceId === workspaceId);

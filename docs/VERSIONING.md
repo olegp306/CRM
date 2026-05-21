@@ -111,6 +111,8 @@ Use `Download Markdown` in the release notes draft panel to export the selected 
 
 Use `Plan release items` in the same panel to move actionable `new` and `triaged` feedback for the selected version into `planned` without touching already planned, transferred, declined, archived, or other-version signals.
 
+Release planning writes a `platform.release.planned` audit event with the selected `appVersion`, planned item count, skipped count, and actor user ID so support messages can be traced back to the product version and planning action that handled them.
+
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.

@@ -259,6 +259,10 @@ Previous R3 verification:
 - `pnpm --filter @app/assistant test`: 17 files, 54 tests passed.
 - `pnpm --filter @app/db test`: 6 files, 17 tests passed.
 - `pnpm --filter @app/web test`: 6 files, 16 tests passed.
+- Release planning audit trail:
+  - `Plan release items` now writes a `platform.release.planned` audit event with `appVersion`, planned count, skipped count, and actor user ID.
+  - Memory and Prisma assistant repositories both support explicit audit event persistence.
+  - `/platform/audit` parsing and action filters include release planning events.
 - `pnpm --filter @app/core typecheck`: passed.
 - `pnpm --filter @app/assistant typecheck`: passed.
 - `pnpm --filter @app/db typecheck`: passed.

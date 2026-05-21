@@ -11,10 +11,11 @@ describe("assistant repository contract", () => {
       "updateFeedbackStatus",
       "listActions",
       "updateActionExecutionResult",
+      "saveAuditEvent",
       "listAuditEvents",
       "clear"
     ];
 
-    expect(methodNames).toHaveLength(9);
+    expect(methodNames).toHaveLength(10);
   });
 });

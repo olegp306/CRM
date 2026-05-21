@@ -216,7 +216,7 @@ export default async function PlatformFeedbackPage({
                     <p className="mt-1 text-xs text-neutral-500">Generated from feedback captured for v{selectedReleaseNotes.appVersion}.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <ReleaseNotesActions workspaceId={session.workspaceId} appVersion={selectedReleaseNotes.appVersion} />
+                    <ReleaseNotesActions workspaceId={session.workspaceId} actorUserId={session.userId} appVersion={selectedReleaseNotes.appVersion} />
                     <a
                       className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
                       href={`/platform/feedback/release-notes/export?appVersion=${selectedReleaseNotes.appVersion}`}

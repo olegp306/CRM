@@ -25,6 +25,7 @@ export type AssistantRepositoryContract = {
     messageId: string,
     update: Pick<AssistantActionWriteDraft, "status" | "result">
   ): AssistantActionWriteDraft | null | Promise<AssistantActionWriteDraft | null>;
+  saveAuditEvent(event: AssistantAuditEventDraft): void | Promise<void>;
   listAuditEvents(workspaceId: string): AssistantAuditEventDraft[] | Promise<AssistantAuditEventDraft[]>;
   clear(): void | Promise<void>;
 };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantContext } from "./context";
+import { createPlatformReleasePlanningAuditEvent } from "./audit-log";
 import { createAssistantMemoryRepository } from "./memory-repository";
 import { createAssistantPersistenceDraft } from "./persistence";
 import { createAssistantSubmissionResult } from "./submission";
@@ -109,6 +110,28 @@ describe("assistant memory repository", () => {
       "assistant.message.submitted",
       "assistant.action.preview_created",
       "assistant.action.executed"
+    ]);
+  });
+
+  it("stores explicit audit events", () => {
+    const repository = createAssistantMemoryRepository();
+
+    repository.saveAuditEvent(
+      createPlatformReleasePlanningAuditEvent({
+        workspaceId: "workspace-1",
+        actorUserId: "user-1",
+        appVersion: "0.1.0",
+        plannedCount: 2,
+        skippedCount: 1
+      })
+    );
+
+    expect(repository.listAuditEvents("workspace-1")).toEqual([
+      expect.objectContaining({
+        action: "platform.release.planned",
+        targetType: "PlatformRelease",
+        targetId: "0.1.0"
+      })
     ]);
   });
 });

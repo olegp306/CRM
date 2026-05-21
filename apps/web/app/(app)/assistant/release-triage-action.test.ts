@@ -18,8 +18,11 @@ describe("platform feedback release triage action", () => {
 
   it("plans actionable feedback for a selected release version", () => {
     expect(actionsSource).toContain("createPlatformReleaseActionPlan");
+    expect(actionsSource).toContain("createPlatformReleasePlanningAuditEvent");
     expect(actionsSource).toContain("planReleaseFeedbackAction");
     expect(actionsSource).toContain("appVersion");
+    expect(actionsSource).toContain("actorUserId");
+    expect(actionsSource).toContain("repository.saveAuditEvent");
     expect(actionsSource).toContain("plan.items.map");
   });
 });

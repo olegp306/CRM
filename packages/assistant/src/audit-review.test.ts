@@ -31,6 +31,14 @@ const events: AssistantAuditEventDraft[] = [
       threadId: "thread-2",
       result: { documentId: "D-20260521-message-2" }
     }
+  },
+  {
+    workspaceId: "workspace-1",
+    actorUserId: "user-1",
+    action: "platform.release.planned",
+    targetType: "PlatformRelease",
+    targetId: "0.1.0",
+    metadata: { appVersion: "0.1.0", plannedCount: 2, skippedCount: 1 }
   }
 ];
 
@@ -47,14 +55,15 @@ describe("audit review helpers", () => {
 
   it("creates summary counts for audit review", () => {
     expect(createAuditReviewSummary(events)).toEqual({
-      totalCount: 3,
+      totalCount: 4,
       actionCounts: {
         "assistant.action.executed": 1,
         "assistant.action.preview_created": 1,
-        "assistant.message.submitted": 1
+        "assistant.message.submitted": 1,
+        "platform.release.planned": 1
       },
       actorCounts: {
-        "user-1": 2,
+        "user-1": 3,
         "user-2": 1
       },
       executedActionCount: 1

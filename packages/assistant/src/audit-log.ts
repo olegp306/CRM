@@ -4,8 +4,8 @@ import type { ActionConfirmationStatus } from "./confirmation-state";
 export type AssistantAuditEventDraft = {
   workspaceId: string;
   actorUserId?: string;
-  action: "assistant.message.submitted" | "assistant.action.preview_created" | "assistant.action.executed";
-  targetType: "AssistantMessage" | "AssistantAction";
+  action: "assistant.message.submitted" | "assistant.action.preview_created" | "assistant.action.executed" | "platform.release.planned";
+  targetType: "AssistantMessage" | "AssistantAction" | "PlatformRelease";
   targetId: string;
   metadata: Record<string, unknown>;
 };
@@ -18,6 +18,14 @@ export type CreateAssistantActionExecutionAuditEventInput = {
   actionType: string;
   status: Extract<ActionConfirmationStatus, "executed" | "failed">;
   result?: Record<string, unknown>;
+};
+
+export type CreatePlatformReleasePlanningAuditEventInput = {
+  workspaceId: string;
+  actorUserId?: string;
+  appVersion: string;
+  plannedCount: number;
+  skippedCount: number;
 };
 
 export function createAssistantAuditEvents(draft: AssistantPersistenceDraft): AssistantAuditEventDraft[] {
@@ -74,6 +82,27 @@ export function createAssistantActionExecutionAuditEvent({
       status,
       threadId,
       ...(result ? { result } : {})
+    }
+  };
+}
+
+export function createPlatformReleasePlanningAuditEvent({
+  workspaceId,
+  actorUserId,
+  appVersion,
+  plannedCount,
+  skippedCount
+}: CreatePlatformReleasePlanningAuditEventInput): AssistantAuditEventDraft {
+  return {
+    workspaceId,
+    actorUserId,
+    action: "platform.release.planned",
+    targetType: "PlatformRelease",
+    targetId: appVersion,
+    metadata: {
+      appVersion,
+      plannedCount,
+      skippedCount
     }
   };
 }

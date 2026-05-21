@@ -6,9 +6,11 @@ import { useTransition } from "react";
 
 export function ReleaseNotesActions({
   workspaceId,
+  actorUserId,
   appVersion
 }: {
   workspaceId: string;
+  actorUserId?: string;
   appVersion: string;
 }) {
   const router = useRouter();
@@ -20,7 +22,7 @@ export function ReleaseNotesActions({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          await planReleaseFeedbackAction({ workspaceId, appVersion });
+          await planReleaseFeedbackAction({ workspaceId, actorUserId, appVersion });
           router.refresh();
         })
       }

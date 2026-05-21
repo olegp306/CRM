@@ -159,6 +159,10 @@ export function createAssistantPrismaRepository(client: AssistantPrismaClientLik
       return action;
     },
 
+    async saveAuditEvent(event) {
+      await client.auditLog.createMany({ data: [event] });
+    },
+
     async listAuditEvents(workspaceId) {
       const rows = await client.auditLog.findMany({
         where: { workspaceId },
