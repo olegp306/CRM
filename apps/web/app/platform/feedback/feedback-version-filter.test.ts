@@ -28,6 +28,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("actorCounts");
     expect(pageSource).toContain("Use Plan release items to create the first release history event.");
     expect(pageSource).toContain("Release history and CSV export follow the selected version filter.");
+    expect(pageSource).toContain("History scope");
+    expect(pageSource).toContain("releaseHistoryScope");
     expect(pageSource).toContain("/platform/feedback/release-history/export");
     expect(pageSource).toContain("releaseHistoryExportParams");
     expect(pageSource).toContain("filters.appVersion");

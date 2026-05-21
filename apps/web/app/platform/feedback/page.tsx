@@ -31,6 +31,7 @@ export default async function PlatformFeedbackPage({
     ...(filters.appVersion ? { appVersion: filters.appVersion } : {})
   });
   const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
+  const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
 
   return (
     <section className="grid gap-4">
@@ -221,7 +222,8 @@ export default async function PlatformFeedbackPage({
                 Export CSV
               </a>
             </div>
-            <div className="grid grid-cols-3 gap-2 border-b border-neutral-800 p-4 text-xs">
+            <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-4 text-xs md:grid-cols-4">
+              <TextMetric label="History scope" value={releaseHistoryScope} />
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
               <Metric label="Skipped" value={inbox.releaseHistorySummary.skippedCount} />
@@ -342,6 +344,15 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-lg font-semibold">{value}</p>
+      <p className="text-xs text-neutral-500">{label}</p>
+    </div>
+  );
+}
+
+function TextMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+      <p className="truncate text-sm font-semibold">{value}</p>
       <p className="text-xs text-neutral-500">{label}</p>
     </div>
   );

@@ -119,7 +119,7 @@ Use `Export CSV` in the `Release history` panel to download prior release planni
 
 The panel header states that release history and CSV export follow the selected version filter, so operators can tell when they are looking at a scoped history view.
 
-The same panel summarizes planning event count, total planned items, total skipped items, and planning actor counts for the current history scope.
+The same panel summarizes the active history scope, planning event count, total planned items, total skipped items, and planning actor counts.
 
 When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
 
