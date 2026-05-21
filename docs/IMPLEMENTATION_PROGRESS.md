@@ -263,6 +263,9 @@ Previous R3 verification:
   - `Plan release items` now writes a `platform.release.planned` audit event with `appVersion`, planned count, skipped count, and actor user ID.
   - Memory and Prisma assistant repositories both support explicit audit event persistence.
   - `/platform/audit` parsing and action filters include release planning events.
+- Release planning history:
+  - `/platform/feedback` now includes a `Release history` panel sourced from `platform.release.planned` audit events.
+  - The platform inbox summary returns `releaseHistory` with version, actor, planned count, and skipped count.
 - `pnpm --filter @app/core typecheck`: passed.
 - `pnpm --filter @app/assistant typecheck`: passed.
 - `pnpm --filter @app/db typecheck`: passed.

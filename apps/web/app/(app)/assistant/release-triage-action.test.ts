@@ -10,10 +10,13 @@ describe("platform feedback release triage action", () => {
     expect(actionsSource).toContain("createPlatformReleaseNotesDraft");
     expect(actionsSource).toContain("createPlatformReleaseReadiness");
     expect(actionsSource).toContain("createPlatformReleaseWorkflow");
+    expect(actionsSource).toContain("createPlatformReleaseHistory");
+    expect(actionsSource).toContain("repository.listAuditEvents");
     expect(actionsSource).toContain("releaseTriage:");
     expect(actionsSource).toContain("releaseNotesDrafts:");
     expect(actionsSource).toContain("releaseReadiness:");
     expect(actionsSource).toContain("releaseWorkflows:");
+    expect(actionsSource).toContain("releaseHistory:");
   });
 
   it("plans actionable feedback for a selected release version", () => {

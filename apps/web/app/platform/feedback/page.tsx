@@ -206,6 +206,26 @@ export default async function PlatformFeedbackPage({
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">
             <div className="border-b border-neutral-800 px-4 py-3">
+              <h3 className="text-sm font-semibold">Release history</h3>
+            </div>
+            <div className="divide-y divide-neutral-800">
+              {inbox.releaseHistory.length > 0 ? (
+                inbox.releaseHistory.map((item, index) => (
+                  <div key={`${item.appVersion}-${index}`} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[100px_1fr_120px_120px] md:items-center">
+                    <span className="font-semibold">v{item.appVersion}</span>
+                    <span className="text-neutral-400">{item.actorUserId ?? "system"}</span>
+                    <span className="text-neutral-400">{item.plannedCount} planned</span>
+                    <span className="text-neutral-500">{item.skippedCount} skipped</span>
+                  </div>
+                ))
+              ) : (
+                <p className="p-4 text-sm text-neutral-500">No release planning events yet.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900">
+            <div className="border-b border-neutral-800 px-4 py-3">
               <h3 className="text-sm font-semibold">Release notes draft</h3>
             </div>
             {selectedReleaseNotes ? (

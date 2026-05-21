@@ -1,3 +1,4 @@
+import type { AssistantAuditEventDraft } from "./audit-log";
 import type { FeedbackItemDraft, FeedbackItemIntent, FeedbackItemStatus } from "./feedback-item";
 import { canTransitionFeedbackStatus, type FeedbackTriageEvent } from "./feedback-triage";
 import type { AssistantActionWriteDraft } from "./persistence";
@@ -92,6 +93,13 @@ export type PlatformReleaseReadiness = {
     plannedCount: number;
     draftItemCount: number;
   };
+};
+
+export type PlatformReleaseHistoryItem = {
+  appVersion: string;
+  actorUserId?: string;
+  plannedCount: number;
+  skippedCount: number;
 };
 
 export function createPlatformInboxSummary({
@@ -272,6 +280,17 @@ export function createPlatformReleaseReadiness(appVersion: string, feedback: Fee
       draftItemCount
     }
   };
+}
+
+export function createPlatformReleaseHistory(events: AssistantAuditEventDraft[]): PlatformReleaseHistoryItem[] {
+  return events
+    .filter((event) => event.action === "platform.release.planned")
+    .map((event) => ({
+      appVersion: typeof event.metadata.appVersion === "string" ? event.metadata.appVersion : event.targetId,
+      actorUserId: event.actorUserId,
+      plannedCount: typeof event.metadata.plannedCount === "number" ? event.metadata.plannedCount : 0,
+      skippedCount: typeof event.metadata.skippedCount === "number" ? event.metadata.skippedCount : 0
+    }));
 }
 
 export function createPlatformReleaseTriage(feedback: FeedbackItemDraft[]): PlatformReleaseTriageRow[] {

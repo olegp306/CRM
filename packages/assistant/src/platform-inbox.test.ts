@@ -6,6 +6,7 @@ import {
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
   createPlatformReleaseActionPlan,
+  createPlatformReleaseHistory,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
   createPlatformReleaseReadiness,
@@ -232,6 +233,49 @@ describe("platform inbox summary", () => {
       summary: "2 feedback signals need planning",
       blockers: ["Plan actionable feedback before release review"]
     });
+  });
+
+  it("creates release planning history from audit events", () => {
+    expect(
+      createPlatformReleaseHistory([
+        {
+          workspaceId: "workspace-1",
+          actorUserId: "user-1",
+          action: "platform.release.planned",
+          targetType: "PlatformRelease",
+          targetId: "0.2.0",
+          metadata: { appVersion: "0.2.0", plannedCount: 1, skippedCount: 0 }
+        },
+        {
+          workspaceId: "workspace-1",
+          actorUserId: "user-2",
+          action: "assistant.message.submitted",
+          targetType: "AssistantMessage",
+          targetId: "message-1",
+          metadata: {}
+        },
+        {
+          workspaceId: "workspace-1",
+          action: "platform.release.planned",
+          targetType: "PlatformRelease",
+          targetId: "0.1.0",
+          metadata: { appVersion: "0.1.0", plannedCount: 3, skippedCount: 1 }
+        }
+      ])
+    ).toEqual([
+      {
+        appVersion: "0.2.0",
+        actorUserId: "user-1",
+        plannedCount: 1,
+        skippedCount: 0
+      },
+      {
+        appVersion: "0.1.0",
+        actorUserId: undefined,
+        plannedCount: 3,
+        skippedCount: 1
+      }
+    ]);
   });
 
   it("groups feedback into release triage summaries by app version", () => {

@@ -9,6 +9,7 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformReleaseActionPlan,
+  createPlatformReleaseHistory,
   createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
@@ -87,10 +88,11 @@ export async function listAssistantWorkspaceMemoryAction(workspaceId: string) {
 
 export async function getPlatformInboxSummaryAction(workspaceId: string, filters: PlatformFeedbackFilters = {}) {
   const repository = getAssistantRepository();
-  const [feedback, allFeedback, actions] = await Promise.all([
+  const [feedback, allFeedback, actions, auditEvents] = await Promise.all([
     repository.listFeedback(workspaceId, filters),
     repository.listFeedback(workspaceId),
-    repository.listActions(workspaceId)
+    repository.listActions(workspaceId),
+    repository.listAuditEvents(workspaceId)
   ]);
 
   const releaseTriage = createPlatformReleaseTriage(allFeedback);
@@ -103,7 +105,8 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     releaseTriage: releaseTriage,
     releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),
     releaseReadiness: releaseTriage.map((release) => createPlatformReleaseReadiness(release.appVersion, allFeedback)),
-    releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback))
+    releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback)),
+    releaseHistory: createPlatformReleaseHistory(auditEvents)
   };
 }
 
