@@ -7,6 +7,7 @@ import {
   createPlatformInboxSummary,
   createPlatformReleaseActionPlan,
   createPlatformReleaseHistory,
+  createPlatformReleaseHistoryCsv,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseNotesMarkdown,
   createPlatformReleaseReadiness,
@@ -276,6 +277,31 @@ describe("platform inbox summary", () => {
         skippedCount: 1
       }
     ]);
+  });
+
+  it("exports release planning history as CSV", () => {
+    expect(
+      createPlatformReleaseHistoryCsv([
+        {
+          appVersion: "0.2.0",
+          actorUserId: "user-1",
+          plannedCount: 1,
+          skippedCount: 0
+        },
+        {
+          appVersion: "0.1.0",
+          actorUserId: undefined,
+          plannedCount: 3,
+          skippedCount: 1
+        }
+      ])
+    ).toBe(
+      [
+        "appVersion,actorUserId,plannedCount,skippedCount",
+        "0.2.0,user-1,1,0",
+        "0.1.0,system,3,1"
+      ].join("\n")
+    );
   });
 
   it("groups feedback into release triage summaries by app version", () => {

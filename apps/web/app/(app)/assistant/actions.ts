@@ -10,6 +10,7 @@ import {
   createPlatformFeedbackCsv,
   createPlatformReleaseActionPlan,
   createPlatformReleaseHistory,
+  createPlatformReleaseHistoryCsv,
   createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
@@ -114,6 +115,12 @@ export async function exportPlatformFeedbackCsvAction(workspaceId: string, filte
   const feedback = await getAssistantRepository().listFeedback(workspaceId, filters);
 
   return createPlatformFeedbackCsv(feedback);
+}
+
+export async function exportPlatformReleaseHistoryCsvAction(workspaceId: string) {
+  const auditEvents = await getAssistantRepository().listAuditEvents(workspaceId);
+
+  return createPlatformReleaseHistoryCsv(createPlatformReleaseHistory(auditEvents));
 }
 
 export async function bulkUpdateFeedbackStatusAction({

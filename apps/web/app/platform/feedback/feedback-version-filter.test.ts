@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const pageSource = readFileSync(join(__dirname, "page.tsx"), "utf8");
 const releaseActionsSource = readFileSync(join(__dirname, "release-notes-actions.tsx"), "utf8");
 const exportRouteSource = readFileSync(join(__dirname, "export", "route.ts"), "utf8");
+const historyExportRouteSource = readFileSync(join(__dirname, "release-history", "export", "route.ts"), "utf8");
 
 describe("platform feedback version filter wiring", () => {
   it("keeps appVersion in page filter links and export route parsing", () => {
@@ -21,6 +22,7 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("inbox.releaseReadiness");
     expect(pageSource).toContain("Release history");
     expect(pageSource).toContain("inbox.releaseHistory");
+    expect(pageSource).toContain("/platform/feedback/release-history/export");
     expect(pageSource).toContain("Download Markdown");
     expect(pageSource).toContain("ReleaseNotesActions");
     expect(pageSource).toContain("/platform/feedback/release-notes/export");
@@ -29,5 +31,7 @@ describe("platform feedback version filter wiring", () => {
     expect(releaseActionsSource).toContain("actorUserId");
     expect(releaseActionsSource).toContain("router.refresh");
     expect(exportRouteSource).toContain("appVersion: url.searchParams.get(\"appVersion\")");
+    expect(historyExportRouteSource).toContain("exportPlatformReleaseHistoryCsvAction");
+    expect(historyExportRouteSource).toContain("text/csv; charset=utf-8");
   });
 });

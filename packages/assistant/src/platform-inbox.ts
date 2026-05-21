@@ -293,6 +293,17 @@ export function createPlatformReleaseHistory(events: AssistantAuditEventDraft[])
     }));
 }
 
+export function createPlatformReleaseHistoryCsv(history: PlatformReleaseHistoryItem[]): string {
+  return [
+    "appVersion,actorUserId,plannedCount,skippedCount",
+    ...history.map((item) =>
+      [item.appVersion, item.actorUserId ?? "system", String(item.plannedCount), String(item.skippedCount)]
+        .map(escapeCsvCell)
+        .join(",")
+    )
+  ].join("\n");
+}
+
 export function createPlatformReleaseTriage(feedback: FeedbackItemDraft[]): PlatformReleaseTriageRow[] {
   const rowsByVersion = new Map<string, PlatformReleaseTriageRow>();
 

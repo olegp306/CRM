@@ -205,8 +205,14 @@ export default async function PlatformFeedbackPage({
           </div>
 
           <div className="rounded-lg border border-neutral-800 bg-neutral-900">
-            <div className="border-b border-neutral-800 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 px-4 py-3">
               <h3 className="text-sm font-semibold">Release history</h3>
+              <a
+                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
+                href="/platform/feedback/release-history/export"
+              >
+                Export CSV
+              </a>
             </div>
             <div className="divide-y divide-neutral-800">
               {inbox.releaseHistory.length > 0 ? (
