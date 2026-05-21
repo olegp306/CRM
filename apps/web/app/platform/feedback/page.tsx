@@ -248,7 +248,10 @@ export default async function PlatformFeedbackPage({
                   </div>
                 ))
               ) : (
-                <p className="p-4 text-sm text-neutral-500">No release planning events yet.</p>
+                <div className="p-4 text-sm text-neutral-500">
+                  <p>No release planning events yet.</p>
+                  <p className="mt-1">Use Plan release items to create the first release history event.</p>
+                </div>
               )}
             </div>
           </div>

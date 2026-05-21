@@ -119,6 +119,8 @@ Use `Export CSV` in the `Release history` panel to download prior release planni
 
 The same panel summarizes planning event count, total planned items, total skipped items, and planning actor counts for the current history scope.
 
+When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
+
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
