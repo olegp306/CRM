@@ -7,6 +7,7 @@ export type AssistantModuleContext =
   | "content"
   | "settings"
   | "assistant"
+  | "onboarding"
   | "other";
 
 export type AssistantEntityContext = {

@@ -16,6 +16,7 @@ export function getAssistantModuleFromRoute(route: string): AssistantModuleConte
   if (route.startsWith("/outreach")) return "outreach";
   if (route.startsWith("/content")) return "content";
   if (route.startsWith("/settings")) return "settings";
+  if (route.startsWith("/onboarding")) return "onboarding";
   if (route.startsWith("/assistant")) return "assistant";
   return "other";
 }

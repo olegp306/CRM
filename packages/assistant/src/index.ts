@@ -10,6 +10,7 @@ export * from "./feedback-item";
 export * from "./feedback-triage";
 export * from "./memory-repository";
 export * from "./openai-provider";
+export * from "./onboarding";
 export * from "./persistence";
 export * from "./platform-inbox";
 export * from "./permission-blocked";

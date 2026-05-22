@@ -46,6 +46,11 @@ const routePendingPreviews: RoutePendingPreview[] = [
     description: "Context capture, preview, permission blocking, and feedback signal rules."
   },
   {
+    href: "/onboarding",
+    title: "Onboarding",
+    description: "Guided client interview for future feature requests."
+  },
+  {
     href: "/settings",
     title: "Settings",
     description: "Workspace preferences for language, branding, team, and modules."
