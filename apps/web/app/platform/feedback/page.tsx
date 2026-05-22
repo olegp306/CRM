@@ -34,6 +34,7 @@ export default async function PlatformFeedbackPage({
   const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
   const releaseHistoryExportLabel = `Export release history CSV for ${releaseHistoryScope}`;
   const releaseHistoryScopeLabel = `History scope: ${releaseHistoryScope}`;
+  const releaseHistoryEmptyLabel = `No release planning events for ${releaseHistoryScope}`;
   const releaseHistoryTopActorEventLabel = inbox.releaseHistorySummary.topActor
     ? formatReleaseHistoryActorCount(inbox.releaseHistorySummary.topActor.count)
     : "No actor events yet";
@@ -302,7 +303,7 @@ export default async function PlatformFeedbackPage({
                   );
                 })
               ) : (
-                <div className="p-4 text-sm text-neutral-500">
+                <div aria-label={releaseHistoryEmptyLabel} className="p-4 text-sm text-neutral-500">
                   <p>No release planning events yet.</p>
                   <p className="mt-1">Use Plan release items to create the first release history event.</p>
                 </div>

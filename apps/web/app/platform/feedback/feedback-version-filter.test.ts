@@ -42,6 +42,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("aria-label={releaseHistoryTopActorLabel}");
     expect(pageSource).toContain("title={releaseHistoryTopActorTitle}");
     expect(pageSource).toContain("Use Plan release items to create the first release history event.");
+    expect(pageSource).toContain("releaseHistoryEmptyLabel");
+    expect(pageSource).toContain("aria-label={releaseHistoryEmptyLabel}");
     expect(pageSource).toContain("Release history and CSV export follow the selected version filter.");
     expect(pageSource).toContain("History scope");
     expect(pageSource).toContain("releaseHistoryScope");

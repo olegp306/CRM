@@ -274,6 +274,7 @@ Previous R3 verification:
   - Version-scoped release history includes a `View all history` link to clear the selected app version.
   - Release history also includes a `Current version history` link when the current app version is not already selected.
   - The release history empty state points operators to `Plan release items` so the first audit-backed history event is discoverable.
+  - The release history empty state exposes a scope-aware accessible label.
   - Release history rows expose combined accessible labels with version, actor, planned count, and skipped count.
   - `/platform/feedback/release-history/export` exports release planning history as CSV, follows the selected `appVersion` filter, and the panel export link exposes a scope-aware accessible label.
 - `pnpm --filter @app/core typecheck`: passed.

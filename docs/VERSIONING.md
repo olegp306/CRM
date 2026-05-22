@@ -133,6 +133,8 @@ When another scope is active, the same metric includes `Current version history`
 
 When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
 
+The empty history state also exposes an accessible label that names the current history scope.
+
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
