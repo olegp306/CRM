@@ -380,8 +380,10 @@ export default async function PlatformFeedbackPage({
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
+  const metricLabel = `${label}: ${value}`;
+
   return (
-    <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+    <div aria-label={metricLabel} className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-lg font-semibold">{value}</p>
       <p className="text-xs text-neutral-500">{label}</p>
     </div>
