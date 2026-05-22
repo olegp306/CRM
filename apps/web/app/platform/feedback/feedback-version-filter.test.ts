@@ -30,6 +30,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("topActor");
     expect(pageSource).toContain("No actor yet");
     expect(pageSource).toContain("No actor events yet");
+    expect(pageSource).toContain("releaseHistoryTopActorEventLabel");
+    expect(pageSource).toContain('count === 1 ? "event" : "events"');
     expect(pageSource).toContain("Use Plan release items to create the first release history event.");
     expect(pageSource).toContain("Release history and CSV export follow the selected version filter.");
     expect(pageSource).toContain("History scope");

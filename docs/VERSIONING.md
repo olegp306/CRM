@@ -119,7 +119,7 @@ Use `Export CSV` in the `Release history` panel to download prior release planni
 
 The panel header states that release history and CSV export follow the selected version filter, so operators can tell when they are looking at a scoped history view.
 
-The same panel summarizes the active history scope, top planning actor, planning event count, total planned items, total skipped items, and planning actor counts. Planning actors are sorted by activity, with stable alphabetical ordering for ties. When no release planning event exists yet, the top actor metric shows `No actor yet` and `No actor events yet`.
+The same panel summarizes the active history scope, top planning actor, planning event count, total planned items, total skipped items, and planning actor counts. Planning actors are sorted by activity, with stable alphabetical ordering for ties. The top actor event label uses singular/plural wording, and when no release planning event exists yet the metric shows `No actor yet` and `No actor events yet`.
 
 When a version filter is active, the history scope metric includes `View all history` to clear the version and return to the full release planning timeline.
 

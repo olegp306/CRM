@@ -32,6 +32,9 @@ export default async function PlatformFeedbackPage({
   });
   const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
   const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
+  const releaseHistoryTopActorEventLabel = inbox.releaseHistorySummary.topActor
+    ? `${inbox.releaseHistorySummary.topActor.count} ${inbox.releaseHistorySummary.topActor.count === 1 ? "event" : "events"}`
+    : "No actor events yet";
 
   return (
     <section className="grid gap-4">
@@ -243,9 +246,7 @@ export default async function PlatformFeedbackPage({
               <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
                 <p className="truncate text-sm font-semibold">{inbox.releaseHistorySummary.topActor?.actor ?? "No actor yet"}</p>
                 <p className="text-xs text-neutral-500">Top planning actor</p>
-                <p className="mt-2 text-xs text-neutral-500">
-                  {inbox.releaseHistorySummary.topActor ? `${inbox.releaseHistorySummary.topActor.count} events` : "No actor events yet"}
-                </p>
+                <p className="mt-2 text-xs text-neutral-500">{releaseHistoryTopActorEventLabel}</p>
               </div>
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
