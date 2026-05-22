@@ -1,4 +1,4 @@
-import { Bot, CalendarDays, FileText, FolderKanban, Home, Megaphone, Settings, Sparkles, UsersRound } from "lucide-react";
+import { Bot, CalendarDays, FileText, FolderKanban, Home, Megaphone, Settings, UsersRound } from "lucide-react";
 import { getDictionary, type SupportedLocale } from "@app/ui";
 
 const navigationItems = [
@@ -9,7 +9,6 @@ const navigationItems = [
   { key: "outreach", href: "/outreach", icon: Megaphone },
   { key: "content", href: "/content", icon: FileText },
   { key: "assistant", href: "/assistant/preview", icon: Bot },
-  { key: "onboarding", href: "/onboarding", icon: Sparkles },
   { key: "settings", href: "/settings", icon: Settings }
 ] as const;
 

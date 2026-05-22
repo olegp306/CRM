@@ -17,6 +17,5 @@ describe("locale helpers", () => {
     expect(getDictionary("en").navigation.clients).toBe("Clients");
     expect(getDictionary("de").navigation.clients).toBe("Kunden");
     expect(getDictionary("ru").navigation.clients).toBe("Клиенты");
-    expect(getDictionary("en").navigation.onboarding).toBe("Onboarding");
   });
 });

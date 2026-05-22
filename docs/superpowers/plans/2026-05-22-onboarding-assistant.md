@@ -4,7 +4,7 @@
 
 **Goal:** Add a guided onboarding assistant that collects free-form client answers and saves each useful answer as versioned feedback.
 
-**Architecture:** The feature reuses the existing assistant persistence and feedback inbox instead of creating a new storage path. `@app/assistant` owns the onboarding questions, context brief, and answer-to-feedback content mapping; the web app owns the onboarding page and server action.
+**Architecture:** The feature reuses the existing assistant persistence and feedback inbox instead of creating a new storage path. `@app/assistant` owns the onboarding questions, context brief, and answer-to-feedback content mapping; the web assistant drawer owns the client-facing onboarding entry.
 
 **Tech Stack:** Next.js App Router, React client component, existing `@app/assistant` feedback pipeline, Prisma-backed assistant repository, Vitest.
 
@@ -24,21 +24,20 @@
 - [x] Export helpers from `@app/assistant`.
 - [x] Test stable question ids, brief version metadata, and feature-request classification content.
 
-### Task 2: Web Onboarding Entry
+### Task 2: Web Assistant Onboarding Entry
 
 **Files:**
-- Create: `apps/web/app/(app)/onboarding/page.tsx`
-- Create: `apps/web/app/(app)/onboarding/onboarding-panel.tsx`
-- Create: `apps/web/app/(app)/onboarding/actions.ts`
+- Modify: `apps/web/components/assistant-drawer.tsx`
+- Modify: `apps/web/app/(app)/assistant/actions.ts`
 - Modify: `apps/web/components/app-navigation.ts`
 - Modify: `apps/web/components/app-navigation.test.ts`
 - Modify: `apps/web/components/app-transition.ts`
 - Modify: `packages/ui/src/i18n/locale.ts`
 
-- [x] Add sidebar route `Onboarding`.
-- [x] Render a page with the current technical brief, planned work, and guided questions.
-- [x] Save each free-form answer as assistant feedback with `moduleContext: onboarding` and current app version.
-- [x] Show a local saved-state timeline in the UI.
+- [x] Remove the standalone onboarding route from sidebar navigation.
+- [x] Show a closed-assistant onboarding indicator when the onboarding message is unread.
+- [x] Render the current technical brief, planned work, and guided questions as the assistant's first message.
+- [x] Save the client's combined free-form answer as feedback with `moduleContext: onboarding` and current app version.
 
 ### Task 3: Verification
 

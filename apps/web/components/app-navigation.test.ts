@@ -11,7 +11,6 @@ describe("getAppNavigationItems", () => {
       { href: "/outreach", label: "Cold Targets" },
       { href: "/content", label: "Content" },
       { href: "/assistant/preview", label: "Assistant" },
-      { href: "/onboarding", label: "Onboarding" },
       { href: "/settings", label: "Settings" }
     ]);
   });

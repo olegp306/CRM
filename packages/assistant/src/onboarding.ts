@@ -53,7 +53,7 @@ export function getCurrentOnboardingBrief(): OnboardingBrief {
       "Loop 1 is the current focus: Telegram can parse incoming messages and create leads.",
       "Created leads can already be viewed and edited in the web form.",
       "Editable CRM tables exist for clients, leads, projects, and cold targets.",
-      "The current onboarding form collects answers as versioned feature requests in the platform feedback inbox.",
+      "The web assistant can collect onboarding answers as versioned feature requests in the platform feedback inbox.",
       "The app can show the current version so support and feature requests can be traced back to a release."
     ],
     planned: [
@@ -64,6 +64,29 @@ export function getCurrentOnboardingBrief(): OnboardingBrief {
       "Use Katya's onboarding answers to prioritize the next feature branches."
     ]
   };
+}
+
+export function createOnboardingAssistantMessage({
+  brief = getCurrentOnboardingBrief(),
+  questions = onboardingQuestions
+}: {
+  brief?: OnboardingBrief;
+  questions?: OnboardingQuestion[];
+} = {}): string {
+  return [
+    "Hi, I am Oleg's assistant. Welcome, and thank you for checking the CRM.",
+    "",
+    "What works now:",
+    ...brief.completed.map((item) => `- ${item}`),
+    "",
+    "Current plan:",
+    ...brief.planned.map((item) => `- ${item}`),
+    "",
+    "Please answer these questions in one message, in free form:",
+    ...questions.map((question, index) => `${index + 1}. ${question.prompt}`),
+    "",
+    "I know the current implementation plan. I will pass your answers to the developers and save them as feature requests."
+  ].join("\n");
 }
 
 export function findOnboardingQuestion(questionId: string): OnboardingQuestion | null {
@@ -83,5 +106,15 @@ export function createOnboardingFeedbackContent({
     `Feature request from onboarding: ${question.title}.`,
     `Question: ${question.prompt}`,
     `Client answer: ${cleanAnswer}`
+  ].join("\n");
+}
+
+export function createOnboardingConversationFeedbackContent(answer: string): string {
+  const cleanAnswer = answer.trim();
+
+  return [
+    "Feature request from onboarding conversation.",
+    "Context: the client answered the current onboarding questions inside the web assistant.",
+    `Client answers: ${cleanAnswer}`
   ].join("\n");
 }

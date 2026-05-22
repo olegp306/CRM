@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { classifyIntent } from "./classify-intent";
 import {
   createOnboardingFeedbackContent,
+  createOnboardingAssistantMessage,
+  createOnboardingConversationFeedbackContent,
   findOnboardingQuestion,
   getCurrentOnboardingBrief,
   onboardingQuestions
@@ -39,6 +41,25 @@ describe("onboarding assistant helpers", () => {
 
     expect(content).toContain("Feature request from onboarding");
     expect(content).toContain("Client answer: I need a clearer proposal workflow before sending KP.");
+    expect(classifyIntent(content)).toBe("feature_request");
+  });
+
+  it("builds a friendly assistant onboarding message with current questions", () => {
+    const message = createOnboardingAssistantMessage();
+
+    expect(message).toContain("Hi, I am Oleg's assistant.");
+    expect(message).toContain("What works now:");
+    expect(message).toContain("Current plan:");
+    expect(message).toContain("Please answer these questions in one message");
+    expect(message).toContain("Gmail or Google account");
+    expect(message).toContain("pass your answers to the developers");
+  });
+
+  it("maps one combined onboarding answer into feature-request classified content", () => {
+    const content = createOnboardingConversationFeedbackContent("Gmail is katya@example.com. Multi-message Telegram leads are useful.");
+
+    expect(content).toContain("Feature request from onboarding conversation.");
+    expect(content).toContain("katya@example.com");
     expect(classifyIntent(content)).toBe("feature_request");
   });
 });

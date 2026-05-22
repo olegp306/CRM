@@ -1,9 +1,9 @@
 "use client";
 
-import { confirmAssistantActionAction, submitAssistantMessageAction } from "@/app/(app)/assistant/actions";
-import { captureAssistantContext, type AssistantSubmissionResult } from "@app/assistant";
+import { confirmAssistantActionAction, submitAssistantMessageAction, submitOnboardingAssistantMessageAction } from "@/app/(app)/assistant/actions";
+import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantSubmissionResult } from "@app/assistant";
 import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantConversationEntry } from "@app/assistant";
-import { MessageSquareText, X } from "lucide-react";
+import { MessageSquareText, Sparkles, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { getAssistantExecutionLabel } from "./assistant-execution-label";
@@ -23,6 +23,8 @@ export function AssistantDrawer() {
   const [submitting, setSubmitting] = useState(false);
   const [savedSummary, setSavedSummary] = useState<string | null>(null);
   const latestResult = history.length > 0 ? result : null;
+  const onboardingMessage = createOnboardingAssistantMessage();
+  const hasUnreadOnboarding = !open && history.length === 0;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,15 +45,39 @@ export function AssistantDrawer() {
 
     const messageId = `message-${submittedAt}`;
     try {
-      const { result: nextResult, saved } = await submitAssistantMessageAction({
+      const submitAction = history.length === 0 ? submitOnboardingAssistantMessageAction : submitAssistantMessageAction;
+      const response = await submitAction({
         context,
         content: text,
         threadId,
         messageId
       });
+      const { result: nextResult, saved } = response;
+      const displayUserContent =
+        "displayUserContent" in response && typeof response.displayUserContent === "string"
+          ? response.displayUserContent
+          : null;
 
       setResult(nextResult);
-      setHistory((current) => appendAssistantExchange(current, nextResult, messageId));
+      setHistory((current) =>
+        displayUserContent
+          ? [
+              ...current,
+              {
+                id: messageId,
+                role: "user",
+                content: displayUserContent,
+                intent: nextResult.message.intent
+              },
+              {
+                id: `${messageId}-response`,
+                role: "assistant",
+                content: nextResult.response,
+                intent: nextResult.message.intent
+              }
+            ]
+          : appendAssistantExchange(current, nextResult, messageId)
+      );
       setSavedSummary(`${saved.messageCount} messages, ${saved.feedbackCount} feedback, ${saved.actionCount} actions saved`);
       setLatestMessageId(messageId);
       setConfirmation("idle");
@@ -96,6 +122,12 @@ export function AssistantDrawer() {
       >
         <MessageSquareText aria-hidden="true" className="h-4 w-4" />
         Assistant
+        {hasUnreadOnboarding ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] font-semibold">
+            <Sparkles aria-hidden="true" className="h-3 w-3" />
+            Onboarding
+          </span>
+        ) : null}
       </button>
       {open ? (
         <aside className="fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-white shadow-xl">
@@ -182,7 +214,17 @@ export function AssistantDrawer() {
                 ) : null}
               </div>
             ) : (
-              <p className="text-muted-foreground">Ask for help, leave feedback, or request an action.</p>
+              <div className="grid gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Assistant</p>
+                  <p className="mt-1 whitespace-pre-line rounded-lg border border-border bg-muted p-3 leading-6 text-foreground">
+                    {onboardingMessage}
+                  </p>
+                </div>
+                <p className="rounded-lg border border-border p-3 text-xs leading-5 text-muted-foreground">
+                  You can answer all questions in one message. I will save the answer for Oleg and the development team.
+                </p>
+              </div>
             )}
           </div>
           <form onSubmit={handleSubmit} className="border-t border-border p-3">
@@ -190,7 +232,7 @@ export function AssistantDrawer() {
               value={text}
               onChange={(event) => setText(event.target.value)}
               className="min-h-24 w-full resize-none rounded-lg border border-border p-3 text-sm outline-none focus:ring-2 focus:ring-foreground/15"
-              placeholder="Type here. On mobile, use your keyboard dictation microphone."
+              placeholder={history.length === 0 ? "Answer the onboarding questions here in one message." : "Type here. On mobile, use your keyboard dictation microphone."}
             />
             <button
               type="submit"

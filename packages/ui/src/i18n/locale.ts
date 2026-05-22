@@ -11,7 +11,6 @@ export type Dictionary = {
     outreach: string;
     content: string;
     assistant: string;
-    onboarding: string;
     settings: string;
   };
   settings: {
@@ -31,7 +30,6 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
       outreach: "Cold Targets",
       content: "Content",
       assistant: "Assistant",
-      onboarding: "Onboarding",
       settings: "Settings"
     },
     settings: {
@@ -49,7 +47,6 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
       outreach: "Cold Targets",
       content: "Content",
       assistant: "Assistent",
-      onboarding: "Onboarding",
       settings: "Einstellungen"
     },
     settings: {
@@ -67,7 +64,6 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
       outreach: "Cold Targets",
       content: "Контент",
       assistant: "Ассистент",
-      onboarding: "Онбординг",
       settings: "Настройки"
     },
     settings: {
