@@ -1,0 +1,17 @@
+[Unit]
+Description=CRM staging Telegram worker
+After=network-online.target docker.service crm-staging-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/apps/crm-staging/packages/integrations
+Environment=NODE_ENV=production
+Environment=TELEGRAM_WORKER_MODE=loop
+EnvironmentFile=/opt/apps/crm-staging/.env
+ExecStart=/usr/bin/pnpm worker:telegram:loop
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

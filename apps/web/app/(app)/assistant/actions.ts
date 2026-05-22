@@ -13,9 +13,18 @@ import {
   createRussianOnboardingAssistantMessage,
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
+  createPlatformReleaseActionPlan,
+  createPlatformReleaseHistory,
+  createPlatformReleaseHistoryCsv,
+  createPlatformReleaseHistorySummary,
+  createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
   isTranslationOrLanguageSwitchRequest,
+  createPlatformReleaseNotesDraft,
+  createPlatformReleaseReadiness,
+  createPlatformReleaseTriage,
+  createPlatformReleaseWorkflow,
   type AuditReviewFilters,
   type AssistantContext,
   type AssistantSubmissionResult,
@@ -167,9 +176,11 @@ export async function listAssistantWorkspaceMemoryAction(workspaceId: string) {
 
 export async function getPlatformInboxSummaryAction(workspaceId: string, filters: PlatformFeedbackFilters = {}) {
   const repository = getAssistantRepository();
-  const [feedback, actions] = await Promise.all([
+  const [feedback, allFeedback, actions, auditEvents] = await Promise.all([
     repository.listFeedback(workspaceId, filters),
-    repository.listActions(workspaceId)
+    repository.listFeedback(workspaceId),
+    repository.listActions(workspaceId),
+    repository.listAuditEvents(workspaceId)
   ]);
   const feedbackMessages = (
     await Promise.all(
@@ -177,17 +188,37 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     )
   ).flat();
 
-  return createPlatformInboxSummary({
-    feedback,
-    actions,
-    messages: feedbackMessages
-  });
+  const releaseTriage = createPlatformReleaseTriage(allFeedback);
+  const releaseHistory = createPlatformReleaseHistory(auditEvents, filters.appVersion ? { appVersion: filters.appVersion } : {});
+
+  return {
+    ...createPlatformInboxSummary({
+      feedback,
+      actions,
+      messages: feedbackMessages
+    }),
+    releaseTriage: releaseTriage,
+    releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),
+    releaseReadiness: releaseTriage.map((release) => createPlatformReleaseReadiness(release.appVersion, allFeedback)),
+    releaseWorkflows: releaseTriage.map((release) => createPlatformReleaseWorkflow(release.appVersion, allFeedback)),
+    releaseHistory: releaseHistory,
+    releaseHistorySummary: createPlatformReleaseHistorySummary(releaseHistory)
+  };
 }
 
 export async function exportPlatformFeedbackCsvAction(workspaceId: string, filters: PlatformFeedbackFilters = {}) {
   const feedback = await getAssistantRepository().listFeedback(workspaceId, filters);
 
   return createPlatformFeedbackCsv(feedback);
+}
+
+export async function exportPlatformReleaseHistoryCsvAction(
+  workspaceId: string,
+  filters: Pick<PlatformFeedbackFilters, "appVersion"> = {}
+) {
+  const auditEvents = await getAssistantRepository().listAuditEvents(workspaceId);
+
+  return createPlatformReleaseHistoryCsv(createPlatformReleaseHistory(auditEvents, filters));
 }
 
 export async function bulkUpdateFeedbackStatusAction({
@@ -210,6 +241,40 @@ export async function bulkUpdateFeedbackStatusAction({
     plan,
     updatedCount: updates.filter(Boolean).length,
     summary: await getPlatformInboxSummaryAction(workspaceId, filters)
+  };
+}
+
+export async function planReleaseFeedbackAction({
+  workspaceId,
+  actorUserId,
+  appVersion
+}: {
+  workspaceId: string;
+  actorUserId?: string;
+  appVersion: string;
+}) {
+  const repository = getAssistantRepository();
+  const feedback = await repository.listFeedback(workspaceId);
+  const plan = createPlatformReleaseActionPlan(feedback, { appVersion, event: "plan" });
+  const updates = await Promise.all(
+    plan.items.map((item) => repository.updateFeedbackStatus(item.workspaceId, item.sourceMessageId, plan.event))
+  );
+  const updatedCount = updates.filter(Boolean).length;
+
+  await repository.saveAuditEvent(
+    createPlatformReleasePlanningAuditEvent({
+      workspaceId,
+      actorUserId,
+      appVersion,
+      plannedCount: updatedCount,
+      skippedCount: plan.skippedCount
+    })
+  );
+
+  return {
+    plan,
+    updatedCount,
+    summary: await getPlatformInboxSummaryAction(workspaceId, { appVersion })
   };
 }
 

@@ -36,3 +36,7 @@ export function transitionFeedbackStatus(status: FeedbackItemStatus, event: Feed
 
   return nextStatus;
 }
+
+export function canTransitionFeedbackStatus(status: FeedbackItemStatus, event: FeedbackTriageEvent): boolean {
+  return Boolean(transitions[status][event]);
+}

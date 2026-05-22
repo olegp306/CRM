@@ -74,6 +74,7 @@ Estimated coverage of first four cards: 100%.
 - [x] Multi-user session integration for assistant persistence
 - [x] Platform feedback CSV export
 - [x] Platform feedback admin bulk actions
+- [x] Platform feedback release version triage, release notes export, release planning actions, release workflow checklist, and release readiness summary
 - [x] Schedule follow-up assistant action preview and execution
 - [x] Project task update assistant action preview and execution
 - [x] KP document generation assistant action preview and execution
@@ -258,6 +259,24 @@ Previous R3 verification:
 - `pnpm --filter @app/assistant test`: 17 files, 54 tests passed.
 - `pnpm --filter @app/db test`: 6 files, 17 tests passed.
 - `pnpm --filter @app/web test`: 6 files, 16 tests passed.
+- Release planning audit trail:
+  - `Plan release items` now writes a `platform.release.planned` audit event with `appVersion`, planned count, skipped count, and actor user ID.
+  - Memory and Prisma assistant repositories both support explicit audit event persistence.
+  - `/platform/audit` parsing and action filters include release planning events.
+- Release planning history:
+  - `/platform/feedback` now includes a `Release history` panel sourced from `platform.release.planned` audit events.
+  - The platform inbox summary returns `releaseHistory` with version, actor, planned count, skipped count, and `releaseHistorySummary` totals plus actor counts.
+  - `releaseHistorySummary` exposes the top planning actor for a quick operator-facing summary, with a full-name title, accessible label, singular/plural event labels, and `No actor yet` / `No actor events yet` empty states before planning starts.
+  - The release history panel explains that its list and CSV export follow the selected version filter.
+  - The release history summary shows the active history scope (`All versions` or the selected app version) with a matching accessible label.
+  - Release history numeric summary metrics expose matching accessible labels for planning events, planned items, and skipped items.
+  - Release history actor counts are sorted by planning activity, use singular/plural event labels, expose full actor titles and accessible labels, and keep alphabetical ordering for ties.
+  - Version-scoped release history includes a `View all history` link to clear the selected app version.
+  - Release history also includes a `Current version history` link when the current app version is not already selected.
+  - The release history empty state points operators to `Plan release items` so the first audit-backed history event is discoverable.
+  - The release history empty state exposes a scope-aware accessible label.
+  - Release history rows expose combined accessible labels with version, actor, planned count, and skipped count.
+  - `/platform/feedback/release-history/export` exports release planning history as CSV, follows the selected `appVersion` filter, and the panel export link exposes a scope-aware accessible label.
 - `pnpm --filter @app/core typecheck`: passed.
 - `pnpm --filter @app/assistant typecheck`: passed.
 - `pnpm --filter @app/db typecheck`: passed.

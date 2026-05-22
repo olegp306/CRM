@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { transitionFeedbackStatus } from "./feedback-triage";
+import { canTransitionFeedbackStatus, transitionFeedbackStatus } from "./feedback-triage";
 
 describe("feedback triage transitions", () => {
   it("moves new feedback into triaged, planned, declined, or archived states", () => {
@@ -16,5 +16,12 @@ describe("feedback triage transitions", () => {
 
   it("rejects invalid transitions", () => {
     expect(() => transitionFeedbackStatus("declined", "plan")).toThrow("Cannot plan feedback from declined");
+  });
+
+  it("checks whether a triage transition is currently allowed", () => {
+    expect(canTransitionFeedbackStatus("new", "plan")).toBe(true);
+    expect(canTransitionFeedbackStatus("triaged", "plan")).toBe(true);
+    expect(canTransitionFeedbackStatus("planned", "plan")).toBe(false);
+    expect(canTransitionFeedbackStatus("archived", "archive")).toBe(false);
   });
 });

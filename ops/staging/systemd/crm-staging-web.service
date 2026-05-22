@@ -1,0 +1,17 @@
+[Unit]
+Description=CRM staging web app
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/apps/crm-staging/apps/web
+Environment=NODE_ENV=production
+Environment=PORT=3002
+EnvironmentFile=/opt/apps/crm-staging/.env
+ExecStart=/usr/bin/pnpm exec next start -H 0.0.0.0 -p 3002
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantContext } from "./context";
-import { createAssistantActionExecutionAuditEvent, createAssistantAuditEvents } from "./audit-log";
+import { createAssistantActionExecutionAuditEvent, createAssistantAuditEvents, createPlatformReleasePlanningAuditEvent } from "./audit-log";
 import { createAssistantPersistenceDraft } from "./persistence";
 import { createAssistantSubmissionResult } from "./submission";
 
@@ -71,6 +71,29 @@ describe("assistant audit events", () => {
         status: "executed",
         threadId: "thread-2",
         result: { leadId: "L-2026-001", recordId: "lead-record-1" }
+      }
+    });
+  });
+
+  it("records release planning audit event with version metadata", () => {
+    expect(
+      createPlatformReleasePlanningAuditEvent({
+        workspaceId: "workspace-1",
+        actorUserId: "user-1",
+        appVersion: "0.1.0",
+        plannedCount: 3,
+        skippedCount: 1
+      })
+    ).toEqual({
+      workspaceId: "workspace-1",
+      actorUserId: "user-1",
+      action: "platform.release.planned",
+      targetType: "PlatformRelease",
+      targetId: "0.1.0",
+      metadata: {
+        appVersion: "0.1.0",
+        plannedCount: 3,
+        skippedCount: 1
       }
     });
   });

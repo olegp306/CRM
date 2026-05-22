@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantContext, AssistantPersistenceDraft } from "@app/assistant";
-import { createAssistantPersistenceDraft, createAssistantSubmissionResult } from "@app/assistant";
+import { createAssistantPersistenceDraft, createAssistantSubmissionResult, createPlatformReleasePlanningAuditEvent } from "@app/assistant";
 import { createAssistantPrismaRepository, type AssistantPrismaClientLike } from "./assistant-prisma-repository";
 
 type Call = {
@@ -207,14 +207,16 @@ describe("assistant Prisma repository", () => {
 
     await repository.listFeedback("workspace-1", {
       status: "planned",
-      type: "feature_request"
+      type: "feature_request",
+      appVersion: "0.1.0"
     });
 
     expect(calls[0]?.args).toEqual({
       where: {
         workspaceId: "workspace-1",
         status: "planned",
-        type: "feature_request"
+        type: "feature_request",
+        appVersion: "0.1.0"
       },
       orderBy: { updatedAt: "desc" }
     });
@@ -295,6 +297,34 @@ describe("assistant Prisma repository", () => {
           action: "assistant.action.executed",
           targetType: "AssistantAction",
           targetId: "message-1"
+        }
+      ]
+    });
+  });
+
+  it("persists explicit audit events", async () => {
+    const { client, calls } = createFakeClient();
+    const repository = createAssistantPrismaRepository(client);
+
+    await repository.saveAuditEvent(
+      createPlatformReleasePlanningAuditEvent({
+        workspaceId: "workspace-1",
+        actorUserId: "user-1",
+        appVersion: "0.1.0",
+        plannedCount: 2,
+        skippedCount: 1
+      })
+    );
+
+    expect(calls.map((call) => `${call.model}.${call.method}`)).toEqual(["auditLog.createMany"]);
+    expect(calls[0]?.args).toMatchObject({
+      data: [
+        {
+          workspaceId: "workspace-1",
+          actorUserId: "user-1",
+          action: "platform.release.planned",
+          targetType: "PlatformRelease",
+          targetId: "0.1.0"
         }
       ]
     });
