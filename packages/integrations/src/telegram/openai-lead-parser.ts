@@ -2,6 +2,7 @@ import { createLeadIntakeDraft, type LeadIntakeDraft } from "@app/core";
 
 export type TelegramLeadMessage = {
   messageId: number;
+  sourceMessageIds?: number[];
   chatId: string;
   text: string;
   receivedAt: string;
@@ -43,25 +44,35 @@ export type OpenAiLeadParserClient = {
   parseLead(input: { text: string; receivedAt: string; attachments?: TelegramLeadAttachment[] }): Promise<ParsedTelegramLeadInput>;
 };
 
+export type TelegramLeadIntakeDraft = Omit<LeadIntakeDraft, "missingData"> & {
+  missingData: string[];
+  telegramSourceExternalId: string;
+  temperature: ParsedTelegramLeadInput["temperature"];
+};
+
 export function createTelegramSourceExternalId(chatId: string, messageId: number): string {
   return `telegram:${chatId}:${messageId}`;
+}
+
+export function createTelegramSourceExternalIds(message: Pick<TelegramLeadMessage, "chatId" | "messageId" | "sourceMessageIds">): string[] {
+  return (message.sourceMessageIds ?? [message.messageId]).map((messageId) => createTelegramSourceExternalId(message.chatId, messageId));
 }
 
 export async function createLeadDraftFromTelegramMessage(
   message: TelegramLeadMessage,
   parser: OpenAiLeadParserClient
-): Promise<LeadIntakeDraft & { telegramSourceExternalId: string; temperature: ParsedTelegramLeadInput["temperature"] }> {
+): Promise<TelegramLeadIntakeDraft> {
   const parsed = await parser.parseLead({ text: message.text, receivedAt: message.receivedAt, attachments: message.attachments });
-  const telegramSourceExternalId = createTelegramSourceExternalId(message.chatId, message.messageId);
+  const telegramSourceExternalIds = createTelegramSourceExternalIds(message);
+  const telegramSourceExternalId = telegramSourceExternalIds[0] ?? createTelegramSourceExternalId(message.chatId, message.messageId);
   const rawInput = [
     message.text,
-    `Telegram source: ${telegramSourceExternalId}`,
+    `Telegram sources: ${telegramSourceExternalIds.join(", ")}`,
     `Summary: ${parsed.summary}`,
     `Suggested reply: ${parsed.suggestedReply}`
   ].join("\n");
 
-  return {
-    ...createLeadIntakeDraft({
+  const draft = createLeadIntakeDraft({
       source: "telegram",
       clientName: parsed.clientName,
       email: parsed.email,
@@ -70,7 +81,11 @@ export async function createLeadDraftFromTelegramMessage(
       projectAddress: parsed.projectAddress,
       bgfM2: parsed.bgfM2,
       rawInput
-    }),
+    });
+
+  return {
+    ...draft,
+    missingData: Array.from(new Set([...draft.missingData, ...parsed.missingData])),
     telegramSourceExternalId,
     temperature: parsed.temperature
   };

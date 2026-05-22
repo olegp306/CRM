@@ -89,6 +89,36 @@ export function createOnboardingAssistantMessage({
   ].join("\n");
 }
 
+export function createRussianOnboardingAssistantMessage(): string {
+  return [
+    "Привет, я помощник Олега. Спасибо, что проверяешь CRM.",
+    "",
+    "Сейчас уже работает:",
+    "- Первый loop в фокусе: Telegram умеет разбирать входящие сообщения и создавать лиды.",
+    "- Созданные лиды можно смотреть и редактировать в веб-форме.",
+    "- Есть редактируемые таблицы для клиентов, лидов, проектов и cold targets.",
+    "",
+    "Текущий план:",
+    "- Ограничить доступ к публичному staging по Google/Gmail аккаунтам.",
+    "- Решить, нужно ли Telegram объединять несколько подряд идущих сообщений в один лид.",
+    "- Уточнить, для какого решения Telegram должен запрашивать недостающие данные: квалификация лида, КП, проект, pricing или что-то еще.",
+    "- Улучшать таблицу лидов: split-view, popup-view и inline editing.",
+    "",
+    "Ответь, пожалуйста, одним сообщением:",
+    "1. Катя, какой Gmail или Google аккаунт нужно добавить для доступа к staging?",
+    "2. Нужно ли создавать один лид из нескольких подряд идущих Telegram сообщений?",
+    "3. Когда Telegram пишет, что запросит недостающие данные, для чего именно эти данные нужны?",
+    "4. Посмотри дизайн таблиц клиентов, лидов, проектов и cold targets. Что понятно, что мешает, чего не хватает?",
+    "5. Что важнее всего поправить первым, чтобы первый loop с Telegram лидами стал полезен в реальной работе?",
+    "",
+    "Я знаю текущий план реализации. Все ответы передам Олегу и разработчикам, а продуктовые замечания сохраню как feature requests."
+  ].join("\n");
+}
+
+export function isTranslationOrLanguageSwitchRequest(content: string): boolean {
+  return /(переведи|перевести|на русский|по-русски|switch to russian|translate|in russian)/i.test(content);
+}
+
 export function findOnboardingQuestion(questionId: string): OnboardingQuestion | null {
   return onboardingQuestions.find((question) => question.id === questionId) ?? null;
 }

@@ -10,12 +10,14 @@ const typeFilters = ["support_request", "bug_report", "feature_request", "ux_fee
 export default async function PlatformFeedbackPage({
   searchParams
 }: {
-  searchParams?: Promise<PlatformFeedbackSearchParams>;
+  searchParams?: Promise<PlatformFeedbackSearchParams & { selected?: string }>;
 }) {
   const session = await getWorkspaceSession();
-  const filters = parsePlatformFeedbackFilters((await searchParams) ?? {});
+  const params = (await searchParams) ?? {};
+  const filters = parsePlatformFeedbackFilters(params);
   const inbox = await getPlatformInboxSummaryAction(session.workspaceId, filters);
   const feedbackTypes = Object.entries(inbox.feedbackByType);
+  const selectedRow = inbox.rows.find((row) => row.sourceMessageId === params.selected) ?? inbox.rows.find((row) => row.kind === "feedback") ?? null;
 
   return (
     <section className="grid gap-4">
@@ -95,6 +97,7 @@ export default async function PlatformFeedbackPage({
           </div>
         </aside>
 
+        <div className="grid gap-4">
         <div className="rounded-lg border border-neutral-800 bg-neutral-900">
           <div className="border-b border-neutral-800 px-4 py-3">
             <h3 className="text-sm font-semibold">Queue</h3>
@@ -104,7 +107,16 @@ export default async function PlatformFeedbackPage({
               inbox.rows.map((row) => (
                 <div key={row.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[120px_minmax(0,1fr)_120px_90px_110px_220px] md:items-center">
                   <span className="w-fit rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">{row.kind}</span>
-                  <span className="font-medium">{row.label}</span>
+                  <a
+                    href={`/platform/feedback?${new URLSearchParams({
+                      ...(filters.status ? { status: filters.status } : {}),
+                      ...(filters.type ? { type: filters.type } : {}),
+                      selected: row.sourceMessageId
+                    }).toString()}`}
+                    className="font-medium text-neutral-100 underline-offset-4 hover:underline"
+                  >
+                    {row.label}
+                  </a>
                   <span className="text-neutral-400">{row.moduleContext}</span>
                   <span className="text-xs font-semibold text-neutral-500">v{row.appVersion}</span>
                   <span className="text-neutral-400">{row.status}</span>
@@ -122,6 +134,28 @@ export default async function PlatformFeedbackPage({
             )}
           </div>
         </div>
+        {selectedRow ? (
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Feedback detail</h3>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {selectedRow.moduleContext} · v{selectedRow.appVersion} · {selectedRow.status}
+                </p>
+              </div>
+              <span className="rounded-md border border-neutral-700 px-2 py-1 text-xs font-semibold uppercase text-neutral-300">
+                {selectedRow.kind}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 text-sm">
+              <DetailBlock label="Generated task" value={selectedRow.taskTitle ?? selectedRow.label} />
+              <DetailBlock label="Task summary" value={selectedRow.taskSummary ?? "No summary available."} />
+              <DetailBlock label="Original message" value={selectedRow.originalMessage ?? "Original assistant message is not available in this runtime."} />
+              <DetailBlock label="Source ids" value={`${selectedRow.sourceThreadId} / ${selectedRow.sourceMessageId}`} />
+            </div>
+          </div>
+        ) : null}
+        </div>
       </div>
     </section>
   );
@@ -132,6 +166,15 @@ function Metric({ label, value }: { label: string; value: number }) {
     <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-lg font-semibold">{value}</p>
       <p className="text-xs text-neutral-500">{label}</p>
+    </div>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-neutral-500">{label}</p>
+      <p className="mt-1 whitespace-pre-wrap rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-neutral-200">{value}</p>
     </div>
   );
 }
