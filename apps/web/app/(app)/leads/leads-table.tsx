@@ -176,30 +176,30 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
 
         {mobileViewMode === "cards" ? (
           rows.length > 0 ? (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {rows.map((lead) => (
                 <button
                   key={lead.id}
                   type="button"
                   onClick={() => setSelectedLeadId(lead.id)}
-                  className="grid gap-3 rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:border-foreground/20"
+                  className="grid gap-2 rounded-lg border border-border bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-foreground/20"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">Lead</p>
-                      <h3 className="mt-1 text-base font-semibold">{lead.leadId}</h3>
+                      <p className="text-[11px] leading-none text-muted-foreground">Lead</p>
+                      <h3 className="mt-0.5 text-sm font-semibold leading-tight">{lead.leadId}</h3>
                     </div>
-                    <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold leading-5 text-muted-foreground">
                       {lead.status || "new"}
                     </span>
                   </div>
-                  <div className="grid gap-2 text-sm">
+                  <div className="grid gap-1">
                     {leadMobileCardFields.map((field) => (
-                      <div key={field} className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
-                        <span className="text-xs font-semibold uppercase text-muted-foreground">
+                      <div key={field} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 leading-tight">
+                        <span className="text-[11px] font-normal text-muted-foreground">
                           {leadTableColumns.find((column) => column.key === field)?.label ?? field}
                         </span>
-                        <span className="truncate text-foreground">{lead[field] || "-"}</span>
+                        <span className="truncate text-xs font-semibold text-foreground">{lead[field] || "-"}</span>
                       </div>
                     ))}
                   </div>
