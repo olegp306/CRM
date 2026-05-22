@@ -570,6 +570,14 @@ function LeadEditor({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
+        {lead.kpGeneratedDocumentId ? (
+          <a
+            href={`/documents?documentId=${encodeURIComponent(lead.kpGeneratedDocumentId)}`}
+            className="rounded-lg border border-border px-4 py-2 text-center text-sm font-semibold text-foreground"
+          >
+            Open KP document
+          </a>
+        ) : null}
         {canMarkLeadKpSent(lead) ? (
           <button
             type="button"
