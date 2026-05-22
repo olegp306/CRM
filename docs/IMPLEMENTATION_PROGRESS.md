@@ -266,7 +266,7 @@ Previous R3 verification:
 - Release planning history:
   - `/platform/feedback` now includes a `Release history` panel sourced from `platform.release.planned` audit events.
   - The platform inbox summary returns `releaseHistory` with version, actor, planned count, skipped count, and `releaseHistorySummary` totals plus actor counts.
-  - `releaseHistorySummary` exposes the top planning actor for a quick operator-facing summary, with a full-name title, singular/plural event labels, and `No actor yet` / `No actor events yet` empty states before planning starts.
+  - `releaseHistorySummary` exposes the top planning actor for a quick operator-facing summary, with a full-name title, accessible label, singular/plural event labels, and `No actor yet` / `No actor events yet` empty states before planning starts.
   - The release history panel explains that its list and CSV export follow the selected version filter.
   - The release history summary shows the active history scope (`All versions` or the selected app version).
   - Release history actor counts are sorted by planning activity, use singular/plural event labels, expose full actor titles and accessible labels, and keep alphabetical ordering for ties.

@@ -36,6 +36,7 @@ export default async function PlatformFeedbackPage({
     ? formatReleaseHistoryActorCount(inbox.releaseHistorySummary.topActor.count)
     : "No actor events yet";
   const releaseHistoryTopActorTitle = inbox.releaseHistorySummary.topActor?.actor ?? "No actor yet";
+  const releaseHistoryTopActorLabel = `Top planning actor: ${releaseHistoryTopActorTitle}, ${releaseHistoryTopActorEventLabel}`;
 
   return (
     <section className="grid gap-4">
@@ -244,7 +245,7 @@ export default async function PlatformFeedbackPage({
                   </a>
                 ) : null}
               </div>
-              <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div aria-label={releaseHistoryTopActorLabel} className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
                 <p className="truncate text-sm font-semibold" title={releaseHistoryTopActorTitle}>
                   {releaseHistoryTopActorTitle}
                 </p>
