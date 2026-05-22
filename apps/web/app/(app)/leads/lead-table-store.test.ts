@@ -95,10 +95,14 @@ describe("lead table model", () => {
 
   it("extracts source materials from saved Telegram raw input", () => {
     expect(
-      getLeadSourceMaterials("Need EFH offer\nTelegram sources: telegram:777:42, telegram:777:43")
+      getLeadSourceMaterials("Need EFH offer\nTelegram sources: telegram:-100777:42, telegram:777:43\nTelegram attachment 1: PDF (lead.pdf)")
     ).toEqual({
-      references: ["telegram:777:42", "telegram:777:43"],
-      sourceText: "Need EFH offer\nTelegram sources: telegram:777:42, telegram:777:43"
+      references: [
+        { label: "telegram:-100777:42", url: "https://t.me/c/777/42" },
+        { label: "telegram:777:43", url: "https://t.me/c/777/43" },
+        { label: "Telegram attachment 1: PDF (lead.pdf)", url: null }
+      ],
+      sourceText: "Need EFH offer\nTelegram sources: telegram:-100777:42, telegram:777:43\nTelegram attachment 1: PDF (lead.pdf)"
     });
   });
 

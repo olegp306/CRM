@@ -401,7 +401,7 @@ function SourceMaterialsCell({ value }: { value: string }) {
       <span className="truncate text-foreground">{materials.sourceText}</span>
       {materials.references.length > 0 ? (
         <span className="truncate text-[11px] font-medium text-muted-foreground">
-          Sources: {materials.references.join(", ")}
+          Sources: {materials.references.map((reference) => reference.label).join(", ")}
         </span>
       ) : null}
     </span>
@@ -517,27 +517,7 @@ function LeadEditor({
         </button>
       </div>
 
-      <details className="rounded-lg border border-border bg-muted/30 p-3" open={Boolean(sourceMaterials.sourceText)}>
-        <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
-        {sourceMaterials.sourceText ? (
-          <div className="mt-3 grid gap-2">
-            {sourceMaterials.references.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sourceMaterials.references.map((reference) => (
-                  <span key={reference} className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
-                    {reference}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-white p-3 text-xs leading-relaxed text-foreground">
-              {sourceMaterials.sourceText}
-            </pre>
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">No source text or document references saved yet.</p>
-        )}
-      </details>
+      <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
       <div className="grid gap-3">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />
@@ -597,6 +577,56 @@ function LeadEditor({
         </button>
       </div>
     </form>
+  );
+}
+
+function SourceMaterialsPanel({
+  sourceText,
+  references
+}: {
+  sourceText: string;
+  references: ReturnType<typeof getLeadSourceMaterials>["references"];
+}) {
+  const [isOpen, setIsOpen] = useState(Boolean(sourceText));
+
+  return (
+    <details
+      className="rounded-lg border border-border bg-muted/30 p-3"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
+      {sourceText ? (
+        <div className="mt-3 grid gap-2">
+          {references.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {references.map((reference) =>
+                reference.url ? (
+                  <a
+                    key={reference.label}
+                    href={reference.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                  >
+                    {reference.label}
+                  </a>
+                ) : (
+                  <span key={reference.label} className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    {reference.label}
+                  </span>
+                )
+              )}
+            </div>
+          ) : null}
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-white p-3 text-xs leading-relaxed text-foreground">
+            {sourceText}
+          </pre>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">No source text or document references saved yet.</p>
+      )}
+    </details>
   );
 }
 

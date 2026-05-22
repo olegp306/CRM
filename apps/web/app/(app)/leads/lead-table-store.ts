@@ -74,6 +74,11 @@ export type LeadActionPlanItem = {
   description: string;
 };
 
+export type LeadSourceReference = {
+  label: string;
+  url: string | null;
+};
+
 export const leadTableColumns: LeadTableColumn[] = [
   { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
   { key: "clientRecordId", label: "Client ID", enableSorting: true, defaultSize: 160 },
@@ -150,7 +155,7 @@ export function clampLeadColumnSizing(columnSizing: Record<string, number>): Rec
   );
 }
 
-export function getLeadSourceMaterials(rawInput: string): { references: string[]; sourceText: string } {
+export function getLeadSourceMaterials(rawInput: string): { references: LeadSourceReference[]; sourceText: string } {
   const sourceText = rawInput.trim();
   if (!sourceText) {
     return { references: [], sourceText: "" };
@@ -158,12 +163,42 @@ export function getLeadSourceMaterials(rawInput: string): { references: string[]
 
   const references = sourceText
     .split(/\r?\n/)
-    .filter((line) => /^Telegram sources?:/i.test(line.trim()))
-    .flatMap((line) => line.replace(/^Telegram sources?:/i, "").split(","))
+    .flatMap((line) => createLeadSourceReferenceEntries(line.trim()))
     .map((entry) => entry.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(createLeadSourceReference);
 
   return { references, sourceText };
+}
+
+function createLeadSourceReferenceEntries(line: string): string[] {
+  if (/^Telegram sources?:/i.test(line)) {
+    return line.replace(/^Telegram sources?:/i, "").split(",");
+  }
+
+  if (/^Telegram attachment \d+:/i.test(line) || /^\[Telegram .+ attachment:/i.test(line)) {
+    return [line.replace(/^\[(.*)\]$/, "$1")];
+  }
+
+  return [];
+}
+
+function createLeadSourceReference(reference: string): LeadSourceReference {
+  if (/^https?:\/\//i.test(reference)) {
+    return { label: reference, url: reference };
+  }
+
+  const telegramMatch = /^telegram:(-?\d+):(\d+)$/i.exec(reference);
+  if (!telegramMatch) {
+    return { label: reference, url: null };
+  }
+
+  const [, chatId, messageId] = telegramMatch;
+  const publicChatPath = chatId.startsWith("-100") ? chatId.slice(4) : chatId.startsWith("-") ? chatId.slice(1) : chatId;
+  return {
+    label: reference,
+    url: publicChatPath ? `https://t.me/c/${publicChatPath}/${messageId}` : null
+  };
 }
 
 export function createLeadTableRows(records: LeadTableRecord[]): LeadTableRow[] {
