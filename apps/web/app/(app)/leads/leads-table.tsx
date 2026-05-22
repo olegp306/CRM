@@ -194,7 +194,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                   key={lead.id}
                   type="button"
                   onClick={() => setSelectedLeadId(lead.id)}
-                  className="grid gap-2 rounded-lg border border-border bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-foreground/20"
+                  className="grid gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-left shadow-sm transition hover:border-foreground/20"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -205,13 +205,13 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                       {lead.status || "new"}
                     </span>
                   </div>
-                  <div className="grid gap-1">
+                  <div className="grid gap-0.5">
                     {leadMobileCardFields.map((field) => (
-                      <div key={field} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 leading-tight">
-                        <span className="text-[11px] font-normal text-muted-foreground">
+                      <div key={field} className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-2 leading-[1.15]">
+                        <span className="text-[10px] font-normal text-muted-foreground">
                           {leadTableColumns.find((column) => column.key === field)?.label ?? field}
                         </span>
-                        <span className="truncate text-xs font-semibold text-foreground">{lead[field] || "-"}</span>
+                        <span className="truncate text-[11px] font-semibold text-foreground">{lead[field] || "-"}</span>
                       </div>
                     ))}
                   </div>
