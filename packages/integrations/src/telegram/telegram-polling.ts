@@ -25,11 +25,15 @@ export type TelegramUpdate = {
       file_name?: string;
       mime_type?: string;
     };
+    reply_to_message?: {
+      message_id: number;
+    };
   };
 };
 
 export type AllowedTelegramMessage = Omit<TelegramLeadMessage, "attachments"> & {
   updateId: number;
+  replyToMessageId?: number;
   attachments?: TelegramPendingAttachment[];
 };
 
@@ -62,6 +66,7 @@ export function createAllowedTelegramMessages(updates: TelegramUpdate[], allowed
       {
         updateId: update.update_id,
         messageId: message.message_id,
+        replyToMessageId: message.reply_to_message?.message_id,
         chatId,
         text,
         receivedAt: new Date(message.date * 1000).toISOString(),
@@ -102,7 +107,7 @@ export async function sendTelegramMessage(config: {
   text: string;
   replyMarkup?: unknown;
   fetchImpl?: typeof fetch;
-}): Promise<void> {
+}): Promise<{ messageId?: number }> {
   const fetchImpl = config.fetchImpl ?? fetch;
   const response = await fetchImpl(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
     method: "POST",
@@ -117,6 +122,10 @@ export async function sendTelegramMessage(config: {
   if (!response.ok) {
     throw new Error(`Telegram sendMessage failed: ${response.status} ${response.statusText}`);
   }
+
+  const body = (await response.json()) as { ok?: boolean; result?: { message_id?: number } };
+
+  return { messageId: body.result?.message_id };
 }
 
 function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["message"]>): TelegramPendingAttachment[] {

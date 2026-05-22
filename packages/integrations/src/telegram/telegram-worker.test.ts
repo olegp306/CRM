@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OpenAiLeadParserClient } from "./openai-lead-parser";
 import { createTelegramTestUpdateFromEnv, processTelegramUpdates, runTelegramWorkerLoop } from "./telegram-worker";
+import { createMemoryTelegramLeadDraftSessionStore } from "./telegram-lead-draft-session";
 
 describe("telegram worker", () => {
   it("creates a synthetic Telegram update from local test env", () => {
@@ -194,6 +195,350 @@ describe("telegram worker", () => {
       text: "Open in CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
+  });
+
+  it("starts an empty lead draft from the new lead command", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 12,
+            message: {
+              message_id: 7,
+              date: 1779296500,
+              chat: { id: 12345 },
+              text: "/newlead"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 12 });
+
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toMatchObject({
+      draft: {
+        missingData: ["clientName", "requestType", "projectAddress"]
+      }
+    });
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("New lead draft started");
+  });
+
+  it("stores an incomplete document intake as a draft instead of creating a CRM lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Katya",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: undefined,
+        email: null,
+        phone: null,
+        missingData: ["projectAddress", "bgfM2"],
+        summary: "PDF lead draft",
+        suggestedReply: "Need address and BGF."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "lead.pdf" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode("pdf").buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 13,
+            message: {
+              message_id: 8,
+              date: 1779296560,
+              chat: { id: 12345 },
+              document: { file_id: "pdf-file", file_name: "lead.pdf", mime_type: "application/pdf" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 13 });
+
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toMatchObject({
+      draft: {
+        clientName: "Katya",
+        requestType: "new_build",
+        missingData: ["projectAddress", "bgfM2"]
+      }
+    });
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1]?.body));
+    expect(sendBody.text).toContain("Lead draft");
+    expect(sendBody.text).toContain("Missing for KP: projectAddress, bgfM2");
+  });
+
+  it("enriches an active draft and creates a CRM lead when KP fields become complete", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi
+        .fn()
+        .mockResolvedValueOnce({
+          clientName: "Katya",
+          requestType: "new_build",
+          urgency: "medium",
+          temperature: "warm",
+          projectAddress: null,
+          email: null,
+          phone: null,
+          missingData: ["projectAddress", "bgfM2"],
+          summary: "Initial lead",
+          suggestedReply: "Need address and BGF."
+        })
+        .mockResolvedValueOnce({
+          clientName: "",
+          requestType: "",
+          urgency: "medium",
+          temperature: "unknown",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: null,
+          phone: null,
+          missingData: [],
+          summary: "Follow-up fields",
+          suggestedReply: "Ready."
+        })
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      telegramDraftStore,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 14,
+          message: {
+            message_id: 9,
+            date: 1779296600,
+            chat: { id: 12345 },
+            text: "Katya needs new build offer"
+          }
+        }
+      ],
+      config
+    );
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 15,
+            message: {
+              message_id: 10,
+              date: 1779296660,
+              chat: { id: 12345 },
+              text: "Address Chiemseeufer 7, BGF 180"
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 15 });
+
+    expect(created).toEqual([
+      {
+        data: expect.objectContaining({
+          leadId: "L-2026-002",
+          status: "new",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          missingData: []
+        })
+      }
+    ]);
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1]?.body));
+    expect(sendBody.text).toContain("KP fields ready");
+    expect(sendBody.reply_markup.inline_keyboard[0][0].url).toBe("https://crm.example.com/leads?leadId=L-2026-002");
+  });
+
+  it("treats a reply to the bot draft message as an explicit update to that draft", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi
+        .fn()
+        .mockResolvedValueOnce({
+          clientName: "Katya",
+          requestType: "new_build",
+          urgency: "medium",
+          temperature: "warm",
+          projectAddress: "Chiemseeufer 7",
+          email: null,
+          phone: null,
+          missingData: ["bgfM2"],
+          summary: "Draft without BGF",
+          suggestedReply: "Need BGF."
+        })
+        .mockResolvedValueOnce({
+          clientName: "Max",
+          requestType: "new_build",
+          urgency: "medium",
+          temperature: "unknown",
+          projectAddress: "Munich",
+          bgfM2: 180,
+          email: null,
+          phone: null,
+          missingData: [],
+          summary: "Reply with BGF",
+          suggestedReply: "Ready."
+        })
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    let nextBotMessageId = 500;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: nextBotMessageId++ } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      parser,
+      prisma: client,
+      telegramDraftStore,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 16,
+          message: {
+            message_id: 11,
+            date: 1779296700,
+            chat: { id: 12345 },
+            text: "Katya new build at Chiemseeufer 7"
+          }
+        }
+      ],
+      config
+    );
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 17,
+            message: {
+              message_id: 12,
+              date: 1779296760,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 500 },
+              text: "BGF 180"
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 17 });
+
+    expect(created).toEqual([
+      {
+        data: expect.objectContaining({
+          leadId: "L-2026-002",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180
+        })
+      }
+    ]);
   });
 
   it("answers capability questions without creating a lead", async () => {
