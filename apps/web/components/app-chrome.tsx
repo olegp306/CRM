@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { AssistantDrawer } from "@/components/assistant-drawer";
+import { AppMobileTabs } from "@/components/app-mobile-tabs";
 import { AppSidebar } from "@/components/app-sidebar";
 import { getRoutePendingPresentation, getRoutePendingPreview } from "@/components/app-transition";
 import { cn } from "@app/ui";
@@ -37,6 +38,7 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
         <header className="flex h-14 items-center justify-end border-b border-border bg-white px-4 lg:px-6">
           <p className="text-xs font-semibold text-muted-foreground">{userName}</p>
         </header>
+        <AppMobileTabs pathname={pathname} pendingHref={pendingHref} onNavigate={setPendingHref} locale="en" />
         <main className="relative min-w-0 p-4 lg:p-6" aria-busy={isPending ? true : undefined}>
           <div className={cn("transition duration-150", pendingPresentation.contentClassName)}>
             {pendingPreview ? <RoutePendingPreview title={pendingPreview.title} description={pendingPreview.description} /> : children}

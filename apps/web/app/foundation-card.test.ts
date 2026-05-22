@@ -18,6 +18,7 @@ describe("Card 1 app foundation", () => {
       "apps/web/app/(app)/leads/page.tsx",
       "apps/web/app/(app)/projects/page.tsx",
       "apps/web/app/(app)/settings/page.tsx",
+      "apps/web/components/app-mobile-tabs.tsx",
       "apps/web/components/app-sidebar.tsx",
       "apps/web/components/assistant-button.tsx"
     ];
