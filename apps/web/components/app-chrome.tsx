@@ -35,7 +35,10 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
     >
       <AppSidebar pathname={pathname} pendingHref={pendingHref} brandName={workspaceName} appVersion={appVersion} onNavigate={setPendingHref} locale="en" />
       <div className="min-w-0">
-        <header className="flex h-14 items-center justify-end border-b border-border bg-white px-4 lg:px-6">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-white px-4 lg:justify-end lg:px-6">
+          <span className="lg:hidden rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground" aria-label={`Mobile version marker v${appVersion}`}>
+            v{appVersion}
+          </span>
           <p className="text-xs font-semibold text-muted-foreground">{userName}</p>
         </header>
         <AppMobileTabs pathname={pathname} pendingHref={pendingHref} onNavigate={setPendingHref} locale="en" />
