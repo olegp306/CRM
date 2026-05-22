@@ -6,9 +6,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
-  type ColumnSizingState,
   type SortingState,
-  type VisibilityState
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -23,6 +21,7 @@ import {
   type LeadTableRow,
   type LeadTableViewMode
 } from "./lead-table-store";
+import { usePersistentTablePreferences } from "../table-preferences";
 
 type LeadsTableProps = {
   rows: LeadTableRow[];
@@ -32,8 +31,7 @@ type LeadsTableProps = {
 
 export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(rows[0]?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);

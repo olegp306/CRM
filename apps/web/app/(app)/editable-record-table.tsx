@@ -6,9 +6,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
-  type ColumnSizingState,
   type SortingState,
-  type VisibilityState
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
@@ -18,6 +16,7 @@ import {
   type EditableRecordRow,
   type EditableTableField
 } from "./editable-record-table-store";
+import { usePersistentTablePreferences } from "./table-preferences";
 
 type EditableRecordTableProps = {
   title: string;
@@ -31,8 +30,7 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction }:
   const tableFields = fields.filter((field) => field.table);
   const editorFields = fields.filter((field) => field.editable);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences(`editable-${kind}`);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
