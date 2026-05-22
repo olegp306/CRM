@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   canMarkLeadKpSent,
+  clampLeadColumnSizing,
   createLeadActionPlan,
   createLeadTableRows,
+  getLeadSourceMaterials,
   inlineEditableLeadFields,
   isInlineEditableLeadField,
   leadMobileCardFields,
@@ -71,6 +73,33 @@ describe("lead table model", () => {
     expect(isInlineEditableLeadField("status")).toBe(true);
     expect(isInlineEditableLeadField("rawInput")).toBe(false);
     expect(isInlineEditableLeadField("missingData")).toBe(false);
+  });
+
+  it("bounds large source-text columns so persisted widths cannot stretch the lead table", () => {
+    expect(leadTableColumns.find((column) => column.key === "rawInput")).toMatchObject({
+      defaultSize: 220,
+      maxSize: 480
+    });
+    expect(
+      clampLeadColumnSizing({
+        rawInput: 1400,
+        missingData: 900,
+        leadId: 180
+      })
+    ).toEqual({
+      rawInput: 480,
+      missingData: 360,
+      leadId: 180
+    });
+  });
+
+  it("extracts source materials from saved Telegram raw input", () => {
+    expect(
+      getLeadSourceMaterials("Need EFH offer\nTelegram sources: telegram:777:42, telegram:777:43")
+    ).toEqual({
+      references: ["telegram:777:42", "telegram:777:43"],
+      sourceText: "Need EFH offer\nTelegram sources: telegram:777:42, telegram:777:43"
+    });
   });
 
   it("serializes lead records for a client-side table and edit drawer", () => {

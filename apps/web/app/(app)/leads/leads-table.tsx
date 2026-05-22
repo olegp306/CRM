@@ -6,13 +6,16 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnSizingState,
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   canMarkLeadKpSent,
+  clampLeadColumnSizing,
   createLeadActionPlan,
+  getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadTableColumns,
   leadTableViewModeStorageKey,
@@ -45,6 +48,10 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const router = useRouter();
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
+  const clampedColumnSizing = useMemo(
+    () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
+    [columnSizing]
+  );
 
   useEffect(() => {
     try {
@@ -67,12 +74,19 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     window.localStorage.setItem(leadTableViewModeStorageKey, viewMode);
   }, [isViewModeHydrated, viewMode]);
 
+  useEffect(() => {
+    if (JSON.stringify(columnSizing) !== JSON.stringify(clampedColumnSizing)) {
+      setColumnSizing(clampedColumnSizing);
+    }
+  }, [clampedColumnSizing, columnSizing, setColumnSizing]);
+
   const columns = useMemo<Array<ColumnDef<LeadTableRow>>>(
     () =>
       leadTableColumns.map((column) => ({
         accessorKey: column.key,
         header: column.label,
         size: column.defaultSize,
+        maxSize: column.maxSize,
         minSize: 92,
         enableSorting: column.enableSorting,
         cell: ({ getValue, row }) =>
@@ -83,6 +97,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
               isSaving={isSaving}
               onSubmit={handleInlineSubmit}
             />
+          ) : column.key === "rawInput" ? (
+            <SourceMaterialsCell value={String(getValue() ?? "")} />
           ) : (
             <TruncatedCell value={String(getValue() ?? "")} />
           )
@@ -93,7 +109,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnVisibility, columnSizing },
+    state: { sorting, columnVisibility, columnSizing: clampedColumnSizing },
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -143,10 +159,6 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     if (mode === "inline") {
       setSelectedLeadId(null);
     }
-  }
-
-  function stopResizeClick(event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) {
-    event.stopPropagation();
   }
 
   return (
@@ -280,8 +292,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                         aria-label="Resize column"
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        onClick={stopResizeClick}
-                        className="absolute -right-1 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none bg-transparent hover:bg-primary/30"
+                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none bg-transparent hover:bg-primary/30"
                       />
                     </th>
                   ))}
@@ -378,6 +389,25 @@ function TruncatedCell({ value }: { value: string }) {
   return <span className="block max-w-full truncate text-foreground" title={value}>{value || "—"}</span>;
 }
 
+function SourceMaterialsCell({ value }: { value: string }) {
+  const materials = getLeadSourceMaterials(value);
+
+  if (!materials.sourceText) {
+    return <TruncatedCell value="" />;
+  }
+
+  return (
+    <span className="grid max-w-full gap-0.5" title={materials.sourceText}>
+      <span className="truncate text-foreground">{materials.sourceText}</span>
+      {materials.references.length > 0 ? (
+        <span className="truncate text-[11px] font-medium text-muted-foreground">
+          Sources: {materials.references.join(", ")}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 const leadEditorFieldNames: LeadTableColumnKey[] = [
   "clientRecordId",
   "temperature",
@@ -471,6 +501,8 @@ function LeadEditor({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
 }) {
+  const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
+
   return (
     <form key={lead.id} onSubmit={onSubmit} className="grid max-h-[calc(100vh-8rem)] gap-4 overflow-auto p-4">
       <input type="hidden" name="id" value={lead.id} />
@@ -484,6 +516,28 @@ function LeadEditor({
           Close
         </button>
       </div>
+
+      <details className="rounded-lg border border-border bg-muted/30 p-3" open={Boolean(sourceMaterials.sourceText)}>
+        <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
+        {sourceMaterials.sourceText ? (
+          <div className="mt-3 grid gap-2">
+            {sourceMaterials.references.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {sourceMaterials.references.map((reference) => (
+                  <span key={reference} className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    {reference}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-white p-3 text-xs leading-relaxed text-foreground">
+              {sourceMaterials.sourceText}
+            </pre>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">No source text or document references saved yet.</p>
+        )}
+      </details>
 
       <div className="grid gap-3">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />

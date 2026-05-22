@@ -29,6 +29,7 @@ export type LeadTableColumn = {
   label: string;
   enableSorting: true;
   defaultSize: number;
+  maxSize?: number;
 };
 
 export type LeadTableViewMode = "split" | "full" | "inline";
@@ -89,14 +90,14 @@ export const leadTableColumns: LeadTableColumn[] = [
   { key: "isStandard", label: "Standard", enableSorting: true, defaultSize: 116 },
   { key: "status", label: "Status", enableSorting: true, defaultSize: 128 },
   { key: "source", label: "Source", enableSorting: true, defaultSize: 116 },
-  { key: "rawInput", label: "Raw input", enableSorting: true, defaultSize: 260 },
-  { key: "missingData", label: "Missing data", enableSorting: true, defaultSize: 180 },
+  { key: "rawInput", label: "Raw input", enableSorting: true, defaultSize: 220, maxSize: 480 },
+  { key: "missingData", label: "Missing data", enableSorting: true, defaultSize: 180, maxSize: 360 },
   { key: "kpGeneratedDocumentId", label: "KP document", enableSorting: true, defaultSize: 168 },
   { key: "kpSentDate", label: "KP sent", enableSorting: true, defaultSize: 124 },
   { key: "followup1Date", label: "Follow-up date", enableSorting: true, defaultSize: 152 },
   { key: "followupStatus", label: "Follow-up status", enableSorting: true, defaultSize: 160 },
   { key: "outcome", label: "Outcome", enableSorting: true, defaultSize: 132 },
-  { key: "outcomeReason", label: "Outcome reason", enableSorting: true, defaultSize: 200 },
+  { key: "outcomeReason", label: "Outcome reason", enableSorting: true, defaultSize: 200, maxSize: 360 },
   { key: "projectRecordId", label: "Project ID", enableSorting: true, defaultSize: 160 }
 ];
 
@@ -132,6 +133,37 @@ export const inlineEditableLeadFields: LeadTableColumnKey[] = [
 
 export function isInlineEditableLeadField(key: LeadTableColumnKey): boolean {
   return inlineEditableLeadFields.includes(key);
+}
+
+export function clampLeadColumnSizing(columnSizing: Record<string, number>): Record<string, number> {
+  const maxSizes = new Map<string, number>(
+    leadTableColumns
+      .filter((column) => column.maxSize)
+      .map((column) => [column.key, column.maxSize as number])
+  );
+
+  return Object.fromEntries(
+    Object.entries(columnSizing).map(([key, size]) => {
+      const maxSize = maxSizes.get(key);
+      return [key, maxSize ? Math.min(size, maxSize) : size];
+    })
+  );
+}
+
+export function getLeadSourceMaterials(rawInput: string): { references: string[]; sourceText: string } {
+  const sourceText = rawInput.trim();
+  if (!sourceText) {
+    return { references: [], sourceText: "" };
+  }
+
+  const references = sourceText
+    .split(/\r?\n/)
+    .filter((line) => /^Telegram sources?:/i.test(line.trim()))
+    .flatMap((line) => line.replace(/^Telegram sources?:/i, "").split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return { references, sourceText };
 }
 
 export function createLeadTableRows(records: LeadTableRecord[]): LeadTableRow[] {
