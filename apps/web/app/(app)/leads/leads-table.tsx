@@ -11,8 +11,18 @@ import {
   type VisibilityState
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
-import { canMarkLeadKpSent, createLeadActionPlan, leadTableColumns, type LeadActionPlanItem, type LeadTableRow } from "./lead-table-store";
+import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  canMarkLeadKpSent,
+  createLeadActionPlan,
+  isInlineEditableLeadField,
+  leadTableColumns,
+  leadTableViewModes,
+  type LeadActionPlanItem,
+  type LeadTableColumnKey,
+  type LeadTableRow,
+  type LeadTableViewMode
+} from "./lead-table-store";
 
 type LeadsTableProps = {
   rows: LeadTableRow[];
@@ -24,6 +34,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(rows[0]?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
@@ -38,9 +49,19 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
         size: column.defaultSize,
         minSize: 92,
         enableSorting: column.enableSorting,
-        cell: ({ getValue }) => <TruncatedCell value={String(getValue() ?? "")} />
+        cell: ({ getValue, row }) =>
+          viewMode === "inline" && isInlineEditableLeadField(column.key) ? (
+            <InlineLeadCell
+              fieldName={column.key}
+              row={row.original}
+              isSaving={isSaving}
+              onSubmit={handleInlineSubmit}
+            />
+          ) : (
+            <TruncatedCell value={String(getValue() ?? "")} />
+          )
       })),
-    []
+    [isSaving, viewMode]
   );
 
   const table = useReactTable({
@@ -61,6 +82,19 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     try {
       await updateLeadAction(new FormData(event.currentTarget));
       router.refresh();
+      if (viewMode === "full") {
+        setSelectedLeadId(null);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleInlineSubmit(formData: FormData) {
+    setIsSaving(true);
+    try {
+      await updateLeadAction(formData);
+      router.refresh();
     } finally {
       setIsSaving(false);
     }
@@ -79,30 +113,54 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className={viewMode === "split" ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" : "grid gap-4"}>
       <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">Lead table</h2>
-            <p className="text-sm text-muted-foreground">Sort, resize, hide columns, then click a row to edit.</p>
+            <p className="text-sm text-muted-foreground">
+              {viewMode === "inline" ? "Sort, resize, hide columns, then edit safe fields directly." : "Sort, resize, hide columns, then click a row to edit."}
+            </p>
           </div>
-          <details className="relative">
-            <summary className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-semibold">
-              Columns
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-white p-3 shadow-xl">
-              {table.getAllLeafColumns().map((column) => (
-                <label key={column.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={column.getIsVisible()}
-                    onChange={column.getToggleVisibilityHandler()}
-                  />
-                  <span>{leadTableColumns.find((item) => item.key === column.id)?.label ?? column.id}</span>
-                </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+              {leadTableViewModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  title={mode.description}
+                  onClick={() => {
+                    setViewMode(mode.id);
+                    if (mode.id === "inline") {
+                      setSelectedLeadId(null);
+                    }
+                  }}
+                  className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
+                    viewMode === mode.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {mode.label}
+                </button>
               ))}
             </div>
-          </details>
+            <details className="relative">
+              <summary className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                Columns
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-white p-3 shadow-xl">
+                {table.getAllLeafColumns().map((column) => (
+                  <label key={column.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={column.getIsVisible()}
+                      onChange={column.getToggleVisibilityHandler()}
+                    />
+                    <span>{leadTableColumns.find((item) => item.key === column.id)?.label ?? column.id}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          </div>
         </div>
 
         <div className="overflow-auto">
@@ -141,8 +199,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={row.id}
-                    onClick={() => setSelectedLeadId(row.original.id)}
-                    className={`cursor-pointer transition hover:bg-muted/60 ${
+                    onClick={viewMode === "inline" ? undefined : () => setSelectedLeadId(row.original.id)}
+                    className={`${viewMode === "inline" ? "" : "cursor-pointer"} transition hover:bg-muted/60 ${
                       row.original.id === selectedLeadId ? "bg-primary/5" : "bg-white"
                     }`}
                   >
@@ -169,27 +227,121 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
         </div>
       </section>
 
-      <aside className="rounded-lg border border-border bg-white">
-        {selectedLead ? (
-          <LeadEditor
-            lead={selectedLead}
-            actionPlan={createLeadActionPlan(selectedLead)}
-            isSaving={isSaving}
-            isMarkingKpSent={isMarkingKpSent}
-            onClose={() => setSelectedLeadId(null)}
-            onSubmit={handleSubmit}
-            onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-          />
-        ) : (
-          <div className="p-4 text-sm text-muted-foreground">Select a lead to edit its fields and action plan.</div>
-        )}
-      </aside>
+      {viewMode === "split" ? (
+        <aside className="rounded-lg border border-border bg-white">
+          {selectedLead ? (
+            <LeadEditor
+              lead={selectedLead}
+              actionPlan={createLeadActionPlan(selectedLead)}
+              isSaving={isSaving}
+              isMarkingKpSent={isMarkingKpSent}
+              onClose={() => setSelectedLeadId(null)}
+              onSubmit={handleSubmit}
+              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+            />
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">Select a lead to edit its fields and action plan.</div>
+          )}
+        </aside>
+      ) : null}
+
+      {viewMode === "full" && selectedLead ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+          <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
+            <LeadEditor
+              lead={selectedLead}
+              actionPlan={createLeadActionPlan(selectedLead)}
+              isSaving={isSaving}
+              isMarkingKpSent={isMarkingKpSent}
+              onClose={() => setSelectedLeadId(null)}
+              onSubmit={handleSubmit}
+              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function TruncatedCell({ value }: { value: string }) {
   return <span className="block max-w-full truncate text-foreground" title={value}>{value || "—"}</span>;
+}
+
+const leadEditorFieldNames: LeadTableColumnKey[] = [
+  "clientRecordId",
+  "temperature",
+  "requestType",
+  "urgency",
+  "budgetEur",
+  "desiredStart",
+  "desiredMoveIn",
+  "bgfM2",
+  "wohnflaecheM2",
+  "projectAddress",
+  "isStandard",
+  "status",
+  "rawInput",
+  "missingData",
+  "kpGeneratedDocumentId",
+  "kpSentDate",
+  "followup1Date",
+  "followupStatus",
+  "outcome",
+  "outcomeReason",
+  "projectRecordId"
+];
+
+function InlineLeadCell({
+  fieldName,
+  row,
+  isSaving,
+  onSubmit
+}: {
+  fieldName: LeadTableColumnKey;
+  row: LeadTableRow;
+  isSaving: boolean;
+  onSubmit: (formData: FormData) => Promise<void>;
+}) {
+  const [value, setValue] = useState(row[fieldName] ?? "");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await onSubmit(new FormData(event.currentTarget));
+  }
+
+  function submitIfChanged(form: HTMLFormElement | null) {
+    if (form && value !== (row[fieldName] ?? "")) {
+      form.requestSubmit();
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      submitIfChanged(event.currentTarget.form);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()} className="min-w-0">
+      <input type="hidden" name="id" value={row.id} />
+      {leadEditorFieldNames.map((name) =>
+        name === fieldName ? null : <input key={name} type="hidden" name={name} value={row[name] ?? ""} />
+      )}
+      <input
+        name={fieldName}
+        value={value}
+        disabled={isSaving}
+        required={fieldName === "status"}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={(event) => submitIfChanged(event.currentTarget.form)}
+        onKeyDown={handleKeyDown}
+        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-white focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+        title="Edit inline, then press Enter or leave the cell to save"
+      />
+    </form>
+  );
 }
 
 function LeadEditor({

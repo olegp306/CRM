@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canMarkLeadKpSent, createLeadActionPlan, createLeadTableRows, leadTableColumns } from "./lead-table-store";
+import {
+  canMarkLeadKpSent,
+  createLeadActionPlan,
+  createLeadTableRows,
+  inlineEditableLeadFields,
+  isInlineEditableLeadField,
+  leadTableColumns,
+  leadTableViewModes
+} from "./lead-table-store";
 
 describe("lead table model", () => {
   it("defines all recommended lead fields as sortable table columns", () => {
@@ -30,6 +38,26 @@ describe("lead table model", () => {
       "projectRecordId"
     ]);
     expect(leadTableColumns.every((column) => column.enableSorting)).toBe(true);
+  });
+
+  it("defines split, full, and inline lead table view modes", () => {
+    expect(leadTableViewModes.map((mode) => mode.id)).toEqual(["split", "full", "inline"]);
+  });
+
+  it("limits inline editing to safe scalar workflow fields", () => {
+    expect(inlineEditableLeadFields).toEqual([
+      "temperature",
+      "requestType",
+      "urgency",
+      "budgetEur",
+      "status",
+      "projectAddress",
+      "followupStatus",
+      "outcome"
+    ]);
+    expect(isInlineEditableLeadField("status")).toBe(true);
+    expect(isInlineEditableLeadField("rawInput")).toBe(false);
+    expect(isInlineEditableLeadField("missingData")).toBe(false);
   });
 
   it("serializes lead records for a client-side table and edit drawer", () => {
