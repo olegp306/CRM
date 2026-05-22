@@ -15,7 +15,10 @@ import {
   createLeadActionPlan,
   isInlineEditableLeadField,
   leadTableColumns,
+  leadMobileCardFields,
+  leadMobileViewModes,
   leadTableViewModes,
+  type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadTableColumnKey,
   type LeadTableRow,
@@ -33,6 +36,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
+  const [mobileViewMode, setMobileViewMode] = useState<LeadMobileViewMode>("cards");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(rows[0]?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
@@ -112,7 +116,68 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
 
   return (
     <div className={viewMode === "split" ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" : "grid gap-4"}>
-      <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-white">
+      <section className="grid gap-3 md:hidden">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-3">
+          <div>
+            <h2 className="text-base font-semibold">Leads</h2>
+            <p className="text-xs text-muted-foreground">Card view for mobile, table when you need all columns.</p>
+          </div>
+          <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+            {leadMobileViewModes.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                title={mode.description}
+                onClick={() => setMobileViewMode(mode.id)}
+                className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
+                  mobileViewMode === mode.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {mobileViewMode === "cards" ? (
+          rows.length > 0 ? (
+            <div className="grid gap-3">
+              {rows.map((lead) => (
+                <button
+                  key={lead.id}
+                  type="button"
+                  onClick={() => setSelectedLeadId(lead.id)}
+                  className="grid gap-3 rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:border-foreground/20"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">Lead</p>
+                      <h3 className="mt-1 text-base font-semibold">{lead.leadId}</h3>
+                    </div>
+                    <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                      {lead.status || "new"}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 text-sm">
+                    {leadMobileCardFields.map((field) => (
+                      <div key={field} className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
+                        <span className="text-xs font-semibold uppercase text-muted-foreground">
+                          {leadTableColumns.find((column) => column.key === field)?.label ?? field}
+                        </span>
+                        <span className="truncate text-foreground">{lead[field] || "-"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">No leads found yet.</div>
+          )
+        ) : null}
+      </section>
+
+      <section className={`${mobileViewMode === "cards" ? "hidden md:block" : "block"} min-w-0 overflow-hidden rounded-lg border border-border bg-white`}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">Lead table</h2>
@@ -226,7 +291,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
       </section>
 
       {viewMode === "split" ? (
-        <aside className="rounded-lg border border-border bg-white">
+        <aside className="hidden rounded-lg border border-border bg-white md:block">
           {selectedLead ? (
             <LeadEditor
               lead={selectedLead}
@@ -244,7 +309,23 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
       ) : null}
 
       {viewMode === "full" && selectedLead ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+        <div className={`fixed inset-0 z-50 place-items-center bg-black/30 p-4 ${mobileViewMode === "cards" ? "hidden md:grid" : "grid"}`}>
+          <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
+            <LeadEditor
+              lead={selectedLead}
+              actionPlan={createLeadActionPlan(selectedLead)}
+              isSaving={isSaving}
+              isMarkingKpSent={isMarkingKpSent}
+              onClose={() => setSelectedLeadId(null)}
+              onSubmit={handleSubmit}
+              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {selectedLead && (mobileViewMode === "cards" || viewMode === "split") ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 md:hidden">
           <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
             <LeadEditor
               lead={selectedLead}
@@ -366,6 +447,7 @@ function LeadEditor({
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected lead</p>
           <h2 className="mt-1 text-lg font-semibold">{lead.leadId}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Created {lead.createdDate || "-"}</p>
         </div>
         <button type="button" onClick={onClose} className="rounded-md border border-border px-2 py-1 text-xs font-semibold">
           Close

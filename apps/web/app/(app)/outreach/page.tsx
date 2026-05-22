@@ -7,6 +7,7 @@ import { createEditableRecordRows, type EditableTableField } from "../editable-r
 
 const coldTargetFields: EditableTableField[] = [
   { key: "targetId", label: "Target ID", type: "text", table: true, editable: false, width: 132 },
+  { key: "createdAt", label: "Created", type: "date", table: true, editable: false, width: 124 },
   { key: "companyName", label: "Company", type: "text", table: true, editable: true, required: true, width: 240 },
   { key: "fitScore", label: "Fit", type: "number", table: true, editable: true, width: 96 },
   { key: "priority", label: "Priority", type: "text", table: true, editable: true, width: 120 },
@@ -113,6 +114,7 @@ export default async function OutreachPage() {
     select: {
       id: true,
       targetId: true,
+      createdAt: true,
       companyName: true,
       website: true,
       region: true,

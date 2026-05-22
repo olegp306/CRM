@@ -6,6 +6,7 @@ import { updateClientAction } from "./actions";
 
 const clientFields: EditableTableField[] = [
   { key: "clientId", label: "Client ID", type: "text", table: true, editable: false, width: 132 },
+  { key: "createdDate", label: "Created", type: "date", table: true, editable: false, width: 124 },
   { key: "name", label: "Name", type: "text", table: true, editable: true, required: true, width: 220 },
   { key: "clientType", label: "Type", type: "text", table: true, editable: true, required: true, width: 132 },
   { key: "status", label: "Status", type: "text", table: true, editable: true, required: true, width: 132 },
@@ -27,6 +28,7 @@ export default async function ClientsPage() {
     select: {
       id: true,
       clientId: true,
+      createdDate: true,
       name: true,
       clientType: true,
       status: true,

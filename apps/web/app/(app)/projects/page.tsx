@@ -6,6 +6,7 @@ import { updateProjectAction } from "./actions";
 
 const projectFields: EditableTableField[] = [
   { key: "projectId", label: "Project ID", type: "text", table: true, editable: false, width: 132 },
+  { key: "createdAt", label: "Created", type: "date", table: true, editable: false, width: 124 },
   { key: "projectName", label: "Project name", type: "text", table: true, editable: true, required: true, width: 240 },
   { key: "status", label: "Status", type: "text", table: true, editable: true, required: true, width: 132 },
   { key: "currentPhase", label: "Current phase", type: "text", table: true, editable: true, width: 180 },
@@ -26,6 +27,7 @@ export default async function ProjectsPage() {
     select: {
       id: true,
       projectId: true,
+      createdAt: true,
       projectName: true,
       status: true,
       currentPhase: true,
