@@ -31,6 +31,7 @@ export function getAssistantRepository() {
   if (
     !globalForAssistant.assistantRepository ||
     !("listAuditEvents" in globalForAssistant.assistantRepository) ||
+    !("saveAuditEvent" in globalForAssistant.assistantRepository) ||
     !("updateFeedbackStatus" in globalForAssistant.assistantRepository)
   ) {
     globalForAssistant.assistantRepository = createAssistantMemoryRepository();

@@ -1,10 +1,13 @@
 import type { AuditReviewFilters, AssistantAuditEventDraft } from "@app/assistant";
 
-const actions = new Set<AssistantAuditEventDraft["action"]>([
+export const platformAuditActionFilters = [
   "assistant.action.executed",
   "assistant.action.preview_created",
-  "assistant.message.submitted"
-]);
+  "assistant.message.submitted",
+  "platform.release.planned"
+] as const satisfies AssistantAuditEventDraft["action"][];
+
+const actions = new Set<AssistantAuditEventDraft["action"]>(platformAuditActionFilters);
 
 export type PlatformAuditSearchParams = {
   action?: string | string[];

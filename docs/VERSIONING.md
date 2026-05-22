@@ -32,6 +32,20 @@ codex/lead-table-inline-editing
 codex/telegram-lead-attachments
 ```
 
+When features are being prepared as a sequence of pull requests, use stacked branches:
+
+1. Finish and push the current feature branch.
+2. Create the next feature branch from the tip of the previous feature branch.
+3. Keep each branch focused so PRs can be merged into `main` in order.
+
+Example:
+
+```text
+main
+  -> codex/feedback-version-filter
+    -> codex/next-feedback-feature
+```
+
 ## Verification Before Merge
 
 Before merging a feature branch into `main`, run:
@@ -80,3 +94,47 @@ git push origin v0.2.0
 Support, bug, UX feedback, feature requests, and permission-blocked signals store `appVersion`.
 
 This makes it possible to connect a request such as "please add this feature" to the product version where the message was created.
+
+## Release Triage
+
+The platform feedback inbox includes release triage grouped by `appVersion`.
+
+Use it to see which product versions generated the most open support, bug, UX, and feature-request signals before planning the next minor or patch release.
+
+The same inbox also shows a release notes draft for the selected version. Draft sections are generated from feedback signals:
+
+- feature requests become `Features`;
+- bug reports become `Fixes`;
+- support, UX, and permission-blocked signals become `Support and UX`.
+
+Use `Download Markdown` in the release notes draft panel to export the selected version draft as a Markdown file for planning, support replies, or release notes review.
+
+Use `Plan release items` in the same panel to move actionable `new` and `triaged` feedback for the selected version into `planned` without touching already planned, transferred, declined, archived, or other-version signals.
+
+Release planning writes a `platform.release.planned` audit event with the selected `appVersion`, planned item count, skipped count, and actor user ID so support messages can be traced back to the product version and planning action that handled them.
+
+The feedback inbox also shows a `Release history` panel sourced from those audit events, making prior planning actions visible alongside triage, readiness, workflow, and release notes draft panels.
+
+Use `Export CSV` in the `Release history` panel to download prior release planning actions with version, actor, planned count, and skipped count. When a version filter is selected, the panel and export are scoped to that same `appVersion`.
+
+The release history export link exposes an accessible label that names whether it exports all versions or the selected version scope.
+
+The panel header states that release history and CSV export follow the selected version filter, so operators can tell when they are looking at a scoped history view.
+
+Each release history row exposes a combined accessible label with version, actor, planned count, and skipped count.
+
+Release history summary metrics expose matching accessible labels for the visible planning event, planned, and skipped counts.
+
+The same panel summarizes the active history scope, top planning actor, planning event count, total planned items, total skipped items, and planning actor counts. The history scope metric has a matching accessible label. Planning actors are sorted by activity, with stable alphabetical ordering for ties. Actor counts use singular/plural event wording, and each actor chip exposes the full actor name in the title attribute plus a matching accessible label. The top actor metric also exposes the full actor name when the visible value is truncated and has a matching accessible label; when no release planning event exists yet the metric shows `No actor yet` and `No actor events yet`.
+
+When a version filter is active, the history scope metric includes `View all history` to clear the version and return to the full release planning timeline.
+
+When another scope is active, the same metric includes `Current version history` to jump to release planning events for `currentAppMetadata.version`.
+
+When no release planning events exist yet, the panel prompts operators to use `Plan release items` to create the first history event.
+
+The empty history state also exposes an accessible label that names the current history scope.
+
+The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
+
+The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.

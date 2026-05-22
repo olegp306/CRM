@@ -1,8 +1,6 @@
 import { getPlatformAuditReviewAction } from "@/app/(app)/assistant/actions";
 import { getWorkspaceSession } from "@/app/workspace-session";
-import { parsePlatformAuditFilters, type PlatformAuditSearchParams } from "./filters";
-
-const actionFilters = ["assistant.message.submitted", "assistant.action.preview_created", "assistant.action.executed"] as const;
+import { parsePlatformAuditFilters, platformAuditActionFilters, type PlatformAuditSearchParams } from "./filters";
 
 export default async function PlatformAuditPage({
   searchParams
@@ -49,7 +47,7 @@ export default async function PlatformAuditPage({
             >
               Export CSV
             </a>
-            {actionFilters.map((action) => (
+            {platformAuditActionFilters.map((action) => (
               <a
                 key={action}
                 href={`/platform/audit?action=${action}${filters.actorUserId ? `&actor=${filters.actorUserId}` : ""}${filters.query ? `&q=${filters.query}` : ""}`}
