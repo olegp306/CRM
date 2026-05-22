@@ -43,6 +43,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("Release history and CSV export follow the selected version filter.");
     expect(pageSource).toContain("History scope");
     expect(pageSource).toContain("releaseHistoryScope");
+    expect(pageSource).toContain("releaseHistoryScopeLabel");
+    expect(pageSource).toContain("aria-label={releaseHistoryScopeLabel}");
     expect(pageSource).toContain("View all history");
     expect(pageSource).toContain("appVersion: undefined");
     expect(pageSource).toContain("Current version history");

@@ -32,6 +32,7 @@ export default async function PlatformFeedbackPage({
   });
   const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
   const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
+  const releaseHistoryScopeLabel = `History scope: ${releaseHistoryScope}`;
   const releaseHistoryTopActorEventLabel = inbox.releaseHistorySummary.topActor
     ? formatReleaseHistoryActorCount(inbox.releaseHistorySummary.topActor.count)
     : "No actor events yet";
@@ -228,7 +229,7 @@ export default async function PlatformFeedbackPage({
               </a>
             </div>
             <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-4 text-xs md:grid-cols-5">
-              <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <div aria-label={releaseHistoryScopeLabel} className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
                 <p className="truncate text-sm font-semibold">{releaseHistoryScope}</p>
                 <p className="text-xs text-neutral-500">History scope</p>
                 {filters.appVersion ? (
