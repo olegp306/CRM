@@ -106,6 +106,12 @@ export const leadTableViewModes: Array<{ id: LeadTableViewMode; label: string; d
   { id: "inline", label: "Inline", description: "Quick-edit safe fields directly in the table." }
 ];
 
+export const leadTableViewModeStorageKey = "crm.table.leads.view-mode.v1";
+
+export function normalizeLeadTableViewMode(input: unknown): LeadTableViewMode {
+  return leadTableViewModes.some((mode) => mode.id === input) ? (input as LeadTableViewMode) : "split";
+}
+
 export const leadMobileViewModes: Array<{ id: LeadMobileViewMode; label: string; description: string }> = [
   { id: "cards", label: "Cards", description: "Mobile cards with the most important lead fields." },
   { id: "table", label: "Table", description: "Full horizontal lead table on mobile." }
