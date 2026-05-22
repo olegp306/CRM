@@ -68,9 +68,10 @@ export async function createLeadDraftFromTelegramMessage(
   const rawInput = [
     message.text,
     `Telegram sources: ${telegramSourceExternalIds.join(", ")}`,
+    createTelegramAttachmentSummary(message.attachments),
     `Summary: ${parsed.summary}`,
     `Suggested reply: ${parsed.suggestedReply}`
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   const draft = createLeadIntakeDraft({
       source: "telegram",
@@ -89,6 +90,23 @@ export async function createLeadDraftFromTelegramMessage(
     telegramSourceExternalId,
     temperature: parsed.temperature
   };
+}
+
+function createTelegramAttachmentSummary(attachments: TelegramLeadAttachment[] | undefined): string {
+  if (!attachments || attachments.length === 0) {
+    return "";
+  }
+
+  return attachments
+    .map((attachment, index) => {
+      const number = index + 1;
+      if (attachment.kind === "photo") {
+        return `Telegram attachment ${number}: photo (${attachment.mimeType})`;
+      }
+
+      return `Telegram attachment ${number}: PDF (${attachment.fileName ?? "telegram-lead.pdf"})`;
+    })
+    .join("\n");
 }
 
 export function createOpenAiLeadParserClient(config: { apiKey: string; model: string; fetchImpl?: typeof fetch }): OpenAiLeadParserClient {
