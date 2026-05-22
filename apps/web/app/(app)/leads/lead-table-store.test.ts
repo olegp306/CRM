@@ -55,8 +55,8 @@ describe("lead table model", () => {
     expect(normalizeLeadTableViewMode("entire")).toBe("split");
   });
 
-  it("auto-selects a lead only for split mode so popup views open on the list", () => {
-    expect(resolveInitialSelectedLeadId("split", ["lead-1", "lead-2"])).toBe("lead-1");
+  it("opens every lead view on the list without auto-selecting a lead", () => {
+    expect(resolveInitialSelectedLeadId("split", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("full", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("inline", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("split", [])).toBeNull();
