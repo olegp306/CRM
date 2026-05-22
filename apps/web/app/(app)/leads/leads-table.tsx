@@ -9,7 +9,7 @@ import {
   type ColumnSizingState,
   type SortingState,
 } from "@tanstack/react-table";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   canMarkLeadKpSent,
@@ -23,6 +23,7 @@ import {
   leadMobileViewModes,
   leadTableViewModes,
   normalizeLeadTableViewMode,
+  resolveDeepLinkedLeadRowId,
   resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
@@ -48,13 +49,26 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkedLeadId = searchParams.get("leadId");
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
+  const isDeepLinkedLeadSelected = Boolean(deepLinkedLeadId && selectedLead?.leadId === deepLinkedLeadId);
+  const shouldShowLeadDialog = Boolean(selectedLead && (viewMode === "full" || isDeepLinkedLeadSelected));
+  const shouldShowMobileLeadDialog = Boolean(selectedLead && !shouldShowLeadDialog && (mobileViewMode === "cards" || viewMode === "split"));
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
     [columnSizing]
   );
 
   useEffect(() => {
+    const deepLinkedLeadRowId = resolveDeepLinkedLeadRowId(rows, deepLinkedLeadId);
+
+    if (deepLinkedLeadRowId) {
+      setSelectedLeadId(deepLinkedLeadRowId);
+      setIsViewModeHydrated(true);
+      return;
+    }
+
     try {
       const storedViewMode = normalizeLeadTableViewMode(window.localStorage.getItem(leadTableViewModeStorageKey));
       setViewMode(storedViewMode);
@@ -64,7 +78,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
       setSelectedLeadId(resolveInitialSelectedLeadId("split", rows.map((row) => row.id)));
     }
     setIsViewModeHydrated(true);
-  }, [rows]);
+  }, [deepLinkedLeadId, rows]);
 
   useEffect(() => {
     if (!isViewModeHydrated) {
@@ -348,8 +362,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
         </aside>
       ) : null}
 
-      {viewMode === "full" && selectedLead ? (
-        <div className={`fixed inset-0 z-50 place-items-center bg-black/30 p-4 ${mobileViewMode === "cards" ? "hidden md:grid" : "grid"}`}>
+      {shouldShowLeadDialog && selectedLead ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
           <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
             <LeadEditor
               lead={selectedLead}
@@ -364,7 +378,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
         </div>
       ) : null}
 
-      {selectedLead && (mobileViewMode === "cards" || viewMode === "split") ? (
+      {shouldShowMobileLeadDialog && selectedLead ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 md:hidden">
           <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
             <LeadEditor

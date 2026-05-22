@@ -13,6 +13,7 @@ import {
   leadTableViewModeStorageKey,
   leadTableViewModes,
   normalizeLeadTableViewMode,
+  resolveDeepLinkedLeadRowId,
   resolveInitialSelectedLeadId
 } from "./lead-table-store";
 
@@ -60,6 +61,18 @@ describe("lead table model", () => {
     expect(resolveInitialSelectedLeadId("full", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("inline", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("split", [])).toBeNull();
+  });
+
+  it("resolves a Telegram CRM deep link to the matching lead row", () => {
+    const rows = [
+      { id: "lead-record-1", leadId: "L-2026-001" },
+      { id: "lead-record-2", leadId: "L-2026-002" }
+    ];
+
+    expect(resolveDeepLinkedLeadRowId(rows, "L-2026-002")).toBe("lead-record-2");
+    expect(resolveDeepLinkedLeadRowId(rows, "lead-record-1")).toBe("lead-record-1");
+    expect(resolveDeepLinkedLeadRowId(rows, "L-2026-999")).toBeNull();
+    expect(resolveDeepLinkedLeadRowId(rows, null)).toBeNull();
   });
 
   it("defines mobile card and table modes with date visible on cards", () => {
