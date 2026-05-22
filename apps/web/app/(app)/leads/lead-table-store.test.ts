@@ -8,7 +8,9 @@ import {
   leadMobileCardFields,
   leadMobileViewModes,
   leadTableColumns,
-  leadTableViewModes
+  leadTableViewModeStorageKey,
+  leadTableViewModes,
+  normalizeLeadTableViewMode
 } from "./lead-table-store";
 
 describe("lead table model", () => {
@@ -44,6 +46,10 @@ describe("lead table model", () => {
 
   it("defines split, full, and inline lead table view modes", () => {
     expect(leadTableViewModes.map((mode) => mode.id)).toEqual(["split", "full", "inline"]);
+    expect(leadTableViewModeStorageKey).toBe("crm.table.leads.view-mode.v1");
+    expect(normalizeLeadTableViewMode("full")).toBe("full");
+    expect(normalizeLeadTableViewMode("inline")).toBe("inline");
+    expect(normalizeLeadTableViewMode("entire")).toBe("split");
   });
 
   it("defines mobile card and table modes with date visible on cards", () => {

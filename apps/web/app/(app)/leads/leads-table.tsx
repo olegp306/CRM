@@ -9,15 +9,17 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from "react";
 import {
   canMarkLeadKpSent,
   createLeadActionPlan,
   isInlineEditableLeadField,
   leadTableColumns,
+  leadTableViewModeStorageKey,
   leadMobileCardFields,
   leadMobileViewModes,
   leadTableViewModes,
+  normalizeLeadTableViewMode,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadTableColumnKey,
@@ -36,12 +38,34 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
+  const [isViewModeHydrated, setIsViewModeHydrated] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<LeadMobileViewMode>("cards");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(rows[0]?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const router = useRouter();
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
+
+  useEffect(() => {
+    try {
+      const storedViewMode = normalizeLeadTableViewMode(window.localStorage.getItem(leadTableViewModeStorageKey));
+      setViewMode(storedViewMode);
+      if (storedViewMode !== "split") {
+        setSelectedLeadId(null);
+      }
+    } catch {
+      setViewMode("split");
+    }
+    setIsViewModeHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isViewModeHydrated) {
+      return;
+    }
+
+    window.localStorage.setItem(leadTableViewModeStorageKey, viewMode);
+  }, [isViewModeHydrated, viewMode]);
 
   const columns = useMemo<Array<ColumnDef<LeadTableRow>>>(
     () =>
@@ -112,6 +136,17 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     } finally {
       setIsMarkingKpSent(false);
     }
+  }
+
+  function handleViewModeChange(mode: LeadTableViewMode) {
+    setViewMode(mode);
+    if (mode === "inline") {
+      setSelectedLeadId(null);
+    }
+  }
+
+  function stopResizeClick(event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) {
+    event.stopPropagation();
   }
 
   return (
@@ -192,12 +227,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                   key={mode.id}
                   type="button"
                   title={mode.description}
-                  onClick={() => {
-                    setViewMode(mode.id);
-                    if (mode.id === "inline") {
-                      setSelectedLeadId(null);
-                    }
-                  }}
+                  onClick={() => handleViewModeChange(mode.id)}
                   className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
                     viewMode === mode.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -250,7 +280,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                         aria-label="Resize column"
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/30"
+                        onClick={stopResizeClick}
+                        className="absolute -right-1 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none bg-transparent hover:bg-primary/30"
                       />
                     </th>
                   ))}
