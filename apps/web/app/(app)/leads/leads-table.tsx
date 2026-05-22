@@ -6,13 +6,16 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnSizingState,
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   canMarkLeadKpSent,
+  clampLeadColumnSizing,
   createLeadActionPlan,
+  getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadTableColumns,
   leadTableViewModeStorageKey,
@@ -45,6 +48,10 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const router = useRouter();
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
+  const clampedColumnSizing = useMemo(
+    () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
+    [columnSizing]
+  );
 
   useEffect(() => {
     try {
@@ -67,12 +74,19 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     window.localStorage.setItem(leadTableViewModeStorageKey, viewMode);
   }, [isViewModeHydrated, viewMode]);
 
+  useEffect(() => {
+    if (JSON.stringify(columnSizing) !== JSON.stringify(clampedColumnSizing)) {
+      setColumnSizing(clampedColumnSizing);
+    }
+  }, [clampedColumnSizing, columnSizing, setColumnSizing]);
+
   const columns = useMemo<Array<ColumnDef<LeadTableRow>>>(
     () =>
       leadTableColumns.map((column) => ({
         accessorKey: column.key,
         header: column.label,
         size: column.defaultSize,
+        maxSize: column.maxSize,
         minSize: 92,
         enableSorting: column.enableSorting,
         cell: ({ getValue, row }) =>
@@ -83,6 +97,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
               isSaving={isSaving}
               onSubmit={handleInlineSubmit}
             />
+          ) : column.key === "rawInput" ? (
+            <SourceMaterialsCell value={String(getValue() ?? "")} />
           ) : (
             <TruncatedCell value={String(getValue() ?? "")} />
           )
@@ -93,7 +109,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnVisibility, columnSizing },
+    state: { sorting, columnVisibility, columnSizing: clampedColumnSizing },
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -145,10 +161,6 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     }
   }
 
-  function stopResizeClick(event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-  }
-
   return (
     <div className={viewMode === "split" ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" : "grid gap-4"}>
       <section className="grid gap-3 md:hidden">
@@ -176,30 +188,30 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
 
         {mobileViewMode === "cards" ? (
           rows.length > 0 ? (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {rows.map((lead) => (
                 <button
                   key={lead.id}
                   type="button"
                   onClick={() => setSelectedLeadId(lead.id)}
-                  className="grid gap-3 rounded-lg border border-border bg-white p-4 text-left shadow-sm transition hover:border-foreground/20"
+                  className="grid gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-left shadow-sm transition hover:border-foreground/20"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase text-muted-foreground">Lead</p>
-                      <h3 className="mt-1 text-base font-semibold">{lead.leadId}</h3>
+                      <p className="text-[11px] leading-none text-muted-foreground">Lead</p>
+                      <h3 className="mt-0.5 text-sm font-semibold leading-tight">{lead.leadId}</h3>
                     </div>
-                    <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold leading-5 text-muted-foreground">
                       {lead.status || "new"}
                     </span>
                   </div>
-                  <div className="grid gap-2 text-sm">
+                  <div className="grid gap-0.5">
                     {leadMobileCardFields.map((field) => (
-                      <div key={field} className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
-                        <span className="text-xs font-semibold uppercase text-muted-foreground">
+                      <div key={field} className="grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-2 leading-[1.15]">
+                        <span className="text-[10px] font-normal text-muted-foreground">
                           {leadTableColumns.find((column) => column.key === field)?.label ?? field}
                         </span>
-                        <span className="truncate text-foreground">{lead[field] || "-"}</span>
+                        <span className="truncate text-[11px] font-semibold text-foreground">{lead[field] || "-"}</span>
                       </div>
                     ))}
                   </div>
@@ -280,8 +292,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
                         aria-label="Resize column"
                         onMouseDown={header.getResizeHandler()}
                         onTouchStart={header.getResizeHandler()}
-                        onClick={stopResizeClick}
-                        className="absolute -right-1 top-0 z-20 h-full w-3 cursor-col-resize touch-none select-none bg-transparent hover:bg-primary/30"
+                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none bg-transparent hover:bg-primary/30"
                       />
                     </th>
                   ))}
@@ -378,6 +389,25 @@ function TruncatedCell({ value }: { value: string }) {
   return <span className="block max-w-full truncate text-foreground" title={value}>{value || "—"}</span>;
 }
 
+function SourceMaterialsCell({ value }: { value: string }) {
+  const materials = getLeadSourceMaterials(value);
+
+  if (!materials.sourceText) {
+    return <TruncatedCell value="" />;
+  }
+
+  return (
+    <span className="grid max-w-full gap-0.5" title={materials.sourceText}>
+      <span className="truncate text-foreground">{materials.sourceText}</span>
+      {materials.references.length > 0 ? (
+        <span className="truncate text-[11px] font-medium text-muted-foreground">
+          Sources: {materials.references.map((reference) => reference.label).join(", ")}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 const leadEditorFieldNames: LeadTableColumnKey[] = [
   "clientRecordId",
   "temperature",
@@ -471,6 +501,8 @@ function LeadEditor({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
 }) {
+  const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
+
   return (
     <form key={lead.id} onSubmit={onSubmit} className="grid max-h-[calc(100vh-8rem)] gap-4 overflow-auto p-4">
       <input type="hidden" name="id" value={lead.id} />
@@ -484,6 +516,8 @@ function LeadEditor({
           Close
         </button>
       </div>
+
+      <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
       <div className="grid gap-3">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />
@@ -543,6 +577,56 @@ function LeadEditor({
         </button>
       </div>
     </form>
+  );
+}
+
+function SourceMaterialsPanel({
+  sourceText,
+  references
+}: {
+  sourceText: string;
+  references: ReturnType<typeof getLeadSourceMaterials>["references"];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <details
+      className="rounded-lg border border-border bg-muted/30 p-3"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
+      {sourceText ? (
+        <div className="mt-3 grid gap-2">
+          {references.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {references.map((reference) =>
+                reference.url ? (
+                  <a
+                    key={reference.label}
+                    href={reference.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                  >
+                    {reference.label}
+                  </a>
+                ) : (
+                  <span key={reference.label} className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    {reference.label}
+                  </span>
+                )
+              )}
+            </div>
+          ) : null}
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-white p-3 text-xs leading-relaxed text-foreground">
+            {sourceText}
+          </pre>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">No source text or document references saved yet.</p>
+      )}
+    </details>
   );
 }
 
