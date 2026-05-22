@@ -128,6 +128,29 @@ export async function sendTelegramMessage(config: {
   return { messageId: body.result?.message_id };
 }
 
+export async function sendTelegramDocument(config: {
+  botToken: string;
+  chatId: string;
+  document: string;
+  caption?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const fetchImpl = config.fetchImpl ?? fetch;
+  const response = await fetchImpl(`https://api.telegram.org/bot${config.botToken}/sendDocument`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: config.chatId,
+      document: config.document,
+      ...(config.caption ? { caption: config.caption } : {})
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram sendDocument failed: ${response.status} ${response.statusText}`);
+  }
+}
+
 function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["message"]>): TelegramPendingAttachment[] {
   const attachments: TelegramPendingAttachment[] = [];
   const largestPhoto = message.photo

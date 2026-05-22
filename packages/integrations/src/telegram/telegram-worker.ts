@@ -1,5 +1,5 @@
 import { getNextBusinessId } from "@app/core";
-import { prisma as defaultPrisma } from "@app/db";
+import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
 import { loadRootEnv } from "../env/root-env";
 import {
   createLeadDraftFromTelegramMessage,
@@ -13,6 +13,7 @@ import {
   createAllowedTelegramMessages,
   fetchTelegramUpdates,
   parseAllowedChatIds,
+  sendTelegramDocument,
   sendTelegramMessage,
   type AllowedTelegramMessage,
   type TelegramPendingAttachment,
@@ -31,8 +32,24 @@ import {
 export type TelegramWorkerPrismaLike = {
   lead: {
     findMany(args: unknown): Promise<Array<{ leadId: string; rawInput: string | null }>>;
-    create(args: unknown): Promise<{ leadId: string; status: string }>;
+    create(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
+    update?(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
   };
+};
+
+export type TelegramGenerateKpDocumentInput = {
+  workspaceId: string;
+  documentId: string;
+  documentType: "kp";
+  sourceRecordIds: string[];
+  rawInput: string;
+  requestedByUserId: string;
+};
+
+export type TelegramGeneratedKpDocumentRecord = TelegramGenerateKpDocumentInput & {
+  id: string;
+  docxAttachmentId?: string;
+  pdfAttachmentId?: string;
 };
 
 export type TelegramWorkerConfig = {
@@ -43,6 +60,7 @@ export type TelegramWorkerConfig = {
   crmBaseUrl?: string;
   batchWindowMs?: number;
   telegramDraftStore?: TelegramLeadDraftSessionStore;
+  generateKpDocument?: (input: TelegramGenerateKpDocumentInput) => Promise<TelegramGeneratedKpDocumentRecord>;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -236,6 +254,31 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
       }
     });
+    const generatedDocument = config.generateKpDocument
+      ? await config.generateKpDocument({
+          workspaceId: config.workspaceId,
+          documentId: createTelegramKpDocumentId(message),
+          documentType: "kp",
+          sourceRecordIds: [created.leadId],
+          rawInput: session.draft.rawInput,
+          requestedByUserId: `telegram:${message.chatId}`
+        })
+      : null;
+    if (generatedDocument && client.lead.update && created.id) {
+      await client.lead.update({
+        where: { id: created.id },
+        data: { kpGeneratedDocumentId: generatedDocument.documentId }
+      });
+    }
+    if (generatedDocument?.docxAttachmentId) {
+      await sendTelegramDocument({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        document: generatedDocument.docxAttachmentId,
+        caption: `KP document ${generatedDocument.documentId} is ready.`,
+        fetchImpl
+      });
+    }
     await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
 
     await sendTelegramMessage({
@@ -244,7 +287,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       text: createTelegramLeadConfirmation({
         leadId: created.leadId,
         status: created.status,
-        draft: session.draft
+        draft: session.draft,
+        generatedDocumentId: generatedDocument?.documentId
       }),
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
       fetchImpl
@@ -296,6 +340,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     botToken,
     workspaceId: env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo",
     crmBaseUrl: env.TELEGRAM_CRM_BASE_URL ?? env.NEXT_PUBLIC_APP_URL,
+    generateKpDocument: createAssistantGeneratedDocumentPrismaStore(defaultPrisma).create,
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: env.OPENAI_MODEL ?? "gpt-4o-mini"
@@ -493,16 +538,19 @@ function createTelegramHelpMessage(): string {
 function createTelegramLeadConfirmation({
   leadId,
   status,
-  draft
+  draft,
+  generatedDocumentId
 }: {
   leadId: string;
   status: string;
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+  generatedDocumentId?: string;
 }): string {
   const fields = [
     ["Lead", leadId],
     ["Status", status],
     ["KP fields ready", "yes"],
+    ["KP document", generatedDocumentId],
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
     ["Project address", draft.projectAddress],
@@ -512,6 +560,10 @@ function createTelegramLeadConfirmation({
   ].filter(([, value]) => String(value ?? "").trim() !== "");
 
   return ["Готово, я создал лид в CRM.", "", ...fields.map(([label, value]) => `${label}: ${value}`)].join("\n");
+}
+
+function createTelegramKpDocumentId(message: AllowedTelegramMessageBatch): string {
+  return `D-telegram-${message.chatId}-${message.sourceMessageIds.at(-1) ?? message.messageId}`;
 }
 
 function createTelegramLeadDraftMessage(session: TelegramLeadDraftSession): string {
