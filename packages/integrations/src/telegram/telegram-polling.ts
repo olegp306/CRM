@@ -100,6 +100,7 @@ export async function sendTelegramMessage(config: {
   botToken: string;
   chatId: string;
   text: string;
+  replyMarkup?: unknown;
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   const fetchImpl = config.fetchImpl ?? fetch;
@@ -108,7 +109,8 @@ export async function sendTelegramMessage(config: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: config.chatId,
-      text: config.text
+      text: config.text,
+      ...(config.replyMarkup ? { reply_markup: config.replyMarkup } : {})
     })
   });
 

@@ -5,6 +5,8 @@ import {
   createLeadTableRows,
   inlineEditableLeadFields,
   isInlineEditableLeadField,
+  leadMobileCardFields,
+  leadMobileViewModes,
   leadTableColumns,
   leadTableViewModes
 } from "./lead-table-store";
@@ -42,6 +44,11 @@ describe("lead table model", () => {
 
   it("defines split, full, and inline lead table view modes", () => {
     expect(leadTableViewModes.map((mode) => mode.id)).toEqual(["split", "full", "inline"]);
+  });
+
+  it("defines mobile card and table modes with date visible on cards", () => {
+    expect(leadMobileViewModes.map((mode) => mode.id)).toEqual(["cards", "table"]);
+    expect(leadMobileCardFields).toEqual(["createdDate", "status", "requestType", "projectAddress", "source"]);
   });
 
   it("limits inline editing to safe scalar workflow fields", () => {
@@ -124,7 +131,7 @@ describe("lead table model", () => {
         projectAddress: "Chiemseeufer 7",
         isStandard: true,
         status: "new",
-        rawInput: "Need EFH offer\nTelegram source: telegram:777:42",
+        rawInput: "Need EFH offer\nTelegram sources: telegram:777:42",
         missingData: [],
         kpGeneratedDocumentId: null,
         kpSentDate: null,

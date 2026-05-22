@@ -33,6 +33,8 @@ export type LeadTableColumn = {
 
 export type LeadTableViewMode = "split" | "full" | "inline";
 
+export type LeadMobileViewMode = "cards" | "table";
+
 export type LeadTableRecord = {
   id: string;
   leadId: string;
@@ -103,6 +105,13 @@ export const leadTableViewModes: Array<{ id: LeadTableViewMode; label: string; d
   { id: "full", label: "Full", description: "Full-width table with popup editor." },
   { id: "inline", label: "Inline", description: "Quick-edit safe fields directly in the table." }
 ];
+
+export const leadMobileViewModes: Array<{ id: LeadMobileViewMode; label: string; description: string }> = [
+  { id: "cards", label: "Cards", description: "Mobile cards with the most important lead fields." },
+  { id: "table", label: "Table", description: "Full horizontal lead table on mobile." }
+];
+
+export const leadMobileCardFields: LeadTableColumnKey[] = ["createdDate", "status", "requestType", "projectAddress", "source"];
 
 export const inlineEditableLeadFields: LeadTableColumnKey[] = [
   "temperature",
@@ -232,7 +241,7 @@ function formatBoolean(value: boolean | null): string {
 
 function formatLeadSource(rawInput: string | null): string {
   if (!rawInput) return "web";
-  return /Telegram source: telegram:|^Telegram:/i.test(rawInput) ? "telegram" : "web";
+  return /Telegram sources?: telegram:|^Telegram:/i.test(rawInput) ? "telegram" : "web";
 }
 
 function formatMissingData(value: unknown): string {

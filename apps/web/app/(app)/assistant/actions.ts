@@ -6,8 +6,11 @@ import {
   createPlatformInboxSummary,
   createAssistantPersistenceDraft,
   createAssistantSubmissionResult,
+  createAssistantMessageDraft,
+  createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
   createOnboardingConversationFeedbackContent,
+  createRussianOnboardingAssistantMessage,
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformReleaseActionPlan,
@@ -17,12 +20,14 @@ import {
   createPlatformReleasePlanningAuditEvent,
   executeAssistantAction,
   filterAuditEvents,
+  isTranslationOrLanguageSwitchRequest,
   createPlatformReleaseNotesDraft,
   createPlatformReleaseReadiness,
   createPlatformReleaseTriage,
   createPlatformReleaseWorkflow,
   type AuditReviewFilters,
   type AssistantContext,
+  type AssistantSubmissionResult,
   type FeedbackTriageEvent,
   type PlatformFeedbackFilters
 } from "@app/assistant";
@@ -78,12 +83,19 @@ export async function submitOnboardingAssistantMessageAction(input: SubmitOnboar
     route: "/assistant",
     module: "onboarding"
   };
-  const result = createAssistantSubmissionResult({
-    context,
-    content: createOnboardingConversationFeedbackContent(input.content),
-    threadId: input.threadId,
-    messageId: input.messageId
-  });
+  const result = isTranslationOrLanguageSwitchRequest(input.content)
+    ? createOnboardingTranslationResult({
+        context,
+        content: input.content,
+        threadId: input.threadId,
+        messageId: input.messageId
+      })
+    : createAssistantSubmissionResult({
+        context,
+        content: createOnboardingConversationFeedbackContent(input.content),
+        threadId: input.threadId,
+        messageId: input.messageId
+      });
   const persistenceDraft = createAssistantPersistenceDraft(result, {
     threadId: input.threadId,
     messageId: input.messageId
@@ -108,6 +120,37 @@ export async function submitOnboardingAssistantMessageAction(input: SubmitOnboar
       feedbackCount: feedback.length,
       actionCount: actions.length
     }
+  };
+}
+
+function createOnboardingTranslationResult({
+  context,
+  content,
+  threadId,
+  messageId
+}: SubmitAssistantMessageInput): AssistantSubmissionResult {
+  const message = createAssistantMessageDraft({
+    threadId,
+    userId: context.userId,
+    role: "user",
+    content: content.trim(),
+    context
+  });
+
+  return {
+    thread: createAssistantThreadDraft({
+      context,
+      title: "Translate onboarding to Russian"
+    }),
+    message: {
+      ...message,
+      intent: "other"
+    },
+    response: createRussianOnboardingAssistantMessage(),
+    feedback: null,
+    actionPreview: null,
+    confirmationStatus: null,
+    permissionBlocked: null
   };
 }
 
@@ -139,6 +182,11 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
     repository.listActions(workspaceId),
     repository.listAuditEvents(workspaceId)
   ]);
+  const feedbackMessages = (
+    await Promise.all(
+      Array.from(new Set(feedback.map((item) => item.sourceThreadId))).map((threadId) => repository.listMessages(threadId))
+    )
+  ).flat();
 
   const releaseTriage = createPlatformReleaseTriage(allFeedback);
   const releaseHistory = createPlatformReleaseHistory(auditEvents, filters.appVersion ? { appVersion: filters.appVersion } : {});
@@ -146,7 +194,8 @@ export async function getPlatformInboxSummaryAction(workspaceId: string, filters
   return {
     ...createPlatformInboxSummary({
       feedback,
-      actions
+      actions,
+      messages: feedbackMessages
     }),
     releaseTriage: releaseTriage,
     releaseNotesDrafts: releaseTriage.map((release) => createPlatformReleaseNotesDraft(release.appVersion, allFeedback)),

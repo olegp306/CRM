@@ -345,6 +345,7 @@ model ColdTarget {
   outcome         String?
   nextReviewDate  DateTime?
   convertedAt     DateTime?
+  createdAt       DateTime @default(now())
   archivedAt      DateTime?
 
   workspace       Workspace @relation(fields: [workspaceId], references: [id])

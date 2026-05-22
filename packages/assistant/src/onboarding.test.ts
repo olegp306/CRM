@@ -4,8 +4,10 @@ import {
   createOnboardingFeedbackContent,
   createOnboardingAssistantMessage,
   createOnboardingConversationFeedbackContent,
+  createRussianOnboardingAssistantMessage,
   findOnboardingQuestion,
   getCurrentOnboardingBrief,
+  isTranslationOrLanguageSwitchRequest,
   onboardingQuestions
 } from "./onboarding";
 
@@ -61,5 +63,11 @@ describe("onboarding assistant helpers", () => {
     expect(content).toContain("Feature request from onboarding conversation.");
     expect(content).toContain("katya@example.com");
     expect(classifyIntent(content)).toBe("feature_request");
+  });
+
+  it("detects translation requests and builds a Russian onboarding message", () => {
+    expect(isTranslationOrLanguageSwitchRequest("Переведи предыдущее сообщение на русский")).toBe(true);
+    expect(createRussianOnboardingAssistantMessage()).toContain("Привет, я помощник Олега");
+    expect(createRussianOnboardingAssistantMessage()).toContain("Ответь, пожалуйста, одним сообщением");
   });
 });
