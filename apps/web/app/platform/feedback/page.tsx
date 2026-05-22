@@ -32,6 +32,7 @@ export default async function PlatformFeedbackPage({
   });
   const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
   const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
+  const releaseHistoryExportLabel = `Export release history CSV for ${releaseHistoryScope}`;
   const releaseHistoryScopeLabel = `History scope: ${releaseHistoryScope}`;
   const releaseHistoryTopActorEventLabel = inbox.releaseHistorySummary.topActor
     ? formatReleaseHistoryActorCount(inbox.releaseHistorySummary.topActor.count)
@@ -222,6 +223,7 @@ export default async function PlatformFeedbackPage({
                 <p className="mt-1 text-xs text-neutral-500">Release history and CSV export follow the selected version filter.</p>
               </div>
               <a
+                aria-label={releaseHistoryExportLabel}
                 className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:text-white"
                 href={`/platform/feedback/release-history/export?${releaseHistoryExportParams.toString()}`}
               >

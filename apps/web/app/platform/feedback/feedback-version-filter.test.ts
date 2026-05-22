@@ -53,6 +53,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("appVersion: currentAppMetadata.version");
     expect(pageSource).toContain("/platform/feedback/release-history/export");
     expect(pageSource).toContain("releaseHistoryExportParams");
+    expect(pageSource).toContain("releaseHistoryExportLabel");
+    expect(pageSource).toContain("aria-label={releaseHistoryExportLabel}");
     expect(pageSource).toContain("filters.appVersion");
     expect(pageSource).toContain("Download Markdown");
     expect(pageSource).toContain("ReleaseNotesActions");
