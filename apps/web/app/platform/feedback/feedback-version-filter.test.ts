@@ -27,6 +27,8 @@ describe("platform feedback version filter wiring", () => {
     expect(pageSource).toContain("Planning actors");
     expect(pageSource).toContain("actorCounts");
     expect(pageSource).toContain("formatReleaseHistoryActorCount");
+    expect(pageSource).toContain("releaseHistoryActorLabel");
+    expect(pageSource).toContain("aria-label={releaseHistoryActorLabel}");
     expect(pageSource).toContain('count === 1 ? "event" : "events"');
     expect(pageSource).toContain("Top planning actor");
     expect(pageSource).toContain("topActor");

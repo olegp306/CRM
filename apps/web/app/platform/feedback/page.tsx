@@ -259,11 +259,21 @@ export default async function PlatformFeedbackPage({
               <h4 className="font-semibold uppercase text-neutral-400">Planning actors</h4>
               {releaseHistoryActors.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {releaseHistoryActors.map(([actor, count]) => (
-                    <span key={actor} className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300" title={actor}>
-                      {actor}: {formatReleaseHistoryActorCount(count)}
-                    </span>
-                  ))}
+                  {releaseHistoryActors.map(([actor, count]) => {
+                    const releaseHistoryActorCountLabel = formatReleaseHistoryActorCount(count);
+                    const releaseHistoryActorLabel = `${actor}: ${releaseHistoryActorCountLabel}`;
+
+                    return (
+                      <span
+                        key={actor}
+                        aria-label={releaseHistoryActorLabel}
+                        className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300"
+                        title={actor}
+                      >
+                        {releaseHistoryActorLabel}
+                      </span>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="mt-2 text-neutral-500">No planning actors yet.</p>
