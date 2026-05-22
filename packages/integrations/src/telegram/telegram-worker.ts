@@ -49,6 +49,7 @@ export type TelegramGenerateKpDocumentInput = {
 export type TelegramGeneratedKpDocumentRecord = TelegramGenerateKpDocumentInput & {
   id: string;
   docxAttachmentId?: string;
+  docxDeliveryUrl?: string;
   pdfAttachmentId?: string;
 };
 
@@ -270,11 +271,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         data: { kpGeneratedDocumentId: generatedDocument.documentId }
       });
     }
-    if (generatedDocument?.docxAttachmentId) {
+    if (generatedDocument?.docxDeliveryUrl) {
       await sendTelegramDocument({
         botToken: config.botToken,
         chatId: message.chatId,
-        document: generatedDocument.docxAttachmentId,
+        document: generatedDocument.docxDeliveryUrl,
         caption: `KP document ${generatedDocument.documentId} is ready.`,
         fetchImpl
       });
@@ -288,7 +289,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         leadId: created.leadId,
         status: created.status,
         draft: session.draft,
-        generatedDocumentId: generatedDocument?.documentId
+        generatedDocumentId: generatedDocument?.documentId,
+        generatedDocumentDelivered: Boolean(generatedDocument?.docxDeliveryUrl)
       }),
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
       fetchImpl
@@ -539,18 +541,21 @@ function createTelegramLeadConfirmation({
   leadId,
   status,
   draft,
-  generatedDocumentId
+  generatedDocumentId,
+  generatedDocumentDelivered
 }: {
   leadId: string;
   status: string;
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
   generatedDocumentId?: string;
+  generatedDocumentDelivered?: boolean;
 }): string {
   const fields = [
     ["Lead", leadId],
     ["Status", status],
     ["KP fields ready", "yes"],
     ["KP document", generatedDocumentId],
+    ["KP file", generatedDocumentId ? (generatedDocumentDelivered ? "sent to Telegram" : "saved in CRM") : ""],
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
     ["Project address", draft.projectAddress],

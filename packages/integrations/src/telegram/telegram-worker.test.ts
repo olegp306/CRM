@@ -507,7 +507,8 @@ describe("telegram worker", () => {
             return {
               id: "generated-document-record-1",
               ...input,
-              docxAttachmentId: "attachment-docx-1"
+              docxAttachmentId: "attachment-docx-1",
+              docxDeliveryUrl: "https://files.example.com/kp.docx"
             };
           },
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -536,11 +537,80 @@ describe("telegram worker", () => {
     ];
     expect(JSON.parse(String(documentCall[1].body))).toMatchObject({
       chat_id: "12345",
-      document: "attachment-docx-1",
+      document: "https://files.example.com/kp.docx",
       caption: "KP document D-telegram-12345-13 is ready."
     });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP document: D-telegram-12345-13");
+  });
+
+  it("does not send a Telegram document when only an internal attachment id exists", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" })),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Katya",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Ready KP lead",
+        suggestedReply: "Ready."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      if (url.includes("/sendDocument")) {
+        throw new Error("sendDocument should not be called with internal attachment ids");
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 19,
+          message: {
+            message_id: 14,
+            date: 1779296860,
+            chat: { id: 12345 },
+            text: "Katya, new build, Chiemseeufer 7, BGF 180"
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        crmBaseUrl: "https://crm.example.com",
+        parser,
+        prisma: client,
+        generateKpDocument: async (input) => ({
+          id: "generated-document-record-1",
+          ...input,
+          docxAttachmentId: "attachment-docx-1"
+        }),
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/sendDocument"))).toBe(false);
+    const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP document: D-telegram-12345-14");
+    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP file: saved in CRM");
   });
 
   it("treats a reply to the bot draft message as an explicit update to that draft", async () => {
