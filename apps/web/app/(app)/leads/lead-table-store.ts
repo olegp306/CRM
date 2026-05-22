@@ -118,6 +118,10 @@ export function normalizeLeadTableViewMode(input: unknown): LeadTableViewMode {
   return leadTableViewModes.some((mode) => mode.id === input) ? (input as LeadTableViewMode) : "split";
 }
 
+export function resolveInitialSelectedLeadId(viewMode: LeadTableViewMode, leadIds: string[]): string | null {
+  return viewMode === "split" ? leadIds[0] ?? null : null;
+}
+
 export const leadMobileViewModes: Array<{ id: LeadMobileViewMode; label: string; description: string }> = [
   { id: "cards", label: "Cards", description: "Mobile cards with the most important lead fields." },
   { id: "table", label: "Table", description: "Full horizontal lead table on mobile." }

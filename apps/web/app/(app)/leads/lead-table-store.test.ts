@@ -12,7 +12,8 @@ import {
   leadTableColumns,
   leadTableViewModeStorageKey,
   leadTableViewModes,
-  normalizeLeadTableViewMode
+  normalizeLeadTableViewMode,
+  resolveInitialSelectedLeadId
 } from "./lead-table-store";
 
 describe("lead table model", () => {
@@ -52,6 +53,13 @@ describe("lead table model", () => {
     expect(normalizeLeadTableViewMode("full")).toBe("full");
     expect(normalizeLeadTableViewMode("inline")).toBe("inline");
     expect(normalizeLeadTableViewMode("entire")).toBe("split");
+  });
+
+  it("auto-selects a lead only for split mode so popup views open on the list", () => {
+    expect(resolveInitialSelectedLeadId("split", ["lead-1", "lead-2"])).toBe("lead-1");
+    expect(resolveInitialSelectedLeadId("full", ["lead-1", "lead-2"])).toBeNull();
+    expect(resolveInitialSelectedLeadId("inline", ["lead-1", "lead-2"])).toBeNull();
+    expect(resolveInitialSelectedLeadId("split", [])).toBeNull();
   });
 
   it("defines mobile card and table modes with date visible on cards", () => {
