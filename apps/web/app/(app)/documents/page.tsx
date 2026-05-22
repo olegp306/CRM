@@ -56,7 +56,20 @@ export default async function DocumentsPage({
                     ) : null}
                   </div>
                 </div>
-                <p className="text-muted-foreground">{document.rawInput}</p>
+                {document.fieldSnapshot ? (
+                  <dl className="grid gap-2 rounded-md bg-muted/40 p-3 text-xs sm:grid-cols-2">
+                    {createDocumentFieldRows(document.fieldSnapshot).map(([label, value]) => (
+                      <div key={label} className="grid grid-cols-[96px_1fr] items-baseline gap-2">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="font-medium text-foreground">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                <details className="text-muted-foreground">
+                  <summary className="cursor-pointer text-xs font-semibold text-foreground">Source material</summary>
+                  <p className="mt-2 whitespace-pre-wrap">{document.rawInput}</p>
+                </details>
                 <p className="text-xs text-muted-foreground">
                   DOCX attachment: {document.docxAttachmentId ?? "pending"} · PDF attachment:{" "}
                   {document.pdfAttachmentId ?? "pending"}
@@ -70,4 +83,18 @@ export default async function DocumentsPage({
       </div>
     </section>
   );
+}
+
+function createDocumentFieldRows(
+  fieldSnapshot: NonNullable<Awaited<ReturnType<typeof listAssistantGeneratedDocuments>>[number]["fieldSnapshot"]>
+): Array<[string, string]> {
+  return [
+    ["Client", fieldSnapshot.clientName],
+    ["Request", fieldSnapshot.requestType],
+    ["Address", fieldSnapshot.projectAddress],
+    ["BGF", fieldSnapshot.bgfM2 === null || fieldSnapshot.bgfM2 === undefined ? "" : `${fieldSnapshot.bgfM2} m2`],
+    ["Email", fieldSnapshot.email],
+    ["Phone", fieldSnapshot.phone],
+    ["Missing", fieldSnapshot.missingData?.join(", ")]
+  ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0);
 }

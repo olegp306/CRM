@@ -523,6 +523,14 @@ describe("telegram worker", () => {
         documentId: "D-telegram-12345-13",
         documentType: "kp",
         sourceRecordIds: ["L-2026-002"],
+        fieldSnapshot: expect.objectContaining({
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          missingData: []
+        }),
         requestedByUserId: "telegram:12345"
       })
     ]);

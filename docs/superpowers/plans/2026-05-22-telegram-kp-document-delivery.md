@@ -45,6 +45,8 @@
 - [x] Add a CRM download route for generated attachments.
 - [x] Link KP documents from lead cards and the Documents page.
 - [x] Use a real minimal OOXML DOCX package instead of a text placeholder.
+- [x] Pass structured Telegram lead fields into KP generation.
+- [x] Show structured KP fields on the Documents page with source material collapsed by default.
 
 ### Task 4: Verification
 
@@ -55,4 +57,6 @@
 - `pnpm --filter @app/db typecheck`
 - `pnpm --filter @app/integrations test -- src/telegram/telegram-worker.test.ts`
 - `pnpm --filter @app/integrations typecheck`
+- `pnpm --filter @app/assistant typecheck`
+- `pnpm --filter @app/web typecheck`
 - `pnpm typecheck`

@@ -111,7 +111,8 @@ export function createAssistantGeneratedDocumentPrismaStore(
             documentId: input.documentId,
             rawInput: input.rawInput,
             sourceRecordIds: input.sourceRecordIds,
-            renderedContent: rendered.content
+            renderedContent: rendered.content,
+            fieldSnapshot: input.fieldSnapshot
           },
           generatedByUserId: input.requestedByUserId
         }
@@ -123,8 +124,22 @@ export function createAssistantGeneratedDocumentPrismaStore(
 }
 
 function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput, renderedContent: string): string[] {
+  const fields = input.fieldSnapshot;
+  const fieldParagraphs = [
+    ["Client", fields?.clientName],
+    ["Request type", fields?.requestType],
+    ["Project address", fields?.projectAddress],
+    ["BGF m2", fields?.bgfM2 === null || fields?.bgfM2 === undefined ? "" : String(fields.bgfM2)],
+    ["Email", fields?.email],
+    ["Phone", fields?.phone],
+    ["Missing data", fields?.missingData && fields.missingData.length > 0 ? fields.missingData.join(", ") : ""]
+  ]
+    .filter(([, value]) => String(value ?? "").trim().length > 0)
+    .map(([label, value]) => `${label}: ${value}`);
+
   return [
     renderedContent,
+    ...fieldParagraphs,
     `Source records: ${input.sourceRecordIds.length > 0 ? input.sourceRecordIds.join(", ") : "assistant request"}`,
     `Source material: ${input.rawInput}`
   ];
@@ -178,6 +193,7 @@ function toGeneratedKpDocumentRecord(row: GeneratedDocumentRow): GeneratedKpDocu
     pdfAttachmentId: row.pdfAttachmentId ?? undefined,
     sourceRecordIds: snapshot.sourceRecordIds,
     rawInput: snapshot.rawInput,
+    fieldSnapshot: snapshot.fieldSnapshot,
     requestedByUserId: row.generatedByUserId ?? ""
   };
 }
@@ -186,6 +202,7 @@ function toSnapshot(value: unknown): {
   documentId: string;
   rawInput: string;
   sourceRecordIds: string[];
+  fieldSnapshot?: GenerateKpDocumentFromAssistantInput["fieldSnapshot"];
 } {
   if (!value || typeof value !== "object") {
     return { documentId: "", rawInput: "", sourceRecordIds: [] };
@@ -197,6 +214,30 @@ function toSnapshot(value: unknown): {
     rawInput: typeof snapshot.rawInput === "string" ? snapshot.rawInput : "",
     sourceRecordIds: Array.isArray(snapshot.sourceRecordIds)
       ? snapshot.sourceRecordIds.filter((item): item is string => typeof item === "string")
+      : [],
+    fieldSnapshot: toKpFieldSnapshot(snapshot.fieldSnapshot)
+  };
+}
+
+function toKpFieldSnapshot(value: unknown): GenerateKpDocumentFromAssistantInput["fieldSnapshot"] | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const snapshot = value as Record<string, unknown>;
+  return {
+    clientName: toOptionalString(snapshot.clientName),
+    requestType: toOptionalString(snapshot.requestType),
+    projectAddress: toOptionalString(snapshot.projectAddress),
+    bgfM2: typeof snapshot.bgfM2 === "number" ? snapshot.bgfM2 : null,
+    email: toOptionalString(snapshot.email),
+    phone: toOptionalString(snapshot.phone),
+    missingData: Array.isArray(snapshot.missingData)
+      ? snapshot.missingData.filter((item): item is string => typeof item === "string")
       : []
   };
+}
+
+function toOptionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }

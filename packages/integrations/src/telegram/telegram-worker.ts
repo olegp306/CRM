@@ -44,6 +44,15 @@ export type TelegramGenerateKpDocumentInput = {
   documentType: "kp";
   sourceRecordIds: string[];
   rawInput: string;
+  fieldSnapshot?: {
+    clientName?: string | null;
+    requestType?: string | null;
+    projectAddress?: string | null;
+    bgfM2?: number | null;
+    email?: string | null;
+    phone?: string | null;
+    missingData?: string[];
+  };
   requestedByUserId: string;
 };
 
@@ -264,6 +273,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           documentType: "kp",
           sourceRecordIds: [created.leadId],
           rawInput: session.draft.rawInput,
+          fieldSnapshot: createTelegramKpFieldSnapshot(session.draft),
           requestedByUserId: `telegram:${message.chatId}`
         })
       : null;
@@ -579,6 +589,18 @@ function createTelegramLeadConfirmation({
 
 function createTelegramKpDocumentId(message: AllowedTelegramMessageBatch): string {
   return `D-telegram-${message.chatId}-${message.sourceMessageIds.at(-1) ?? message.messageId}`;
+}
+
+function createTelegramKpFieldSnapshot(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>) {
+  return {
+    clientName: draft.clientName,
+    requestType: draft.requestType,
+    projectAddress: draft.projectAddress,
+    bgfM2: draft.bgfM2,
+    email: draft.email,
+    phone: draft.phone,
+    missingData: draft.missingData
+  };
 }
 
 function createTelegramLeadDraftMessage(session: TelegramLeadDraftSession): string {
