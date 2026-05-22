@@ -5,6 +5,8 @@ import {
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformInboxSummary,
+  createFeedbackTaskSummary,
+  createFeedbackTaskTitle,
   filterPlatformFeedback
 } from "./platform-inbox";
 
@@ -68,19 +70,43 @@ describe("platform inbox summary", () => {
   });
 
   it("creates rows for feedback and action queues", () => {
-    expect(createPlatformInboxSummary({ feedback, actions }).rows).toEqual([
+    expect(
+      createPlatformInboxSummary({
+        feedback,
+        actions,
+        messages: [
+          {
+            id: "message-1",
+            threadId: "thread-1",
+            role: "user",
+            content: "Feature request from onboarding conversation.\nClient answers: Please add Russian onboarding translations.",
+            context: {
+              workspaceId: "workspace-1",
+              userId: "user-1",
+              role: "admin",
+              route: "/assistant",
+              module: "onboarding",
+              selectedRecordIds: []
+            },
+            intent: "feature_request"
+          }
+        ]
+      }).rows
+    ).toEqual([
       expect.objectContaining({
         id: "feedback-message-1",
         kind: "feedback",
-        label: "feature_request",
+        label: "Please add Russian onboarding translations.",
         moduleContext: "leads",
         status: "new",
-        appVersion: "0.1.0"
+        appVersion: "0.1.0",
+        originalMessage: expect.stringContaining("Client answers"),
+        taskSummary: "Please add Russian onboarding translations."
       }),
       expect.objectContaining({
         id: "feedback-message-2",
         kind: "feedback",
-        label: "bug_report",
+        label: "bug report",
         moduleContext: "clients",
         status: "new"
       }),
@@ -121,5 +147,14 @@ describe("platform inbox summary", () => {
         { workspaceId: "workspace-1", sourceMessageId: "message-2" }
       ]
     });
+  });
+
+  it("summarizes translation feature requests explicitly", () => {
+    const source = "Переведи предыдущее сообщение на русский";
+
+    expect(createFeedbackTaskTitle(source, "feature_request")).toBe(source);
+    expect(createFeedbackTaskSummary(source, "feature_request")).toBe(
+      "User asked the assistant to translate or switch language. Review whether language handling should be improved."
+    );
   });
 });

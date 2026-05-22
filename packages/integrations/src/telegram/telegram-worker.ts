@@ -4,6 +4,7 @@ import { loadRootEnv } from "../env/root-env";
 import {
   createLeadDraftFromTelegramMessage,
   createOpenAiLeadParserClient,
+  createTelegramSourceExternalIds,
   type OpenAiLeadParserClient,
   type TelegramLeadAttachment,
   type TelegramLeadMessage
@@ -30,6 +31,8 @@ export type TelegramWorkerConfig = {
   botToken: string;
   workspaceId: string;
   parser: OpenAiLeadParserClient;
+  crmBaseUrl?: string;
+  batchWindowMs?: number;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -68,6 +71,11 @@ type TelegramTestEnv = {
   TELEGRAM_TEST_RECEIVED_AT?: string;
 };
 
+type AllowedTelegramMessageBatch = AllowedTelegramMessage & {
+  sourceMessageIds: number[];
+  updateIds: number[];
+};
+
 export function createTelegramTestUpdateFromEnv(env: TelegramTestEnv): TelegramUpdate | undefined {
   const text = env.TELEGRAM_TEST_MESSAGE?.trim();
 
@@ -94,21 +102,35 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   const client = config.prisma ?? defaultPrisma;
   const fetchImpl = config.fetchImpl ?? fetch;
   const allowedMessages = createAllowedTelegramMessages(updates, config.allowedChatIds);
+  const messageBatches = createAllowedTelegramMessageBatches(allowedMessages, config.batchWindowMs);
   let processed = 0;
   let skipped = 0;
 
-  for (const message of allowedMessages) {
-    const sourceExternalId = `telegram:${message.chatId}:${message.messageId}`;
+  for (const message of messageBatches) {
+    if (isTelegramHelpRequest(message)) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramHelpMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
+    const sourceExternalIds = createTelegramSourceExternalIds(message);
     const existingLeads = await client.lead.findMany({
       where: {
         workspaceId: config.workspaceId,
-        rawInput: { contains: `Telegram source: ${sourceExternalId}` }
+        OR: sourceExternalIds.map((sourceExternalId) => ({
+          rawInput: { contains: sourceExternalId }
+        }))
       },
       select: { leadId: true, rawInput: true }
     });
 
-    if (existingLeads.some((lead) => lead.rawInput?.includes(`Telegram source: ${sourceExternalId}`))) {
-      skipped += 1;
+    if (existingLeads.some((lead) => sourceExternalIds.some((sourceExternalId) => lead.rawInput?.includes(sourceExternalId)))) {
+      skipped += message.sourceMessageIds.length;
       continue;
     }
 
@@ -141,7 +163,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     await sendTelegramMessage({
       botToken: config.botToken,
       chatId: message.chatId,
-      text: `Lead draft ${created.leadId} created for review. Status: ${created.status}.`,
+      text: createTelegramLeadConfirmation({
+        leadId: created.leadId,
+        status: created.status,
+        draft
+      }),
+      replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
       fetchImpl
     });
     processed += 1;
@@ -190,6 +217,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     allowedChatIds: parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS),
     botToken,
     workspaceId: env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo",
+    crmBaseUrl: env.TELEGRAM_CRM_BASE_URL ?? env.NEXT_PUBLIC_APP_URL,
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: env.OPENAI_MODEL ?? "gpt-4o-mini"
@@ -251,16 +279,18 @@ export async function runTelegramWorkerLoopFromEnv(env = process.env): Promise<T
 async function hydrateTelegramLeadMessage(message: AllowedTelegramMessage, config: TelegramWorkerConfig): Promise<TelegramLeadMessage> {
   if (!message.attachments?.length) {
     return {
-      chatId: message.chatId,
-      messageId: message.messageId,
-      receivedAt: message.receivedAt,
-      text: message.text
+    chatId: message.chatId,
+    messageId: message.messageId,
+    sourceMessageIds: "sourceMessageIds" in message ? (message.sourceMessageIds as number[]) : [message.messageId],
+    receivedAt: message.receivedAt,
+    text: message.text
     };
   }
 
   return {
     chatId: message.chatId,
     messageId: message.messageId,
+    sourceMessageIds: "sourceMessageIds" in message ? (message.sourceMessageIds as number[]) : [message.messageId],
     receivedAt: message.receivedAt,
     text: message.text,
     attachments: await Promise.all(message.attachments.map((attachment) => downloadTelegramAttachment(attachment, config)))
@@ -301,6 +331,113 @@ async function downloadTelegramAttachment(
 
 function defaultSleep(intervalMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, intervalMs));
+}
+
+function createAllowedTelegramMessageBatches(messages: AllowedTelegramMessage[], batchWindowMs = 120_000): AllowedTelegramMessageBatch[] {
+  const sorted = [...messages].sort((left, right) => {
+    if (left.chatId !== right.chatId) {
+      return left.chatId.localeCompare(right.chatId);
+    }
+
+    return new Date(left.receivedAt).getTime() - new Date(right.receivedAt).getTime();
+  });
+  const batches: AllowedTelegramMessageBatch[] = [];
+
+  for (const message of sorted) {
+    const previous = batches[batches.length - 1];
+    const previousTime = previous ? new Date(previous.receivedAt).getTime() : 0;
+    const messageTime = new Date(message.receivedAt).getTime();
+    const canMerge =
+      previous &&
+      previous.chatId === message.chatId &&
+      Math.abs(messageTime - previousTime) <= batchWindowMs &&
+      !isTelegramHelpRequest(previous) &&
+      !isTelegramHelpRequest(message);
+
+    if (!canMerge) {
+      batches.push({
+        ...message,
+        sourceMessageIds: [message.messageId],
+        updateIds: [message.updateId]
+      });
+      continue;
+    }
+
+    previous.messageId = Math.min(previous.messageId, message.messageId);
+    previous.receivedAt = new Date(Math.min(previousTime, messageTime)).toISOString();
+    previous.text = [previous.text, message.text].filter(Boolean).join("\n\n---\n\n");
+    previous.sourceMessageIds.push(message.messageId);
+    previous.updateIds.push(message.updateId);
+    previous.attachments = [...(previous.attachments ?? []), ...(message.attachments ?? [])];
+  }
+
+  return batches;
+}
+
+function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  return (
+    /^\/(start|help|about)(@\w+)?$/i.test(text) ||
+    /(what can you do|help|capabilities|что ты умеешь|что умеешь|помощь|как работает)/i.test(text) ||
+    text.length < 12
+  );
+}
+
+function createTelegramHelpMessage(): string {
+  return [
+    "Я умею принимать заявки на архитектурные проекты и создавать по ним лиды в CRM.",
+    "",
+    "Можно отправить одним скопом текст, несколько сообщений, фотографии или PDF. Я попробую разобрать это как одну заявку.",
+    "",
+    "Пока я не редактирую существующие записи и не отправляю КП сам. После создания лида пришлю короткую карточку и ссылку на CRM."
+  ].join("\n");
+}
+
+function createTelegramLeadConfirmation({
+  leadId,
+  status,
+  draft
+}: {
+  leadId: string;
+  status: string;
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+}): string {
+  const fields = [
+    ["Lead", leadId],
+    ["Status", status],
+    ["Request type", draft.requestType],
+    ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
+    ["Project address", draft.projectAddress],
+    ["BGF m2", draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
+    ["Standard", draft.isStandard === undefined ? "" : draft.isStandard ? "yes" : "no"],
+    ["Missing data", Array.isArray(draft.missingData) && draft.missingData.length > 0 ? draft.missingData.join(", ") : ""]
+  ].filter(([, value]) => String(value ?? "").trim() !== "");
+
+  return ["Готово, я создал лид в CRM.", "", ...fields.map(([label, value]) => `${label}: ${value}`)].join("\n");
+}
+
+function createTelegramCrmReplyMarkup(crmBaseUrl: string | undefined, leadId: string): unknown | undefined {
+  const trimmedBaseUrl = crmBaseUrl?.trim().replace(/\/$/, "");
+
+  if (!trimmedBaseUrl) {
+    return undefined;
+  }
+
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "Open in CRM",
+          url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
+        }
+      ]
+    ]
+  };
 }
 
 if (process.argv[1]?.endsWith("telegram-worker.ts")) {

@@ -37,7 +37,7 @@ describe("openai lead parser", () => {
       requestType: "new_build",
       projectAddress: "Chiemseeufer 7",
       bgfM2: 160,
-      rawInput: "Need EFH offer\nTelegram source: telegram:123:8\nSummary: Standard EFH lead\nSuggested reply: Danke, wir pruefen das.",
+          rawInput: "Need EFH offer\nTelegram sources: telegram:123:8\nSummary: Standard EFH lead\nSuggested reply: Danke, wir pruefen das.",
       missingData: [],
       isStandard: true
     });
