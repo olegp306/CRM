@@ -122,6 +122,14 @@ export function resolveInitialSelectedLeadId(_viewMode: LeadTableViewMode, _lead
   return null;
 }
 
+export function resolveDeepLinkedLeadRowId(rows: Array<Pick<LeadTableRow, "id" | "leadId">>, leadId: string | null): string | null {
+  if (!leadId) {
+    return null;
+  }
+
+  return rows.find((row) => row.leadId === leadId || row.id === leadId)?.id ?? null;
+}
+
 export const leadMobileViewModes: Array<{ id: LeadMobileViewMode; label: string; description: string }> = [
   { id: "cards", label: "Cards", description: "Mobile cards with the most important lead fields." },
   { id: "table", label: "Table", description: "Full horizontal lead table on mobile." }
