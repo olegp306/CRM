@@ -508,6 +508,7 @@ describe("telegram worker", () => {
               id: "generated-document-record-1",
               ...input,
               docxAttachmentId: "attachment-docx-1",
+              pdfAttachmentId: "attachment-pdf-1",
               docxDeliveryUrl: "https://files.example.com/kp.docx"
             };
           },
@@ -522,6 +523,14 @@ describe("telegram worker", () => {
         documentId: "D-telegram-12345-13",
         documentType: "kp",
         sourceRecordIds: ["L-2026-002"],
+        fieldSnapshot: expect.objectContaining({
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          missingData: []
+        }),
         requestedByUserId: "telegram:12345"
       })
     ]);
@@ -537,14 +546,14 @@ describe("telegram worker", () => {
     ];
     expect(JSON.parse(String(documentCall[1].body))).toMatchObject({
       chat_id: "12345",
-      document: "https://files.example.com/kp.docx",
+      document: "https://crm.example.com/documents/attachments/attachment-pdf-1",
       caption: "KP document D-telegram-12345-13 is ready."
     });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP document: D-telegram-12345-13");
   });
 
-  it("does not send a Telegram document when only an internal attachment id exists", async () => {
+  it("sends a CRM attachment URL when only an internal attachment id exists", async () => {
     const client = {
       lead: {
         findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
@@ -573,7 +582,7 @@ describe("telegram worker", () => {
       }
 
       if (url.includes("/sendDocument")) {
-        throw new Error("sendDocument should not be called with internal attachment ids");
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
       }
 
       throw new Error(`Unexpected URL ${url}`);
@@ -607,10 +616,17 @@ describe("telegram worker", () => {
       }
     );
 
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/sendDocument"))).toBe(false);
+    const documentCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendDocument")) as unknown as [
+      string,
+      { body?: unknown }
+    ];
+    expect(JSON.parse(String(documentCall[1].body))).toMatchObject({
+      chat_id: "12345",
+      document: "https://crm.example.com/documents/attachments/attachment-docx-1"
+    });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP document: D-telegram-12345-14");
-    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP file: saved in CRM");
+    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP file: sent to Telegram");
   });
 
   it("treats a reply to the bot draft message as an explicit update to that draft", async () => {

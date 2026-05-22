@@ -43,6 +43,15 @@ export type GenerateKpDocumentFromAssistantInput = {
   documentType: "kp";
   sourceRecordIds: string[];
   rawInput: string;
+  fieldSnapshot?: {
+    clientName?: string | null;
+    requestType?: string | null;
+    projectAddress?: string | null;
+    bgfM2?: number | null;
+    email?: string | null;
+    phone?: string | null;
+    missingData?: string[];
+  };
   requestedByUserId: string;
 };
 

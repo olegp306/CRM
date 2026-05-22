@@ -27,7 +27,16 @@ function createFakeClient() {
         documentId: "D-20260521-message-4",
         rawInput: "Generate KP for lead L-2026-001",
         sourceRecordIds: ["L-2026-001"],
-        renderedContent: "KP draft for L-2026-001"
+        renderedContent: "KP draft for L-2026-001",
+        fieldSnapshot: {
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          phone: "+49 170 000",
+          missingData: []
+        }
       },
       generatedByUserId: "user-1"
     }
@@ -72,6 +81,15 @@ describe("assistant generated document Prisma store", () => {
         pdfAttachmentId: "attachment-pdf-1",
         sourceRecordIds: ["L-2026-001"],
         rawInput: "Generate KP for lead L-2026-001",
+        fieldSnapshot: {
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          phone: "+49 170 000",
+          missingData: []
+        },
         requestedByUserId: "user-1"
       }
     ]);
@@ -94,6 +112,15 @@ describe("assistant generated document Prisma store", () => {
       documentType: "kp",
       sourceRecordIds: ["L-2026-001"],
       rawInput: "Generate KP for lead L-2026-001",
+      fieldSnapshot: {
+        clientName: "Katya",
+        requestType: "new_build",
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: "katya@example.com",
+        phone: "+49 170 000",
+        missingData: []
+      },
       requestedByUserId: "user-1"
     });
 
@@ -105,7 +132,7 @@ describe("assistant generated document Prisma store", () => {
           storageKey: "workspaces/workspace-1/generated/kp/d-20260521-message-4.docx",
           fileName: "D-20260521-message-4.docx",
           mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          sizeBytes: 0,
+          sizeBytes: expect.any(Number),
           status: "current",
           source: "generated_document",
           createdByUserId: "user-1"
@@ -120,7 +147,7 @@ describe("assistant generated document Prisma store", () => {
           storageKey: "workspaces/workspace-1/generated/kp/d-20260521-message-4.pdf",
           fileName: "D-20260521-message-4.pdf",
           mimeType: "application/pdf",
-          sizeBytes: 0,
+          sizeBytes: expect.any(Number),
           status: "current",
           source: "generated_document",
           createdByUserId: "user-1"
@@ -144,11 +171,71 @@ describe("assistant generated document Prisma store", () => {
             documentId: "D-20260521-message-4",
             rawInput: "Generate KP for lead L-2026-001",
             sourceRecordIds: ["L-2026-001"],
-            renderedContent: "KP draft for L-2026-001"
+            renderedContent: "KP draft for L-2026-001",
+            fieldSnapshot: {
+              clientName: "Katya",
+              requestType: "new_build",
+              projectAddress: "Chiemseeufer 7",
+              bgfM2: 180,
+              email: "katya@example.com",
+              phone: "+49 170 000",
+              missingData: []
+            }
           },
           generatedByUserId: "user-1"
         }
       }
     });
+  });
+
+  it("writes generated document artifacts to object storage when configured", async () => {
+    const { client } = createFakeClient();
+    const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      objectStorage: {
+        putObject: async (input) => {
+          uploads.push(input);
+        },
+        getObject: async () => new Uint8Array(),
+        deleteObject: async () => undefined
+      }
+    });
+
+    await store.create({
+      workspaceId: "workspace-1",
+      documentId: "D-20260521-message-4",
+      documentType: "kp",
+      sourceRecordIds: ["L-2026-001"],
+      rawInput: "Generate KP for lead L-2026-001",
+      fieldSnapshot: {
+        clientName: "Katya",
+        requestType: "new_build",
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: "katya@example.com",
+        phone: "+49 170 000",
+        missingData: []
+      },
+      requestedByUserId: "user-1"
+    });
+
+    expect(uploads).toEqual([
+      expect.objectContaining({
+        key: "workspaces/workspace-1/generated/kp/d-20260521-message-4.docx",
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      }),
+      expect.objectContaining({
+        key: "workspaces/workspace-1/generated/kp/d-20260521-message-4.pdf",
+        contentType: "application/pdf"
+      })
+    ]);
+    expect(new TextDecoder().decode(uploads[1].body)).toContain("%PDF-1.4");
+    expect(uploads[0].body[0]).toBe(0x50);
+    expect(uploads[0].body[1]).toBe(0x4b);
+    const docxText = new TextDecoder().decode(uploads[0].body);
+    expect(docxText).toContain("word/document.xml");
+    expect(docxText).toContain("Client: Katya");
+    expect(docxText).toContain("Project address: Chiemseeufer 7");
+    expect(docxText).toContain("BGF m2: 180");
   });
 });

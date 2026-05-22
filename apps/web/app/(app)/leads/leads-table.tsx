@@ -15,6 +15,7 @@ import {
   canMarkLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadLoopTimelineViewModel,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadTableColumns,
@@ -27,6 +28,9 @@ import {
   resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
+  type LeadLoopStepMode,
+  type LeadLoopStepStatus,
+  type LeadLoopTimelineStep,
   type LeadTableColumnKey,
   type LeadTableRow,
   type LeadTableViewMode
@@ -55,6 +59,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const isDeepLinkedLeadSelected = Boolean(deepLinkedLeadId && selectedLead?.leadId === deepLinkedLeadId);
   const shouldShowLeadDialog = Boolean(selectedLead && (viewMode === "full" || isDeepLinkedLeadSelected));
   const shouldShowMobileLeadDialog = Boolean(selectedLead && !shouldShowLeadDialog && (mobileViewMode === "cards" || viewMode === "split"));
+  const leadLoopTimeline = createLeadLoopTimelineViewModel(selectedLead ?? rows[0] ?? null);
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
     [columnSizing]
@@ -393,8 +398,101 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
           </div>
         </div>
       ) : null}
+
+      <LeadLoopTimeline timeline={leadLoopTimeline} hasSelectedLead={Boolean(selectedLead)} />
     </div>
   );
+}
+
+function LeadLoopTimeline({
+  timeline,
+  hasSelectedLead
+}: {
+  timeline: ReturnType<typeof createLeadLoopTimelineViewModel>;
+  hasSelectedLead: boolean;
+}) {
+  return (
+    <section className="xl:col-span-2 rounded-lg border border-border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Loop 1 map</h2>
+          <p className="text-sm text-muted-foreground">
+            {hasSelectedLead ? "Current marker follows the selected lead." : "Current marker uses the first visible lead until one is selected."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
+          <LoopLegendBadge mode="manual" label="Manual" />
+          <LoopLegendBadge mode="automatic" label="Automatic" />
+          <LoopLegendBadge mode="branch" label="Branch" />
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-x-auto pb-1">
+        <ol className="grid min-w-[980px] grid-cols-9 gap-2">
+          {timeline.steps.map((step) => (
+            <li
+              key={step.id}
+              className={`relative grid min-h-32 content-start gap-2 rounded-lg border p-3 ${getLoopStepClassName(step)}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-xs font-bold shadow-sm">{step.id}</span>
+                <span className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase ${getLoopModeBadgeClassName(step.mode)}`}>
+                  {getLoopModeLabel(step.mode)}
+                </span>
+              </div>
+              <p className="text-xs font-semibold leading-snug text-foreground">{step.title}</p>
+              <p className="text-[11px] font-medium text-muted-foreground">{getLoopStatusLabel(step.status)}</p>
+              {step.isCurrent ? (
+                <span className="mt-auto rounded-md bg-foreground px-2 py-1 text-center text-[11px] font-semibold text-white">
+                  Current
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function LoopLegendBadge({ mode, label }: { mode: LeadLoopStepMode; label: string }) {
+  return <span className={`rounded-md px-2 py-1 ${getLoopModeBadgeClassName(mode)}`}>{label}</span>;
+}
+
+function getLoopStepClassName(step: LeadLoopTimelineStep): string {
+  const baseByMode: Record<LeadLoopStepMode, string> = {
+    manual: "border-amber-200 bg-amber-50/80",
+    automatic: "border-emerald-200 bg-emerald-50/80",
+    branch: "border-sky-200 bg-sky-50/80"
+  };
+  return `${baseByMode[step.mode]} ${step.isCurrent ? "ring-2 ring-foreground ring-offset-2" : ""}`;
+}
+
+function getLoopModeBadgeClassName(mode: LeadLoopStepMode): string {
+  const classes: Record<LeadLoopStepMode, string> = {
+    manual: "bg-amber-100 text-amber-800",
+    automatic: "bg-emerald-100 text-emerald-800",
+    branch: "bg-sky-100 text-sky-800"
+  };
+  return classes[mode];
+}
+
+function getLoopModeLabel(mode: LeadLoopStepMode): string {
+  const labels: Record<LeadLoopStepMode, string> = {
+    manual: "Manual",
+    automatic: "Auto",
+    branch: "Branch"
+  };
+  return labels[mode];
+}
+
+function getLoopStatusLabel(status: LeadLoopStepStatus): string {
+  const labels: Record<LeadLoopStepStatus, string> = {
+    implemented: "Implemented",
+    partial: "Partial",
+    gap: "Gap"
+  };
+  return labels[status];
 }
 
 function TruncatedCell({ value }: { value: string }) {
@@ -570,6 +668,14 @@ function LeadEditor({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
+        {lead.kpGeneratedDocumentId ? (
+          <a
+            href={`/documents?documentId=${encodeURIComponent(lead.kpGeneratedDocumentId)}`}
+            className="rounded-lg border border-border px-4 py-2 text-center text-sm font-semibold text-foreground"
+          >
+            Open KP document
+          </a>
+        ) : null}
         {canMarkLeadKpSent(lead) ? (
           <button
             type="button"
