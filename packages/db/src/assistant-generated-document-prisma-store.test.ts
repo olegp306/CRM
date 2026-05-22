@@ -185,5 +185,8 @@ describe("assistant generated document Prisma store", () => {
       })
     ]);
     expect(new TextDecoder().decode(uploads[1].body)).toContain("%PDF-1.4");
+    expect(uploads[0].body[0]).toBe(0x50);
+    expect(uploads[0].body[1]).toBe(0x4b);
+    expect(new TextDecoder().decode(uploads[0].body)).toContain("word/document.xml");
   });
 });

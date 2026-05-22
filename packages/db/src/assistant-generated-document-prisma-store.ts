@@ -1,7 +1,7 @@
 import type { GeneratedKpDocumentRecord, GenerateKpDocumentFromAssistantInput } from "@app/assistant";
 import { createGeneratedDocumentAttachmentMetadata } from "@app/core";
 import type { ObjectStorage } from "@app/core/storage";
-import { renderDocumentTemplate } from "@app/documents";
+import { createDocxPackageBytes, renderDocumentTemplate } from "@app/documents";
 
 const ASSISTANT_KP_TEMPLATE_ID = "assistant-kp-template";
 const ASSISTANT_KP_TEMPLATE_VERSION_ID = "assistant-kp-template-v1";
@@ -56,8 +56,12 @@ export function createAssistantGeneratedDocumentPrismaStore(
       const rendered = renderDocumentTemplate(ASSISTANT_KP_TEMPLATE, {
         source_id: input.sourceRecordIds[0] ?? "assistant request"
       });
-      const docxBody = createDraftSourceBytes(input.documentId, rendered.content);
-      const pdfBody = createMinimalPdfBytes(input.documentId, rendered.content);
+      const paragraphs = createKpDocumentParagraphs(input, rendered.content);
+      const docxBody = createDocxPackageBytes({
+        title: `KP document ${input.documentId}`,
+        paragraphs
+      });
+      const pdfBody = createMinimalPdfBytes(input.documentId, paragraphs);
       const docxMetadata = createGeneratedDocumentAttachmentMetadata({
         workspaceId: input.workspaceId,
         documentId: input.documentId,
@@ -118,13 +122,20 @@ export function createAssistantGeneratedDocumentPrismaStore(
   };
 }
 
-function createDraftSourceBytes(documentId: string, content: string): Uint8Array {
-  return new TextEncoder().encode(`KP document ${documentId}\n\n${content}\n`);
+function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput, renderedContent: string): string[] {
+  return [
+    renderedContent,
+    `Source records: ${input.sourceRecordIds.length > 0 ? input.sourceRecordIds.join(", ") : "assistant request"}`,
+    `Source material: ${input.rawInput}`
+  ];
 }
 
-function createMinimalPdfBytes(documentId: string, content: string): Uint8Array {
-  const lines = [`KP document ${documentId}`, content].map(escapePdfText);
-  const stream = `BT /F1 14 Tf 50 780 Td (${lines[0]}) Tj 0 -24 Td /F1 11 Tf (${lines[1]}) Tj ET`;
+function createMinimalPdfBytes(documentId: string, paragraphs: string[]): Uint8Array {
+  const lines = [`KP document ${documentId}`, ...paragraphs].map(escapePdfText);
+  const lineOps = lines
+    .map((line, index) => `${index === 0 ? "/F1 14 Tf" : "/F1 10 Tf"} (${line}) Tj 0 -22 Td`)
+    .join(" ");
+  const stream = `BT 50 780 Td ${lineOps} ET`;
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
     "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
