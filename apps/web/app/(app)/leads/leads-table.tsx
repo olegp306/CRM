@@ -23,6 +23,7 @@ import {
   leadMobileViewModes,
   leadTableViewModes,
   normalizeLeadTableViewMode,
+  resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadTableColumnKey,
@@ -43,7 +44,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
   const [isViewModeHydrated, setIsViewModeHydrated] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<LeadMobileViewMode>("cards");
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(rows[0]?.id ?? null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const router = useRouter();
@@ -57,14 +58,13 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     try {
       const storedViewMode = normalizeLeadTableViewMode(window.localStorage.getItem(leadTableViewModeStorageKey));
       setViewMode(storedViewMode);
-      if (storedViewMode !== "split") {
-        setSelectedLeadId(null);
-      }
+      setSelectedLeadId(resolveInitialSelectedLeadId(storedViewMode, rows.map((row) => row.id)));
     } catch {
       setViewMode("split");
+      setSelectedLeadId(resolveInitialSelectedLeadId("split", rows.map((row) => row.id)));
     }
     setIsViewModeHydrated(true);
-  }, []);
+  }, [rows]);
 
   useEffect(() => {
     if (!isViewModeHydrated) {
@@ -156,9 +156,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
 
   function handleViewModeChange(mode: LeadTableViewMode) {
     setViewMode(mode);
-    if (mode === "inline") {
-      setSelectedLeadId(null);
-    }
+    setSelectedLeadId(resolveInitialSelectedLeadId(mode, rows.map((row) => row.id)));
   }
 
   return (
