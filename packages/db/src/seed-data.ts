@@ -38,7 +38,7 @@ export function createDemoSeedData(now = new Date()) {
     workspace: {
       id: "workspace-demo",
       name: "Demo Architecture Studio",
-      brandName: "Studio OS Demo",
+      brandName: "Reyzbikh architect CRM",
       primaryColor: "#1c1917"
     },
     owner: {

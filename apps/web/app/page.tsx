@@ -4,9 +4,9 @@ export default function HomePage() {
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">CRM SaaS v1</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-normal">Studio OS</h1>
+          <h1 className="mt-3 text-4xl font-semibold tracking-normal">Reyzbikh architect CRM</h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
-            Workspace CRM foundation for architecture operations, ready for auth, assistant, and module screens.
+            Architecture CRM foundation, ready for lead intake, assistant workflows, and module screens.
           </p>
         </div>
         <a

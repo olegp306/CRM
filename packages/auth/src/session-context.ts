@@ -19,8 +19,8 @@ export function createDemoWorkspaceSession(
 ): WorkspaceSessionContext {
   return {
     workspaceId: "workspace-demo",
-    workspaceName: "Studio OS",
-    workspaceDescription: "Airbnb Calm workspace",
+    workspaceName: "Reyzbikh architect CRM",
+    workspaceDescription: "Architecture CRM workspace",
     userId: "user-demo",
     userName: "Demo Admin",
     role: "admin",

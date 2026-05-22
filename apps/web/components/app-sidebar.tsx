@@ -10,11 +10,12 @@ type AppSidebarProps = {
   locale?: SupportedLocale;
   pathname: string;
   pendingHref: string | null;
+  brandName: string;
   appVersion: string;
   onNavigate: (href: string) => void;
 };
 
-export function AppSidebar({ locale = "en", pathname, pendingHref, appVersion, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ locale = "en", pathname, pendingHref, brandName, appVersion, onNavigate }: AppSidebarProps) {
   const items = getAppNavigationItems(locale);
   const pendingItem = items.find((item) => item.href === pendingHref);
   const displayHref = getNavigationDisplayHref(pathname, pendingHref);
@@ -35,7 +36,7 @@ export function AppSidebar({ locale = "en", pathname, pendingHref, appVersion, o
           <span className="sr-only">{getNavigationPendingLabel(pendingItem.label)}</span>
         </div>
       ) : null}
-      <div className="mb-6 text-base font-semibold">Studio OS</div>
+      <div className="mb-6 truncate text-base font-semibold">{brandName}</div>
       <nav className="grid gap-1" aria-busy={pendingItem ? true : undefined}>
         {items.map((item) => {
           const isDisplayed = displayHref === item.href;

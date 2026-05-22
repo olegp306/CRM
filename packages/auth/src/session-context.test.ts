@@ -5,8 +5,8 @@ describe("workspace session context", () => {
   it("creates a demo workspace session for the app shell", () => {
     expect(createDemoWorkspaceSession()).toEqual({
       workspaceId: "workspace-demo",
-      workspaceName: "Studio OS",
-      workspaceDescription: "Airbnb Calm workspace",
+      workspaceName: "Reyzbikh architect CRM",
+      workspaceDescription: "Architecture CRM workspace",
       userId: "user-demo",
       userName: "Demo Admin",
       role: "admin",
