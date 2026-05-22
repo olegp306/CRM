@@ -241,9 +241,11 @@ export default async function PlatformFeedbackPage({
                 ) : null}
               </div>
               <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
-                <p className="truncate text-sm font-semibold">{inbox.releaseHistorySummary.topActor?.actor ?? "None"}</p>
+                <p className="truncate text-sm font-semibold">{inbox.releaseHistorySummary.topActor?.actor ?? "No actor yet"}</p>
                 <p className="text-xs text-neutral-500">Top planning actor</p>
-                <p className="mt-2 text-xs text-neutral-500">{inbox.releaseHistorySummary.topActor?.count ?? 0} events</p>
+                <p className="mt-2 text-xs text-neutral-500">
+                  {inbox.releaseHistorySummary.topActor ? `${inbox.releaseHistorySummary.topActor.count} events` : "No actor events yet"}
+                </p>
               </div>
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
