@@ -15,33 +15,33 @@ export type OnboardingBrief = {
 
 export const onboardingQuestions: OnboardingQuestion[] = [
   {
-    id: "workflow-gaps",
-    title: "Workflow gaps",
-    prompt: "Which parts of your real client workflow are still missing or unclear in this CRM?",
-    moduleContext: "onboarding"
+    id: "gmail-access",
+    title: "Gmail access",
+    prompt: "Katya, please send the Gmail or Google account that should be allowed to access the CRM when we restrict the public staging app.",
+    moduleContext: "settings"
   },
   {
-    id: "lead-intake",
-    title: "Lead intake",
-    prompt: "When a new lead arrives from Telegram or manually, what should the CRM ask, infer, or prepare for you?",
+    id: "telegram-message-batch",
+    title: "Telegram message batches",
+    prompt: "Telegram can already create leads from messages. Should it also create one lead from several consecutive Telegram messages that belong to the same client request?",
     moduleContext: "leads"
   },
   {
-    id: "project-flow",
-    title: "Project flow",
-    prompt: "After a lead becomes a project, what statuses, tasks, documents, or handoffs should be visible first?",
-    moduleContext: "projects"
+    id: "missing-data-purpose",
+    title: "Missing data purpose",
+    prompt: "The form says Telegram will ask for additional missing data. Missing for what exactly: lead qualification, KP/proposal generation, project setup, pricing, or another decision?",
+    moduleContext: "leads"
   },
   {
-    id: "assistant-behavior",
-    title: "Assistant behavior",
-    prompt: "What should the assistant know, explain, or do differently while you use the app?",
-    moduleContext: "assistant"
+    id: "table-design-review",
+    title: "Table design review",
+    prompt: "Please check the current table design for clients, leads, projects, and cold targets. What feels clear, unclear, too much, or missing for your daily work?",
+    moduleContext: "onboarding"
   },
   {
-    id: "priority",
-    title: "Priority",
-    prompt: "If we could build only one improvement next, what should it be and why?",
+    id: "loop-one-priority",
+    title: "Loop one priority",
+    prompt: "For the first loop, we are focusing on Telegram lead intake and web editing of created leads. What should be fixed or added first so this loop becomes useful for real work?",
     moduleContext: "onboarding"
   }
 ];
@@ -50,15 +50,18 @@ export function getCurrentOnboardingBrief(): OnboardingBrief {
   return {
     appVersion: currentAppMetadata.version,
     completed: [
-      "Telegram lead intake can create leads and preserve source context.",
+      "Loop 1 is the current focus: Telegram can parse incoming messages and create leads.",
+      "Created leads can already be viewed and edited in the web form.",
       "Editable CRM tables exist for clients, leads, projects, and cold targets.",
-      "Assistant messages can create versioned feedback, action previews, and platform inbox rows.",
-      "Version metadata is visible in the app shell and attached to support or feature feedback."
+      "The current onboarding form collects answers as versioned feature requests in the platform feedback inbox.",
+      "The app can show the current version so support and feature requests can be traced back to a release."
     ],
     planned: [
+      "Restrict staging access to specific Google/Gmail accounts.",
+      "Decide whether Telegram should merge several consecutive messages into one lead.",
+      "Clarify which business decision the missing-data questions should support.",
       "Improve lead table views with split, popup, and inline editing modes.",
-      "Expand project and document execution loops beyond the first working flows.",
-      "Use onboarding answers to prioritize the next feature branches."
+      "Use Katya's onboarding answers to prioritize the next feature branches."
     ]
   };
 }

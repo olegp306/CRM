@@ -10,25 +10,26 @@ import {
 describe("onboarding assistant helpers", () => {
   it("exposes stable guided questions", () => {
     expect(onboardingQuestions.map((question) => question.id)).toEqual([
-      "workflow-gaps",
-      "lead-intake",
-      "project-flow",
-      "assistant-behavior",
-      "priority"
+      "gmail-access",
+      "telegram-message-batch",
+      "missing-data-purpose",
+      "table-design-review",
+      "loop-one-priority"
     ]);
-    expect(findOnboardingQuestion("lead-intake")?.moduleContext).toBe("leads");
+    expect(findOnboardingQuestion("telegram-message-batch")?.moduleContext).toBe("leads");
+    expect(findOnboardingQuestion("gmail-access")?.moduleContext).toBe("settings");
   });
 
   it("summarizes current product context with the active app version", () => {
     expect(getCurrentOnboardingBrief()).toMatchObject({
       appVersion: "0.1.1",
-      completed: expect.arrayContaining([expect.stringContaining("Telegram lead intake")]),
-      planned: expect.arrayContaining([expect.stringContaining("lead table views")])
+      completed: expect.arrayContaining([expect.stringContaining("Loop 1")]),
+      planned: expect.arrayContaining([expect.stringContaining("Gmail")])
     });
   });
 
   it("maps free-form answers into feature-request classified content", () => {
-    const question = findOnboardingQuestion("priority");
+    const question = findOnboardingQuestion("loop-one-priority");
 
     expect(question).not.toBeNull();
     const content = createOnboardingFeedbackContent({
