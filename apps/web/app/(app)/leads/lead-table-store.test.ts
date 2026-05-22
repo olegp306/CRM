@@ -3,6 +3,7 @@ import {
   canMarkLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadLoopTimelineViewModel,
   createLeadTableRows,
   getLeadSourceMaterials,
   inlineEditableLeadFields,
@@ -263,5 +264,50 @@ describe("lead table model", () => {
     expect(canMarkLeadKpSent({ kpGeneratedDocumentId: "D-20260521-message-2", kpSentDate: "" })).toBe(true);
     expect(canMarkLeadKpSent({ kpGeneratedDocumentId: "", kpSentDate: "" })).toBe(false);
     expect(canMarkLeadKpSent({ kpGeneratedDocumentId: "D-20260521-message-2", kpSentDate: "2026-05-21" })).toBe(false);
+  });
+
+  it("builds the nine-step Loop 1 timeline with mode and current-step markers", () => {
+    const timeline = createLeadLoopTimelineViewModel({
+      missingData: "",
+      isStandard: "yes",
+      kpGeneratedDocumentId: "D-telegram-12345-13",
+      kpSentDate: "",
+      followup1Date: "",
+      outcome: "",
+      projectRecordId: ""
+    });
+
+    expect(timeline.steps).toHaveLength(9);
+    expect(timeline.steps.map((step) => step.mode)).toEqual([
+      "manual",
+      "automatic",
+      "automatic",
+      "automatic",
+      "branch",
+      "manual",
+      "manual",
+      "automatic",
+      "automatic"
+    ]);
+    expect(timeline.currentStepId).toBe(6);
+    expect(timeline.steps.find((step) => step.id === 6)).toMatchObject({
+      title: "Review and send KP",
+      isCurrent: true
+    });
+  });
+
+  it("moves the Loop 1 current marker to follow-up after KP is sent", () => {
+    const timeline = createLeadLoopTimelineViewModel({
+      missingData: "",
+      isStandard: "yes",
+      kpGeneratedDocumentId: "D-telegram-12345-13",
+      kpSentDate: "2026-05-23",
+      followup1Date: "2026-05-30",
+      outcome: "",
+      projectRecordId: ""
+    });
+
+    expect(timeline.currentStepId).toBe(8);
+    expect(timeline.steps.find((step) => step.id === 8)?.isCurrent).toBe(true);
   });
 });

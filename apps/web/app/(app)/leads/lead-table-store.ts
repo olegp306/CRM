@@ -74,6 +74,23 @@ export type LeadActionPlanItem = {
   description: string;
 };
 
+export type LeadLoopStepMode = "manual" | "automatic" | "branch";
+
+export type LeadLoopStepStatus = "implemented" | "partial" | "gap";
+
+export type LeadLoopTimelineStep = {
+  id: number;
+  title: string;
+  mode: LeadLoopStepMode;
+  status: LeadLoopStepStatus;
+  isCurrent: boolean;
+};
+
+export type LeadLoopTimelineViewModel = {
+  currentStepId: number;
+  steps: LeadLoopTimelineStep[];
+};
+
 export type LeadSourceReference = {
   label: string;
   url: string | null;
@@ -305,6 +322,68 @@ export function createLeadActionPlan(lead: Pick<LeadTableRow, "missingData" | "i
 
 export function canMarkLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentId" | "kpSentDate">): boolean {
   return lead.kpGeneratedDocumentId.trim().length > 0 && lead.kpSentDate.trim().length === 0;
+}
+
+export const leadLoopTimelineSteps: Array<Omit<LeadLoopTimelineStep, "isCurrent">> = [
+  { id: 1, title: "Send raw Telegram material", mode: "manual", status: "implemented" },
+  { id: 2, title: "AI extracts lead fields", mode: "automatic", status: "partial" },
+  { id: 3, title: "Ask for missing data", mode: "automatic", status: "implemented" },
+  { id: 4, title: "Create client and lead", mode: "automatic", status: "partial" },
+  { id: 5, title: "Standard vs custom branch", mode: "branch", status: "partial" },
+  { id: 6, title: "Review and send KP", mode: "manual", status: "partial" },
+  { id: 7, title: "Mark KP sent", mode: "manual", status: "partial" },
+  { id: 8, title: "Schedule follow-up", mode: "automatic", status: "partial" },
+  { id: 9, title: "Reminder and follow-up draft", mode: "automatic", status: "partial" }
+];
+
+export function createLeadLoopTimelineViewModel(
+  lead: Pick<
+    LeadTableRow,
+    "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate" | "followup1Date" | "outcome" | "projectRecordId"
+  > | null
+): LeadLoopTimelineViewModel {
+  const currentStepId = resolveCurrentLeadLoopStepId(lead);
+
+  return {
+    currentStepId,
+    steps: leadLoopTimelineSteps.map((step) => ({
+      ...step,
+      isCurrent: step.id === currentStepId
+    }))
+  };
+}
+
+function resolveCurrentLeadLoopStepId(
+  lead: Pick<
+    LeadTableRow,
+    "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate" | "followup1Date" | "outcome" | "projectRecordId"
+  > | null
+): number {
+  if (!lead) {
+    return 5;
+  }
+
+  if (lead.outcome || lead.projectRecordId) {
+    return 9;
+  }
+
+  if (lead.followup1Date && lead.kpSentDate) {
+    return 8;
+  }
+
+  if (lead.kpGeneratedDocumentId && !lead.kpSentDate) {
+    return 6;
+  }
+
+  if (lead.missingData) {
+    return 3;
+  }
+
+  if (lead.isStandard === "yes" || lead.isStandard === "no") {
+    return 5;
+  }
+
+  return 4;
 }
 
 function formatDate(value: Date | string | null): string {

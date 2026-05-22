@@ -1,4 +1,5 @@
 import type { GenerateKpDocumentFromAssistantInput, GeneratedKpDocumentRecord } from "@app/assistant";
+import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma, type AssistantGeneratedDocumentStore } from "@app/db";
 import { selectDatabaseBackedRuntime } from "../../../lib/database-runtime";
 
@@ -59,7 +60,9 @@ function getAssistantGeneratedDocumentStore(): AssistantGeneratedDocumentStore {
   const memoryStore = createMemoryGeneratedDocumentStore();
 
   if (!globalForAssistantDocuments.assistantGeneratedDocumentPrismaStore) {
-    globalForAssistantDocuments.assistantGeneratedDocumentPrismaStore = createAssistantGeneratedDocumentPrismaStore(prisma);
+    globalForAssistantDocuments.assistantGeneratedDocumentPrismaStore = createAssistantGeneratedDocumentPrismaStore(prisma, {
+      objectStorage: createObjectStorageFromEnv()
+    });
   }
 
   return selectGeneratedDocumentStoreRuntime({

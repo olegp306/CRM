@@ -1,4 +1,5 @@
 import { getNextBusinessId } from "@app/core";
+import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
 import { loadRootEnv } from "../env/root-env";
 import {
@@ -43,6 +44,15 @@ export type TelegramGenerateKpDocumentInput = {
   documentType: "kp";
   sourceRecordIds: string[];
   rawInput: string;
+  fieldSnapshot?: {
+    clientName?: string | null;
+    requestType?: string | null;
+    projectAddress?: string | null;
+    bgfM2?: number | null;
+    email?: string | null;
+    phone?: string | null;
+    missingData?: string[];
+  };
   requestedByUserId: string;
 };
 
@@ -51,6 +61,7 @@ export type TelegramGeneratedKpDocumentRecord = TelegramGenerateKpDocumentInput 
   docxAttachmentId?: string;
   docxDeliveryUrl?: string;
   pdfAttachmentId?: string;
+  pdfDeliveryUrl?: string;
 };
 
 export type TelegramWorkerConfig = {
@@ -262,6 +273,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           documentType: "kp",
           sourceRecordIds: [created.leadId],
           rawInput: session.draft.rawInput,
+          fieldSnapshot: createTelegramKpFieldSnapshot(session.draft),
           requestedByUserId: `telegram:${message.chatId}`
         })
       : null;
@@ -271,11 +283,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         data: { kpGeneratedDocumentId: generatedDocument.documentId }
       });
     }
-    if (generatedDocument?.docxDeliveryUrl) {
+    const generatedDocumentDeliveryUrl =
+      generatedDocument?.pdfDeliveryUrl ??
+      createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId) ??
+      generatedDocument?.docxDeliveryUrl ??
+      createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
+
+    if (generatedDocumentDeliveryUrl && generatedDocument) {
       await sendTelegramDocument({
         botToken: config.botToken,
         chatId: message.chatId,
-        document: generatedDocument.docxDeliveryUrl,
+        document: generatedDocumentDeliveryUrl,
         caption: `KP document ${generatedDocument.documentId} is ready.`,
         fetchImpl
       });
@@ -290,7 +308,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         status: created.status,
         draft: session.draft,
         generatedDocumentId: generatedDocument?.documentId,
-        generatedDocumentDelivered: Boolean(generatedDocument?.docxDeliveryUrl)
+        generatedDocumentDelivered: Boolean(generatedDocumentDeliveryUrl)
       }),
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
       fetchImpl
@@ -342,7 +360,9 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     botToken,
     workspaceId: env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo",
     crmBaseUrl: env.TELEGRAM_CRM_BASE_URL ?? env.NEXT_PUBLIC_APP_URL,
-    generateKpDocument: createAssistantGeneratedDocumentPrismaStore(defaultPrisma).create,
+    generateKpDocument: createAssistantGeneratedDocumentPrismaStore(defaultPrisma, {
+      objectStorage: createObjectStorageFromEnv()
+    }).create,
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: env.OPENAI_MODEL ?? "gpt-4o-mini"
@@ -571,6 +591,18 @@ function createTelegramKpDocumentId(message: AllowedTelegramMessageBatch): strin
   return `D-telegram-${message.chatId}-${message.sourceMessageIds.at(-1) ?? message.messageId}`;
 }
 
+function createTelegramKpFieldSnapshot(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>) {
+  return {
+    clientName: draft.clientName,
+    requestType: draft.requestType,
+    projectAddress: draft.projectAddress,
+    bgfM2: draft.bgfM2,
+    email: draft.email,
+    phone: draft.phone,
+    missingData: draft.missingData
+  };
+}
+
 function createTelegramLeadDraftMessage(session: TelegramLeadDraftSession): string {
   const kpStatus = getKpRequiredFieldStatus(session.draft);
 
@@ -659,6 +691,16 @@ function createTelegramCrmReplyMarkup(crmBaseUrl: string | undefined, leadId: st
       ]
     ]
   };
+}
+
+function createTelegramAttachmentDeliveryUrl(crmBaseUrl: string | undefined, attachmentId: string | undefined): string | undefined {
+  const trimmedBaseUrl = crmBaseUrl?.replace(/\/+$/, "");
+
+  if (!trimmedBaseUrl || !attachmentId) {
+    return undefined;
+  }
+
+  return `${trimmedBaseUrl}/documents/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 if (process.argv[1]?.endsWith("telegram-worker.ts")) {
