@@ -365,6 +365,41 @@ describe("platform inbox summary", () => {
     });
   });
 
+  it("sorts release planning actor counts by activity", () => {
+    const summary = createPlatformReleaseHistorySummary([
+      {
+        appVersion: "0.2.0",
+        actorUserId: undefined,
+        plannedCount: 1,
+        skippedCount: 0
+      },
+      {
+        appVersion: "0.2.0",
+        actorUserId: "user-2",
+        plannedCount: 1,
+        skippedCount: 0
+      },
+      {
+        appVersion: "0.2.0",
+        actorUserId: "user-1",
+        plannedCount: 1,
+        skippedCount: 0
+      },
+      {
+        appVersion: "0.2.0",
+        actorUserId: "user-1",
+        plannedCount: 1,
+        skippedCount: 0
+      }
+    ]);
+
+    expect(Object.entries(summary.actorCounts)).toEqual([
+      ["user-1", 2],
+      ["system", 1],
+      ["user-2", 1]
+    ]);
+  });
+
   it("groups feedback into release triage summaries by app version", () => {
     const triage = createPlatformReleaseTriage([
       ...feedback,

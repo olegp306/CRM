@@ -268,6 +268,7 @@ Previous R3 verification:
   - The platform inbox summary returns `releaseHistory` with version, actor, planned count, skipped count, and `releaseHistorySummary` totals plus actor counts.
   - The release history panel explains that its list and CSV export follow the selected version filter.
   - The release history summary shows the active history scope (`All versions` or the selected app version).
+  - Release history actor counts are sorted by planning activity, with alphabetical ordering for ties.
   - Version-scoped release history includes a `View all history` link to clear the selected app version.
   - Release history also includes a `Current version history` link when the current app version is not already selected.
   - The release history empty state points operators to `Plan release items` so the first audit-backed history event is discoverable.

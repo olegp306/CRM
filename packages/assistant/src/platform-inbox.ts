@@ -321,12 +321,15 @@ export function createPlatformReleaseHistorySummary(history: PlatformReleaseHist
     counts[actor] = (counts[actor] ?? 0) + 1;
     return counts;
   }, {});
+  const sortedActorCounts = Object.fromEntries(
+    Object.entries(actorCounts).sort(([leftActor, leftCount], [rightActor, rightCount]) => rightCount - leftCount || leftActor.localeCompare(rightActor))
+  );
 
   return {
     planningEventCount: history.length,
     plannedCount: history.reduce((count, item) => count + item.plannedCount, 0),
     skippedCount: history.reduce((count, item) => count + item.skippedCount, 0),
-    actorCounts
+    actorCounts: sortedActorCounts
   };
 }
 
