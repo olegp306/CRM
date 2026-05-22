@@ -31,6 +31,8 @@ export type LeadTableColumn = {
   defaultSize: number;
 };
 
+export type LeadTableViewMode = "split" | "full" | "inline";
+
 export type LeadTableRecord = {
   id: string;
   leadId: string;
@@ -95,6 +97,27 @@ export const leadTableColumns: LeadTableColumn[] = [
   { key: "outcomeReason", label: "Outcome reason", enableSorting: true, defaultSize: 200 },
   { key: "projectRecordId", label: "Project ID", enableSorting: true, defaultSize: 160 }
 ];
+
+export const leadTableViewModes: Array<{ id: LeadTableViewMode; label: string; description: string }> = [
+  { id: "split", label: "Split", description: "Table with selected lead side panel." },
+  { id: "full", label: "Full", description: "Full-width table with popup editor." },
+  { id: "inline", label: "Inline", description: "Quick-edit safe fields directly in the table." }
+];
+
+export const inlineEditableLeadFields: LeadTableColumnKey[] = [
+  "temperature",
+  "requestType",
+  "urgency",
+  "budgetEur",
+  "status",
+  "projectAddress",
+  "followupStatus",
+  "outcome"
+];
+
+export function isInlineEditableLeadField(key: LeadTableColumnKey): boolean {
+  return inlineEditableLeadFields.includes(key);
+}
 
 export function createLeadTableRows(records: LeadTableRecord[]): LeadTableRow[] {
   return records.map((record) => ({

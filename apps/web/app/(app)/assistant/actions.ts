@@ -5,7 +5,9 @@ import {
   createAuditReviewSummary,
   createPlatformInboxSummary,
   createAssistantPersistenceDraft,
+  createAssistantSubmissionResult,
   createOpenAIAssistantSubmissionResult,
+  createOnboardingConversationFeedbackContent,
   createPlatformFeedbackBulkUpdatePlan,
   createPlatformFeedbackCsv,
   createPlatformReleaseActionPlan,
@@ -37,6 +39,8 @@ export type SubmitAssistantMessageInput = {
   messageId: string;
 };
 
+export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
+
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
   const result = await createOpenAIAssistantSubmissionResult(input, {
     apiKey: getRequiredOpenAiApiKey(),
@@ -58,6 +62,45 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
 
   return {
     result,
+    persistenceDraft,
+    saved: {
+      threadCount: threads.length,
+      messageCount: messages.length,
+      feedbackCount: feedback.length,
+      actionCount: actions.length
+    }
+  };
+}
+
+export async function submitOnboardingAssistantMessageAction(input: SubmitOnboardingAssistantMessageInput) {
+  const context: AssistantContext = {
+    ...input.context,
+    route: "/assistant",
+    module: "onboarding"
+  };
+  const result = createAssistantSubmissionResult({
+    context,
+    content: createOnboardingConversationFeedbackContent(input.content),
+    threadId: input.threadId,
+    messageId: input.messageId
+  });
+  const persistenceDraft = createAssistantPersistenceDraft(result, {
+    threadId: input.threadId,
+    messageId: input.messageId
+  });
+  const repository = getAssistantRepository();
+
+  await repository.save(persistenceDraft);
+  const [threads, messages, feedback, actions] = await Promise.all([
+    repository.listThreads(context.workspaceId),
+    repository.listMessages(input.threadId),
+    repository.listFeedback(context.workspaceId),
+    repository.listActions(context.workspaceId)
+  ]);
+
+  return {
+    result,
+    displayUserContent: input.content,
     persistenceDraft,
     saved: {
       threadCount: threads.length,
