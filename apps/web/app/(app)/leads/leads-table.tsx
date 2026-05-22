@@ -587,7 +587,7 @@ function SourceMaterialsPanel({
   sourceText: string;
   references: ReturnType<typeof getLeadSourceMaterials>["references"];
 }) {
-  const [isOpen, setIsOpen] = useState(Boolean(sourceText));
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <details
