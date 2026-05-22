@@ -269,7 +269,7 @@ Previous R3 verification:
   - `releaseHistorySummary` exposes the top planning actor for a quick operator-facing summary, with a full-name title, singular/plural event labels, and `No actor yet` / `No actor events yet` empty states before planning starts.
   - The release history panel explains that its list and CSV export follow the selected version filter.
   - The release history summary shows the active history scope (`All versions` or the selected app version).
-  - Release history actor counts are sorted by planning activity, with alphabetical ordering for ties.
+  - Release history actor counts are sorted by planning activity, use singular/plural event labels, expose full actor titles, and keep alphabetical ordering for ties.
   - Version-scoped release history includes a `View all history` link to clear the selected app version.
   - Release history also includes a `Current version history` link when the current app version is not already selected.
   - The release history empty state points operators to `Plan release items` so the first audit-backed history event is discoverable.

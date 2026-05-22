@@ -33,7 +33,7 @@ export default async function PlatformFeedbackPage({
   const releaseHistoryActors = Object.entries(inbox.releaseHistorySummary.actorCounts);
   const releaseHistoryScope = filters.appVersion ? `v${filters.appVersion}` : "All versions";
   const releaseHistoryTopActorEventLabel = inbox.releaseHistorySummary.topActor
-    ? `${inbox.releaseHistorySummary.topActor.count} ${inbox.releaseHistorySummary.topActor.count === 1 ? "event" : "events"}`
+    ? formatReleaseHistoryActorCount(inbox.releaseHistorySummary.topActor.count)
     : "No actor events yet";
   const releaseHistoryTopActorTitle = inbox.releaseHistorySummary.topActor?.actor ?? "No actor yet";
 
@@ -260,8 +260,8 @@ export default async function PlatformFeedbackPage({
               {releaseHistoryActors.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {releaseHistoryActors.map(([actor, count]) => (
-                    <span key={actor} className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300">
-                      {actor}: {count}
+                    <span key={actor} className="rounded-md border border-neutral-800 px-2 py-1 text-neutral-300" title={actor}>
+                      {actor}: {formatReleaseHistoryActorCount(count)}
                     </span>
                   ))}
                 </div>
@@ -374,6 +374,10 @@ function Metric({ label, value }: { label: string; value: number }) {
       <p className="text-xs text-neutral-500">{label}</p>
     </div>
   );
+}
+
+function formatReleaseHistoryActorCount(count: number) {
+  return `${count} ${count === 1 ? "event" : "events"}`;
 }
 
 function buildFeedbackHref(filters: { status?: string; type?: string; appVersion?: string }) {
