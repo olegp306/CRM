@@ -289,14 +289,20 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       generatedDocument?.docxDeliveryUrl ??
       createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
 
+    let generatedDocumentDelivered = false;
     if (generatedDocumentDeliveryUrl && generatedDocument) {
-      await sendTelegramDocument({
-        botToken: config.botToken,
-        chatId: message.chatId,
-        document: generatedDocumentDeliveryUrl,
-        caption: `KP document ${generatedDocument.documentId} is ready.`,
-        fetchImpl
-      });
+      try {
+        await sendTelegramDocument({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          document: generatedDocumentDeliveryUrl,
+          caption: `KP document ${generatedDocument.documentId} is ready.`,
+          fetchImpl
+        });
+        generatedDocumentDelivered = true;
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : error);
+      }
     }
     await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
 
@@ -308,7 +314,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         status: created.status,
         draft: session.draft,
         generatedDocumentId: generatedDocument?.documentId,
-        generatedDocumentDelivered: Boolean(generatedDocumentDeliveryUrl)
+        generatedDocumentDelivered
       }),
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
       fetchImpl
