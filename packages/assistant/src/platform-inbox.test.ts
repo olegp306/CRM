@@ -361,6 +361,10 @@ describe("platform inbox summary", () => {
       actorCounts: {
         "user-1": 1,
         system: 1
+      },
+      topActor: {
+        actor: "system",
+        count: 1
       }
     });
   });
@@ -398,6 +402,10 @@ describe("platform inbox summary", () => {
       ["system", 1],
       ["user-2", 1]
     ]);
+    expect(summary.topActor).toEqual({
+      actor: "user-1",
+      count: 2
+    });
   });
 
   it("groups feedback into release triage summaries by app version", () => {

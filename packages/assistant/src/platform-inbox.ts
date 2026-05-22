@@ -107,6 +107,10 @@ export type PlatformReleaseHistorySummary = {
   plannedCount: number;
   skippedCount: number;
   actorCounts: Record<string, number>;
+  topActor?: {
+    actor: string;
+    count: number;
+  };
 };
 
 export function createPlatformInboxSummary({
@@ -324,12 +328,14 @@ export function createPlatformReleaseHistorySummary(history: PlatformReleaseHist
   const sortedActorCounts = Object.fromEntries(
     Object.entries(actorCounts).sort(([leftActor, leftCount], [rightActor, rightCount]) => rightCount - leftCount || leftActor.localeCompare(rightActor))
   );
+  const topActorEntry = Object.entries(sortedActorCounts)[0];
 
   return {
     planningEventCount: history.length,
     plannedCount: history.reduce((count, item) => count + item.plannedCount, 0),
     skippedCount: history.reduce((count, item) => count + item.skippedCount, 0),
-    actorCounts: sortedActorCounts
+    actorCounts: sortedActorCounts,
+    topActor: topActorEntry ? { actor: topActorEntry[0], count: topActorEntry[1] } : undefined
   };
 }
 

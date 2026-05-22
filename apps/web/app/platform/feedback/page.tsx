@@ -222,7 +222,7 @@ export default async function PlatformFeedbackPage({
                 Export CSV
               </a>
             </div>
-            <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-4 text-xs md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 border-b border-neutral-800 p-4 text-xs md:grid-cols-5">
               <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
                 <p className="truncate text-sm font-semibold">{releaseHistoryScope}</p>
                 <p className="text-xs text-neutral-500">History scope</p>
@@ -239,6 +239,11 @@ export default async function PlatformFeedbackPage({
                     Current version history
                   </a>
                 ) : null}
+              </div>
+              <div className="min-w-20 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2">
+                <p className="truncate text-sm font-semibold">{inbox.releaseHistorySummary.topActor?.actor ?? "None"}</p>
+                <p className="text-xs text-neutral-500">Top planning actor</p>
+                <p className="mt-2 text-xs text-neutral-500">{inbox.releaseHistorySummary.topActor?.count ?? 0} events</p>
               </div>
               <Metric label="Planning events" value={inbox.releaseHistorySummary.planningEventCount} />
               <Metric label="Planned" value={inbox.releaseHistorySummary.plannedCount} />
