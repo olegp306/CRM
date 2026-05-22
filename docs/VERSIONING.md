@@ -121,6 +121,8 @@ The release history export link exposes an accessible label that names whether i
 
 The panel header states that release history and CSV export follow the selected version filter, so operators can tell when they are looking at a scoped history view.
 
+Each release history row exposes a combined accessible label with version, actor, planned count, and skipped count.
+
 Release history summary metrics expose matching accessible labels for the visible planning event, planned, and skipped counts.
 
 The same panel summarizes the active history scope, top planning actor, planning event count, total planned items, total skipped items, and planning actor counts. The history scope metric has a matching accessible label. Planning actors are sorted by activity, with stable alphabetical ordering for ties. Actor counts use singular/plural event wording, and each actor chip exposes the full actor name in the title attribute plus a matching accessible label. The top actor metric also exposes the full actor name when the visible value is truncated and has a matching accessible label; when no release planning event exists yet the metric shows `No actor yet` and `No actor events yet`.
