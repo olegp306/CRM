@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   getEditableEmptyStateMessage,
+  getEditableMobileCardFields,
   type EditableRecordKind,
   type EditableRecordRow,
   type EditableTableField
@@ -26,11 +27,15 @@ type EditableRecordTableProps = {
   updateAction: (formData: FormData) => Promise<void>;
 };
 
+type MobileTableViewMode = "cards" | "table";
+
 export function EditableRecordTable({ title, kind, fields, rows, updateAction }: EditableRecordTableProps) {
   const tableFields = fields.filter((field) => field.table);
   const editorFields = fields.filter((field) => field.editable);
+  const mobileCardFields = useMemo(() => getEditableMobileCardFields(kind, fields), [fields, kind]);
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences(`editable-${kind}`);
+  const [mobileViewMode, setMobileViewMode] = useState<MobileTableViewMode>("cards");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
@@ -75,29 +80,69 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction }:
 
   return (
     <>
-      <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-white">
+      <section className="grid gap-3 md:hidden">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-3">
+          <div>
+            <h2 className="text-base font-semibold">{title}</h2>
+            <p className="text-xs text-muted-foreground">Cards for quick review, table for all columns.</p>
+          </div>
+          <MobileViewModeToggle value={mobileViewMode} onChange={setMobileViewMode} />
+        </div>
+
+        {mobileViewMode === "cards" ? (
+          rows.length > 0 ? (
+            <div className="grid gap-2">
+              {rows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedId(row.id)}
+                  className="grid gap-2 rounded-lg border border-border bg-white px-3 py-2 text-left shadow-sm transition hover:border-foreground/20"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="min-w-0 truncate text-sm font-semibold leading-tight">{getMobileCardTitle(row, mobileCardFields, tableFields)}</h3>
+                    <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold leading-5 text-muted-foreground">
+                      {getMobileCardMeta(row, mobileCardFields) || "row"}
+                    </span>
+                  </div>
+                  <CompactMobileFields fields={mobileCardFields} row={row} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">{getEditableEmptyStateMessage(kind)}</div>
+          )
+        ) : null}
+      </section>
+
+      <section className={`${mobileViewMode === "cards" ? "hidden md:block" : "block"} min-w-0 overflow-hidden rounded-lg border border-border bg-white`}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">{title}</h2>
             <p className="text-sm text-muted-foreground">Sort, resize, hide columns, then click a row to edit.</p>
           </div>
-          <details className="relative">
-            <summary className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-semibold">
-              Columns
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-white p-3 shadow-xl">
-              {table.getAllLeafColumns().map((column) => (
-                <label key={column.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={column.getIsVisible()}
-                    onChange={column.getToggleVisibilityHandler()}
-                  />
-                  <span>{tableFields.find((field) => field.key === column.id)?.label ?? column.id}</span>
-                </label>
-              ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="md:hidden">
+              <MobileViewModeToggle value={mobileViewMode} onChange={setMobileViewMode} />
             </div>
-          </details>
+            <details className="relative">
+              <summary className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                Columns
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-white p-3 shadow-xl">
+                {table.getAllLeafColumns().map((column) => (
+                  <label key={column.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={column.getIsVisible()}
+                      onChange={column.getToggleVisibilityHandler()}
+                    />
+                    <span>{tableFields.find((field) => field.key === column.id)?.label ?? column.id}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          </div>
         </div>
 
         <div className="overflow-auto">
@@ -210,6 +255,54 @@ function TruncatedCell({ value }: { value: string }) {
       {value || "-"}
     </span>
   );
+}
+
+function MobileViewModeToggle({
+  value,
+  onChange
+}: {
+  value: MobileTableViewMode;
+  onChange: (value: MobileTableViewMode) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+      {(["cards", "table"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          className={`h-8 rounded-md px-3 text-xs font-semibold capitalize transition ${
+            value === mode ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {mode}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CompactMobileFields({ fields, row }: { fields: EditableTableField[]; row: EditableRecordRow }) {
+  return (
+    <div className="grid gap-1">
+      {fields.map((field) => (
+        <div key={field.key} className="grid grid-cols-[74px_minmax(0,1fr)] items-baseline gap-2 leading-tight">
+          <span className="text-[11px] font-normal text-muted-foreground">{field.label}</span>
+          <span className="truncate text-[11px] font-semibold text-foreground">{row[field.key] || "-"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getMobileCardTitle(row: EditableRecordRow, fields: EditableTableField[], tableFields: EditableTableField[]): string {
+  const titleField = fields.find((field) => !/created|date|status|priority/i.test(field.key)) ?? tableFields[0];
+  return titleField ? row[titleField.key] || titleField.label : "Record";
+}
+
+function getMobileCardMeta(row: EditableRecordRow, fields: EditableTableField[]): string {
+  const metaField = fields.find((field) => /status|priority/i.test(field.key)) ?? fields.find((field) => /created|date/i.test(field.key));
+  return metaField ? row[metaField.key] : "";
 }
 
 function EditorField({ field, value }: { field: EditableTableField; value: string }) {

@@ -22,6 +22,13 @@ export type EditableRecordRow = {
 
 export type EditableRecordKind = "clients" | "leads" | "projects" | "coldTargets";
 
+const editableMobileCardFields: Record<EditableRecordKind, string[]> = {
+  clients: ["createdDate", "status", "name", "email", "phone"],
+  leads: ["createdDate", "status", "requestType", "projectAddress", "source"],
+  projects: ["createdAt", "status", "projectName", "currentPhase", "projectAddress"],
+  coldTargets: ["createdAt", "priority", "companyName", "contactPerson", "nextActionDate"]
+};
+
 export function createEditableRecordRows(fields: EditableTableField[], records: EditableRecord[]): EditableRecordRow[] {
   return records.map((record) => {
     const row: EditableRecordRow = { id: record.id };
@@ -32,6 +39,20 @@ export function createEditableRecordRows(fields: EditableTableField[], records: 
 
     return row;
   });
+}
+
+export function getEditableMobileCardFields(kind: EditableRecordKind, fields: EditableTableField[]): EditableTableField[] {
+  const preferredKeys = editableMobileCardFields[kind];
+  const tableFields = fields.filter((field) => field.table);
+  const preferredFields = preferredKeys
+    .map((key) => tableFields.find((field) => field.key === key))
+    .filter((field): field is EditableTableField => Boolean(field));
+
+  if (preferredFields.length > 0) {
+    return preferredFields.slice(0, 5);
+  }
+
+  return tableFields.slice(0, 5);
 }
 
 export function getEditableEmptyStateMessage(kind: EditableRecordKind): string {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEditableRecordRows,
   getEditableEmptyStateMessage,
+  getEditableMobileCardFields,
   type EditableTableField
 } from "./editable-record-table-store";
 
@@ -60,5 +61,18 @@ describe("editable record table store", () => {
     expect(getEditableEmptyStateMessage("leads")).toBe("No leads found yet.");
     expect(getEditableEmptyStateMessage("projects")).toBe("No projects found yet.");
     expect(getEditableEmptyStateMessage("coldTargets")).toBe("No cold targets found yet.");
+  });
+
+  it("selects compact mobile card fields from visible table fields", () => {
+    expect(
+      getEditableMobileCardFields("clients", [
+        { key: "clientId", label: "Client ID", type: "text", table: true, editable: false },
+        { key: "createdDate", label: "Created", type: "date", table: true, editable: false },
+        { key: "name", label: "Name", type: "text", table: true, editable: true },
+        { key: "status", label: "Status", type: "text", table: true, editable: true },
+        { key: "email", label: "Email", type: "email", table: true, editable: true },
+        { key: "notes", label: "Notes", type: "textarea", table: false, editable: true }
+      ]).map((field) => field.key)
+    ).toEqual(["createdDate", "status", "name", "email"]);
   });
 });
