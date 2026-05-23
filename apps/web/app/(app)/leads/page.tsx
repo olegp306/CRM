@@ -1,6 +1,6 @@
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
-import { markLeadKpSentAction, updateLeadAction } from "./actions";
+import { markLeadKpSentAction, undoLeadKpSentAction, updateLeadAction } from "./actions";
 import { LeadsTable } from "./leads-table";
 import { createLeadTableRows } from "./lead-table-store";
 
@@ -36,11 +36,50 @@ export default async function LeadsPage() {
       projectRecordId: true
     }
   });
-  const leadRows = createLeadTableRows(leadRecords);
+  const leadBusinessIds = leadRecords.map((lead) => lead.leadId);
+  const generatedDocuments = leadBusinessIds.length > 0
+    ? await prisma.generatedDocument.findMany({
+        where: {
+          workspaceId: session.workspaceId,
+          documentType: "kp",
+          sourceType: "assistant",
+          sourceId: { in: leadBusinessIds }
+        },
+        select: {
+          inputSnapshot: true,
+          docxAttachmentId: true,
+          pdfAttachmentId: true
+        }
+      })
+    : [];
+  const leadRows = createLeadTableRows(
+    leadRecords,
+    generatedDocuments
+      .map((document) => ({
+        documentId: extractGeneratedDocumentId(document.inputSnapshot),
+        docxAttachmentId: document.docxAttachmentId,
+        pdfAttachmentId: document.pdfAttachmentId
+      }))
+      .filter((document) => document.documentId)
+  );
 
   return (
     <section>
-      <LeadsTable rows={leadRows} updateLeadAction={updateLeadAction} markLeadKpSentAction={markLeadKpSentAction} />
+      <LeadsTable
+        rows={leadRows}
+        updateLeadAction={updateLeadAction}
+        markLeadKpSentAction={markLeadKpSentAction}
+        undoLeadKpSentAction={undoLeadKpSentAction}
+      />
     </section>
   );
+}
+
+function extractGeneratedDocumentId(inputSnapshot: unknown): string {
+  if (!inputSnapshot || typeof inputSnapshot !== "object") {
+    return "";
+  }
+
+  const snapshot = inputSnapshot as Record<string, unknown>;
+  return typeof snapshot.documentId === "string" ? snapshot.documentId : "";
 }

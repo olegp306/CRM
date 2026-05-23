@@ -1,5 +1,6 @@
 export type LeadTableColumnKey =
   | "leadId"
+  | "loopStage"
   | "clientRecordId"
   | "createdDate"
   | "temperature"
@@ -65,6 +66,8 @@ export type LeadTableRecord = {
 
 export type LeadTableRow = Record<LeadTableColumnKey, string> & {
   id: string;
+  kpDocxAttachmentId?: string;
+  kpPdfAttachmentId?: string;
 };
 
 export type LeadActionPlanItem = {
@@ -81,9 +84,11 @@ export type LeadLoopStepStatus = "implemented" | "partial" | "gap";
 export type LeadLoopTimelineStep = {
   id: number;
   title: string;
+  description: string;
   mode: LeadLoopStepMode;
   status: LeadLoopStepStatus;
   isCurrent: boolean;
+  progressState: "done" | "current" | "upcoming";
 };
 
 export type LeadLoopTimelineViewModel = {
@@ -98,6 +103,7 @@ export type LeadSourceReference = {
 
 export const leadTableColumns: LeadTableColumn[] = [
   { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
+  { key: "loopStage", label: "Loop stage", enableSorting: true, defaultSize: 132 },
   { key: "clientRecordId", label: "Client ID", enableSorting: true, defaultSize: 160 },
   { key: "createdDate", label: "Created", enableSorting: true, defaultSize: 124 },
   { key: "temperature", label: "Temperature", enableSorting: true, defaultSize: 132 },
@@ -230,10 +236,22 @@ function createLeadSourceReference(reference: string): LeadSourceReference {
   };
 }
 
-export function createLeadTableRows(records: LeadTableRecord[]): LeadTableRow[] {
+export type LeadGeneratedDocumentReference = {
+  documentId: string;
+  docxAttachmentId: string | null;
+  pdfAttachmentId: string | null;
+};
+
+export function createLeadTableRows(
+  records: LeadTableRecord[],
+  generatedDocuments: LeadGeneratedDocumentReference[] = []
+): LeadTableRow[] {
+  const documentsById = new Map(generatedDocuments.map((document) => [document.documentId, document]));
+
   return records.map((record) => ({
     id: record.id,
     leadId: record.leadId,
+    loopStage: formatLeadLoopStage(record),
     clientRecordId: record.clientRecordId ?? "",
     createdDate: formatDate(record.createdDate),
     temperature: record.temperature ?? "",
@@ -256,7 +274,9 @@ export function createLeadTableRows(records: LeadTableRecord[]): LeadTableRow[] 
     followupStatus: record.followupStatus ?? "",
     outcome: record.outcome ?? "",
     outcomeReason: record.outcomeReason ?? "",
-    projectRecordId: record.projectRecordId ?? ""
+    projectRecordId: record.projectRecordId ?? "",
+    kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
+    kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined
   }));
 }
 
@@ -324,16 +344,74 @@ export function canMarkLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentI
   return lead.kpGeneratedDocumentId.trim().length > 0 && lead.kpSentDate.trim().length === 0;
 }
 
-export const leadLoopTimelineSteps: Array<Omit<LeadLoopTimelineStep, "isCurrent">> = [
-  { id: 1, title: "Send raw Telegram material", mode: "manual", status: "implemented" },
-  { id: 2, title: "AI extracts lead fields", mode: "automatic", status: "partial" },
-  { id: 3, title: "Ask for missing data", mode: "automatic", status: "implemented" },
-  { id: 4, title: "Create client and lead", mode: "automatic", status: "partial" },
-  { id: 5, title: "Standard vs custom branch", mode: "branch", status: "partial" },
-  { id: 6, title: "Review and send KP", mode: "manual", status: "partial" },
-  { id: 7, title: "Mark KP sent", mode: "manual", status: "partial" },
-  { id: 8, title: "Schedule follow-up", mode: "automatic", status: "partial" },
-  { id: 9, title: "Reminder and follow-up draft", mode: "automatic", status: "partial" }
+export function canUndoLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentId" | "kpSentDate">): boolean {
+  return lead.kpGeneratedDocumentId.trim().length > 0 && lead.kpSentDate.trim().length > 0;
+}
+
+export const leadLoopTimelineSteps: Array<Omit<LeadLoopTimelineStep, "isCurrent" | "progressState">> = [
+  {
+    id: 1,
+    title: "Send raw Telegram material",
+    description: "Operator sends text, photos, or PDF material that describes the potential project.",
+    mode: "manual",
+    status: "implemented"
+  },
+  {
+    id: 2,
+    title: "AI extracts lead fields",
+    description: "Telegram intake parses client, request, address, BGF, contacts, and source material.",
+    mode: "automatic",
+    status: "partial"
+  },
+  {
+    id: 3,
+    title: "Ask for missing data",
+    description: "The bot keeps a draft and asks for fields required for a commercial proposal.",
+    mode: "automatic",
+    status: "implemented"
+  },
+  {
+    id: 4,
+    title: "Create client and lead",
+    description: "CRM creates the lead record and links the source material for later review.",
+    mode: "automatic",
+    status: "partial"
+  },
+  {
+    id: 5,
+    title: "Standard vs custom branch",
+    description: "CRM classifies whether standard pricing can be used or manual pricing is needed.",
+    mode: "branch",
+    status: "partial"
+  },
+  {
+    id: 6,
+    title: "Review and send KP",
+    description: "A generated KP is ready for review; PDF and DOCX can be downloaded from the card.",
+    mode: "manual",
+    status: "partial"
+  },
+  {
+    id: 7,
+    title: "Mark KP sent",
+    description: "Operator confirms that the commercial proposal was sent to the client.",
+    mode: "manual",
+    status: "partial"
+  },
+  {
+    id: 8,
+    title: "Schedule follow-up",
+    description: "CRM stores the first follow-up date after the KP was sent.",
+    mode: "automatic",
+    status: "partial"
+  },
+  {
+    id: 9,
+    title: "Reminder and follow-up draft",
+    description: "CRM surfaces due follow-ups and prepares the next client message.",
+    mode: "automatic",
+    status: "partial"
+  }
 ];
 
 export function createLeadLoopTimelineViewModel(
@@ -348,7 +426,8 @@ export function createLeadLoopTimelineViewModel(
     currentStepId,
     steps: leadLoopTimelineSteps.map((step) => ({
       ...step,
-      isCurrent: step.id === currentStepId
+      isCurrent: step.id === currentStepId,
+      progressState: step.id < currentStepId ? "done" : step.id === currentStepId ? "current" : "upcoming"
     }))
   };
 }
@@ -372,7 +451,7 @@ function resolveCurrentLeadLoopStepId(
   }
 
   if (lead.kpGeneratedDocumentId && !lead.kpSentDate) {
-    return 6;
+    return 5;
   }
 
   if (lead.missingData) {
@@ -384,6 +463,22 @@ function resolveCurrentLeadLoopStepId(
   }
 
   return 4;
+}
+
+function formatLeadLoopStage(record: LeadTableRecord): string {
+  const row = {
+    missingData: formatMissingData(record.missingData),
+    isStandard: formatBoolean(record.isStandard),
+    kpGeneratedDocumentId: record.kpGeneratedDocumentId ?? "",
+    kpSentDate: formatDate(record.kpSentDate),
+    followup1Date: formatDate(record.followup1Date),
+    outcome: record.outcome ?? "",
+    projectRecordId: record.projectRecordId ?? ""
+  };
+  const stageId = resolveCurrentLeadLoopStepId(row);
+  const title = leadLoopTimelineSteps.find((step) => step.id === stageId)?.title ?? "Unknown";
+
+  return `${stageId}. ${title}`;
 }
 
 function formatDate(value: Date | string | null): string {

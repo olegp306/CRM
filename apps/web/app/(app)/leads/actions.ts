@@ -88,6 +88,22 @@ export async function markLeadKpSentAction(formData: FormData): Promise<void> {
   revalidatePath("/today");
 }
 
+export async function undoLeadKpSentAction(formData: FormData): Promise<void> {
+  const session = await getWorkspaceSession();
+  const id = getRequiredFormValue(formData, "id");
+
+  await prisma.lead.update({
+    where: { id, workspaceId: session.workspaceId },
+    data: {
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null
+    }
+  });
+  revalidatePath("/leads");
+  revalidatePath("/today");
+}
+
 function getOptionalFormValue(formData: FormData, key: string): string | null {
   const value = formData.get(key);
   return typeof value === "string" && value.trim() ? value.trim() : null;

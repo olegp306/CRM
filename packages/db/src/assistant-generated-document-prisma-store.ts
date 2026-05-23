@@ -5,7 +5,7 @@ import { createDocxPackageBytes, renderDocumentTemplate } from "@app/documents";
 
 const ASSISTANT_KP_TEMPLATE_ID = "assistant-kp-template";
 const ASSISTANT_KP_TEMPLATE_VERSION_ID = "assistant-kp-template-v1";
-const ASSISTANT_KP_TEMPLATE = "KP draft for {{source_id}}";
+const ASSISTANT_KP_TEMPLATE = "Commercial proposal for {{source_id}}";
 
 type GeneratedDocumentRow = {
   id: string;
@@ -125,6 +125,14 @@ export function createAssistantGeneratedDocumentPrismaStore(
 
 function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput, renderedContent: string): string[] {
   const fields = input.fieldSnapshot;
+  const missingData = fields?.missingData?.filter((field) => field.trim().length > 0) ?? [];
+  const draftNotice =
+    missingData.length > 0
+      ? [
+          `DRAFT: This commercial proposal is missing required data: ${missingData.join(", ")}.`,
+          "Please add the missing fields manually before sending the final proposal."
+        ]
+      : [];
   const fieldParagraphs = [
     ["Client", fields?.clientName],
     ["Request type", fields?.requestType],
@@ -132,12 +140,13 @@ function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput,
     ["BGF m2", fields?.bgfM2 === null || fields?.bgfM2 === undefined ? "" : String(fields.bgfM2)],
     ["Email", fields?.email],
     ["Phone", fields?.phone],
-    ["Missing data", fields?.missingData && fields.missingData.length > 0 ? fields.missingData.join(", ") : ""]
+    ["Missing data", missingData.length > 0 ? missingData.join(", ") : ""]
   ]
     .filter(([, value]) => String(value ?? "").trim().length > 0)
     .map(([label, value]) => `${label}: ${value}`);
 
   return [
+    ...draftNotice,
     renderedContent,
     ...fieldParagraphs,
     `Source records: ${input.sourceRecordIds.length > 0 ? input.sourceRecordIds.join(", ") : "assistant request"}`,
