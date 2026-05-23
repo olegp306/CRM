@@ -16,6 +16,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadHistory,
   createLeadLoopTimelineViewModel,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
@@ -29,6 +30,7 @@ import {
   resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
+  type LeadHistoryItem,
   type LeadLoopStepMode,
   type LeadLoopTimelineStep,
   type LeadTableColumnKey,
@@ -592,6 +594,7 @@ function LeadEditor({
   variant?: "panel" | "modal" | "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
+  const history = createLeadHistory(lead);
   const timeline = createLeadLoopTimelineViewModel(lead);
   const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
   const nextAction = actionPlan[0];
@@ -672,6 +675,7 @@ function LeadEditor({
         </div>
       </section>
 
+      <LeadHistoryPanel history={history} />
       <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
@@ -741,6 +745,36 @@ function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
 
 function createKpDownloadBaseName(lead: LeadTableRow): string {
   return `${lead.leadId}-KP`.replace(/[^\w.-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <details
+      className="rounded-lg border border-border bg-muted/30 p-3"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-semibold">History</summary>
+      <div className="mt-3 grid gap-2">
+        {history.map((item, index) => (
+          <article key={`${item.title}-${item.at}-${index}`} className="rounded-lg bg-white p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-semibold text-foreground">{item.title}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  {item.at} · {item.actor}
+                </p>
+              </div>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">{item.stageLabel}</span>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
+          </article>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {

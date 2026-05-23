@@ -4,6 +4,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadHistory,
   createLeadLoopTimelineViewModel,
   createLeadTableRows,
   getLeadSourceMaterials,
@@ -267,6 +268,74 @@ describe("lead table model", () => {
         projectRecordId: ""
       }).map((item) => item.title)
     ).toEqual(["Follow up", "Capture outcome"]);
+  });
+
+  it("builds a collapsed-card history from the lead workflow state", () => {
+    const history = createLeadHistory({
+      leadId: "L-2026-004",
+      createdDate: "2026-05-21",
+      source: "telegram",
+      temperature: "hot",
+      requestType: "information_request",
+      projectAddress: "Chiemseeufer 7",
+      bgfM2: "180",
+      budgetEur: "25000",
+      isStandard: "yes",
+      missingData: "",
+      kpGeneratedDocumentId: "D-local-l-2026-004",
+      kpSentDate: "2026-05-23",
+      followup1Date: "2026-05-30",
+      followupStatus: "planned",
+      outcome: "",
+      projectRecordId: ""
+    });
+
+    expect(history.map((item) => item.title)).toEqual([
+      "Lead created",
+      "Fields imported",
+      "Automatic checks",
+      "KP generated",
+      "KP sent",
+      "Follow-up scheduled"
+    ]);
+    expect(history[0]).toMatchObject({
+      at: "2026-05-21",
+      actor: "Telegram",
+      stageLabel: "Step 4"
+    });
+    expect(history[1].description).toContain("requestType, projectAddress, bgfM2, budgetEur, isStandard");
+    expect(history[2].description).toContain("Standard pricing branch is available");
+    expect(history[4]).toMatchObject({
+      actor: "Operator",
+      at: "2026-05-23"
+    });
+  });
+
+  it("shows an undo history entry when a generated KP is back before sent state", () => {
+    const history = createLeadHistory({
+      leadId: "L-2026-004",
+      createdDate: "2026-05-21",
+      source: "telegram",
+      temperature: "hot",
+      requestType: "information_request",
+      projectAddress: "",
+      bgfM2: "",
+      budgetEur: "",
+      isStandard: "yes",
+      missingData: "",
+      kpGeneratedDocumentId: "D-local-l-2026-004",
+      kpSentDate: "",
+      followup1Date: "",
+      followupStatus: "",
+      outcome: "",
+      projectRecordId: ""
+    });
+
+    expect(history.map((item) => item.title)).toContain("Undo to KP review");
+    expect(history.find((item) => item.title === "Undo to KP review")).toMatchObject({
+      actor: "Operator",
+      stageLabel: "Step 5"
+    });
   });
 
   it("enables the KP sent quick action only for generated unsent KP leads", () => {
