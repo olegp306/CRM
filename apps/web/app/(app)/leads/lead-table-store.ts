@@ -77,6 +77,14 @@ export type LeadActionPlanItem = {
   description: string;
 };
 
+export type LeadHistoryItem = {
+  title: string;
+  at: string;
+  actor: "Telegram" | "CRM" | "Operator";
+  stageLabel: string;
+  description: string;
+};
+
 export type LeadLoopStepMode = "manual" | "automatic" | "branch";
 
 export type LeadLoopStepStatus = "implemented" | "partial" | "gap";
@@ -338,6 +346,143 @@ export function createLeadActionPlan(lead: Pick<LeadTableRow, "missingData" | "i
   }
 
   return plan;
+}
+
+export function createLeadHistory(
+  lead: Pick<
+    LeadTableRow,
+    | "leadId"
+    | "createdDate"
+    | "source"
+    | "temperature"
+    | "requestType"
+    | "projectAddress"
+    | "bgfM2"
+    | "budgetEur"
+    | "isStandard"
+    | "missingData"
+    | "kpGeneratedDocumentId"
+    | "kpSentDate"
+    | "followup1Date"
+    | "followupStatus"
+    | "outcome"
+    | "projectRecordId"
+  >
+): LeadHistoryItem[] {
+  const history: LeadHistoryItem[] = [
+    {
+      title: "Lead created",
+      at: lead.createdDate || "Unknown date",
+      actor: lead.source === "telegram" ? "Telegram" : "Operator",
+      stageLabel: "Step 4",
+      description: `${lead.leadId} was created from ${lead.source || "web"} intake.`
+    }
+  ];
+
+  const importedFields = [
+    ["temperature", lead.temperature],
+    ["requestType", lead.requestType],
+    ["projectAddress", lead.projectAddress],
+    ["bgfM2", lead.bgfM2],
+    ["budgetEur", lead.budgetEur],
+    ["isStandard", lead.isStandard],
+    ["missingData", lead.missingData]
+  ]
+    .filter(([, value]) => value.trim().length > 0)
+    .map(([name]) => name);
+
+  history.push({
+    title: "Fields imported",
+    at: lead.createdDate || "Unknown date",
+    actor: lead.source === "telegram" ? "Telegram" : "Operator",
+    stageLabel: "Steps 2-4",
+    description:
+      importedFields.length > 0
+        ? `Captured ${importedFields.join(", ")}.`
+        : "No commercial proposal fields have been captured yet."
+  });
+
+  history.push({
+    title: "Automatic checks",
+    at: lead.createdDate || "Unknown date",
+    actor: "CRM",
+    stageLabel: "Step 5",
+    description: createLeadAutomaticCheckDescription(lead)
+  });
+
+  if (lead.kpGeneratedDocumentId) {
+    history.push({
+      title: "KP generated",
+      at: lead.createdDate || "Unknown date",
+      actor: "CRM",
+      stageLabel: "Step 6",
+      description: `Commercial proposal record ${lead.kpGeneratedDocumentId} is available.`
+    });
+  }
+
+  if (lead.kpGeneratedDocumentId && !lead.kpSentDate) {
+    history.push({
+      title: "Undo to KP review",
+      at: "Current state",
+      actor: "Operator",
+      stageLabel: "Step 5",
+      description: "The lead is back before KP sent; review the proposal before marking it sent again."
+    });
+  }
+
+  if (lead.kpSentDate) {
+    history.push({
+      title: "KP sent",
+      at: lead.kpSentDate,
+      actor: "Operator",
+      stageLabel: "Step 7",
+      description: "Commercial proposal was marked as sent to the client."
+    });
+  }
+
+  if (lead.followup1Date) {
+    history.push({
+      title: "Follow-up scheduled",
+      at: lead.followup1Date,
+      actor: "CRM",
+      stageLabel: "Step 8",
+      description: `Follow-up is scheduled${lead.followupStatus ? ` with status ${lead.followupStatus}` : ""}.`
+    });
+  }
+
+  if (lead.outcome || lead.projectRecordId) {
+    history.push({
+      title: "Outcome captured",
+      at: "Current state",
+      actor: "Operator",
+      stageLabel: "Step 9",
+      description: lead.projectRecordId ? `Converted toward project ${lead.projectRecordId}.` : `Outcome: ${lead.outcome}.`
+    });
+  }
+
+  return history;
+}
+
+function createLeadAutomaticCheckDescription(
+  lead: Pick<LeadTableRow, "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate">
+): string {
+  if (lead.missingData) {
+    return `Missing commercial proposal data: ${lead.missingData}.`;
+  }
+
+  if (lead.isStandard === "yes") {
+    return "Standard pricing branch is available.";
+  }
+
+  if (lead.isStandard === "no") {
+    return "Custom pricing branch is required.";
+  }
+
+  if (lead.kpGeneratedDocumentId && !lead.kpSentDate) {
+    return "KP is generated and waiting for manual review before sending.";
+  }
+
+  return "CRM checked the lead and is waiting for the next workflow signal.";
 }
 
 export function canMarkLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentId" | "kpSentDate">): boolean {
