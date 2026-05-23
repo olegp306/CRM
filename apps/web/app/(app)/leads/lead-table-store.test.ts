@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canMarkLeadKpSent,
+  canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
   createLeadLoopTimelineViewModel,
@@ -22,6 +23,7 @@ describe("lead table model", () => {
   it("defines all recommended lead fields as sortable table columns", () => {
     expect(leadTableColumns.map((column) => column.key)).toEqual([
       "leadId",
+      "loopStage",
       "clientRecordId",
       "createdDate",
       "temperature",
@@ -129,38 +131,42 @@ describe("lead table model", () => {
   });
 
   it("serializes lead records for a client-side table and edit drawer", () => {
-    const [row] = createLeadTableRows([
-      {
-        id: "lead-record-1",
-        leadId: "L-2026-001",
-        clientRecordId: "client-record-1",
-        createdDate: new Date("2026-05-21T10:00:00.000Z"),
-        temperature: "warm",
-        requestType: "new_build",
-        urgency: "soon",
-        budgetEur: 12000,
-        desiredStart: new Date("2026-06-01T00:00:00.000Z"),
-        desiredMoveIn: null,
-        bgfM2: 150,
-        wohnflaecheM2: 112.5,
-        projectAddress: "Chiemseeufer 7",
-        isStandard: true,
-        status: "new",
-        rawInput: "Client asks for EFH LP1-4 and KP.",
-        missingData: ["email"],
-        kpGeneratedDocumentId: null,
-        kpSentDate: null,
-        followup1Date: new Date("2026-05-28T00:00:00.000Z"),
-        followupStatus: "planned",
-        outcome: null,
-        outcomeReason: null,
-        projectRecordId: null
-      }
-    ]);
+    const [row] = createLeadTableRows(
+      [
+        {
+          id: "lead-record-1",
+          leadId: "L-2026-001",
+          clientRecordId: "client-record-1",
+          createdDate: new Date("2026-05-21T10:00:00.000Z"),
+          temperature: "warm",
+          requestType: "new_build",
+          urgency: "soon",
+          budgetEur: 12000,
+          desiredStart: new Date("2026-06-01T00:00:00.000Z"),
+          desiredMoveIn: null,
+          bgfM2: 150,
+          wohnflaecheM2: 112.5,
+          projectAddress: "Chiemseeufer 7",
+          isStandard: true,
+          status: "new",
+          rawInput: "Client asks for EFH LP1-4 and KP.",
+          missingData: ["email"],
+          kpGeneratedDocumentId: "D-telegram-12345-13",
+          kpSentDate: null,
+          followup1Date: new Date("2026-05-28T00:00:00.000Z"),
+          followupStatus: "planned",
+          outcome: null,
+          outcomeReason: null,
+          projectRecordId: null
+        }
+      ],
+      [{ documentId: "D-telegram-12345-13", docxAttachmentId: "attachment-docx-1", pdfAttachmentId: "attachment-pdf-1" }]
+    );
 
     expect(row).toMatchObject({
       id: "lead-record-1",
       leadId: "L-2026-001",
+      loopStage: "5. Standard vs custom branch",
       createdDate: "2026-05-21",
       desiredStart: "2026-06-01",
       desiredMoveIn: "",
@@ -170,7 +176,10 @@ describe("lead table model", () => {
       isStandard: "yes",
       source: "web",
       missingData: "email",
-      followup1Date: "2026-05-28"
+      followup1Date: "2026-05-28",
+      kpGeneratedDocumentId: "D-telegram-12345-13",
+      kpDocxAttachmentId: "attachment-docx-1",
+      kpPdfAttachmentId: "attachment-pdf-1"
     });
   });
 
@@ -266,6 +275,12 @@ describe("lead table model", () => {
     expect(canMarkLeadKpSent({ kpGeneratedDocumentId: "D-20260521-message-2", kpSentDate: "2026-05-21" })).toBe(false);
   });
 
+  it("enables KP sent undo only for generated sent KP leads", () => {
+    expect(canUndoLeadKpSent({ kpGeneratedDocumentId: "D-20260521-message-2", kpSentDate: "2026-05-21" })).toBe(true);
+    expect(canUndoLeadKpSent({ kpGeneratedDocumentId: "D-20260521-message-2", kpSentDate: "" })).toBe(false);
+    expect(canUndoLeadKpSent({ kpGeneratedDocumentId: "", kpSentDate: "2026-05-21" })).toBe(false);
+  });
+
   it("builds the nine-step Loop 1 timeline with mode and current-step markers", () => {
     const timeline = createLeadLoopTimelineViewModel({
       missingData: "",
@@ -289,9 +304,21 @@ describe("lead table model", () => {
       "automatic",
       "automatic"
     ]);
-    expect(timeline.currentStepId).toBe(6);
-    expect(timeline.steps.find((step) => step.id === 6)).toMatchObject({
-      title: "Review and send KP",
+    expect(timeline.currentStepId).toBe(5);
+    expect(timeline.steps.map((step) => step.progressState)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+      "current",
+      "upcoming",
+      "upcoming",
+      "upcoming",
+      "upcoming"
+    ]);
+    expect(timeline.steps.find((step) => step.id === 5)).toMatchObject({
+      title: "Standard vs custom branch",
+      description: "CRM classifies whether standard pricing can be used or manual pricing is needed.",
       isCurrent: true
     });
   });

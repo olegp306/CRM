@@ -27,7 +27,7 @@ function createFakeClient() {
         documentId: "D-20260521-message-4",
         rawInput: "Generate KP for lead L-2026-001",
         sourceRecordIds: ["L-2026-001"],
-        renderedContent: "KP draft for L-2026-001",
+        renderedContent: "Commercial proposal for L-2026-001",
         fieldSnapshot: {
           clientName: "Katya",
           requestType: "new_build",
@@ -171,7 +171,7 @@ describe("assistant generated document Prisma store", () => {
             documentId: "D-20260521-message-4",
             rawInput: "Generate KP for lead L-2026-001",
             sourceRecordIds: ["L-2026-001"],
-            renderedContent: "KP draft for L-2026-001",
+            renderedContent: "Commercial proposal for L-2026-001",
             fieldSnapshot: {
               clientName: "Katya",
               requestType: "new_build",
@@ -237,5 +237,44 @@ describe("assistant generated document Prisma store", () => {
     expect(docxText).toContain("Client: Katya");
     expect(docxText).toContain("Project address: Chiemseeufer 7");
     expect(docxText).toContain("BGF m2: 180");
+    expect(new TextDecoder().decode(uploads[1].body)).not.toContain("DRAFT:");
+  });
+
+  it("marks generated KP artifacts as drafts when required data is missing", async () => {
+    const { client } = createFakeClient();
+    const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      objectStorage: {
+        putObject: async (input) => {
+          uploads.push(input);
+        },
+        getObject: async () => new Uint8Array(),
+        deleteObject: async () => undefined
+      }
+    });
+
+    await store.create({
+      workspaceId: "workspace-1",
+      documentId: "D-20260521-message-5",
+      documentType: "kp",
+      sourceRecordIds: ["L-2026-002"],
+      rawInput: "Generate draft KP for lead L-2026-002",
+      fieldSnapshot: {
+        clientName: "Katya",
+        requestType: "new_build",
+        projectAddress: null,
+        bgfM2: null,
+        email: null,
+        phone: null,
+        missingData: ["projectAddress", "bgfM2"]
+      },
+      requestedByUserId: "user-1"
+    });
+
+    const pdfText = new TextDecoder().decode(uploads[1].body);
+    const docxText = new TextDecoder().decode(uploads[0].body);
+    expect(pdfText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
+    expect(docxText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
+    expect(docxText).not.toContain("Project address: null");
   });
 });

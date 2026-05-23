@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   canMarkLeadKpSent,
+  canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
   createLeadLoopTimelineViewModel,
@@ -29,7 +30,6 @@ import {
   type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadLoopStepMode,
-  type LeadLoopStepStatus,
   type LeadLoopTimelineStep,
   type LeadTableColumnKey,
   type LeadTableRow,
@@ -41,9 +41,10 @@ type LeadsTableProps = {
   rows: LeadTableRow[];
   updateLeadAction: (formData: FormData) => Promise<void>;
   markLeadKpSentAction: (formData: FormData) => Promise<void>;
+  undoLeadKpSentAction: (formData: FormData) => Promise<void>;
 };
 
-export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: LeadsTableProps) {
+export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoLeadKpSentAction }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
@@ -52,6 +53,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
+  const [isUndoingKpSent, setIsUndoingKpSent] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedLeadId = searchParams.get("leadId");
@@ -59,7 +61,6 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
   const isDeepLinkedLeadSelected = Boolean(deepLinkedLeadId && selectedLead?.leadId === deepLinkedLeadId);
   const shouldShowLeadDialog = Boolean(selectedLead && (viewMode === "full" || isDeepLinkedLeadSelected));
   const shouldShowMobileLeadDialog = Boolean(selectedLead && !shouldShowLeadDialog && (mobileViewMode === "cards" || viewMode === "split"));
-  const leadLoopTimeline = createLeadLoopTimelineViewModel(selectedLead ?? rows[0] ?? null);
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
     [columnSizing]
@@ -173,13 +174,37 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
     }
   }
 
+  async function handleUndoKpSent(leadId: string) {
+    const confirmed = window.confirm("Return this lead to the previous manual step and mark the KP as not sent?");
+    if (!confirmed) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("id", leadId);
+    setIsUndoingKpSent(true);
+    try {
+      await undoLeadKpSentAction(formData);
+      router.refresh();
+    } finally {
+      setIsUndoingKpSent(false);
+    }
+  }
+
+  function handleCloseSelectedLead() {
+    setSelectedLeadId(null);
+    if (deepLinkedLeadId) {
+      router.replace("/leads");
+    }
+  }
+
   function handleViewModeChange(mode: LeadTableViewMode) {
     setViewMode(mode);
     setSelectedLeadId(resolveInitialSelectedLeadId(mode, rows.map((row) => row.id)));
   }
 
   return (
-    <div className={viewMode === "split" ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" : "grid gap-4"}>
+    <div className="grid gap-4">
       <section className="grid gap-3 md:hidden">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-3">
           <div>
@@ -349,35 +374,45 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
         </div>
       </section>
 
-      {viewMode === "split" ? (
-        <aside className="hidden rounded-lg border border-border bg-white md:block">
-          {selectedLead ? (
-            <LeadEditor
-              lead={selectedLead}
-              actionPlan={createLeadActionPlan(selectedLead)}
-              isSaving={isSaving}
-              isMarkingKpSent={isMarkingKpSent}
-              onClose={() => setSelectedLeadId(null)}
-              onSubmit={handleSubmit}
-              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-            />
-          ) : (
-            <div className="p-4 text-sm text-muted-foreground">Select a lead to edit its fields and action plan.</div>
-          )}
-        </aside>
-      ) : null}
-
-      {shouldShowLeadDialog && selectedLead ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+      {viewMode === "split" && selectedLead ? (
+        <div className="fixed inset-0 z-50 hidden place-items-center bg-black/30 p-4 md:grid">
           <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
             <LeadEditor
               lead={selectedLead}
               actionPlan={createLeadActionPlan(selectedLead)}
               isSaving={isSaving}
               isMarkingKpSent={isMarkingKpSent}
-              onClose={() => setSelectedLeadId(null)}
+              isUndoingKpSent={isUndoingKpSent}
+              onClose={handleCloseSelectedLead}
               onSubmit={handleSubmit}
               onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
+              variant="modal"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {shouldShowLeadDialog && selectedLead ? (
+        <div className={`fixed inset-0 z-50 bg-black/30 ${isDeepLinkedLeadSelected ? "p-0" : "grid place-items-center p-4"}`}>
+          <div
+            className={
+              isDeepLinkedLeadSelected
+                ? "h-full w-full overflow-hidden bg-white"
+                : "w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl"
+            }
+          >
+            <LeadEditor
+              lead={selectedLead}
+              actionPlan={createLeadActionPlan(selectedLead)}
+              isSaving={isSaving}
+              isMarkingKpSent={isMarkingKpSent}
+              isUndoingKpSent={isUndoingKpSent}
+              onClose={handleCloseSelectedLead}
+              onSubmit={handleSubmit}
+              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
+              variant={isDeepLinkedLeadSelected ? "fullscreen" : "modal"}
             />
           </div>
         </div>
@@ -391,81 +426,38 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction }: Lea
               actionPlan={createLeadActionPlan(selectedLead)}
               isSaving={isSaving}
               isMarkingKpSent={isMarkingKpSent}
-              onClose={() => setSelectedLeadId(null)}
+              isUndoingKpSent={isUndoingKpSent}
+              onClose={handleCloseSelectedLead}
               onSubmit={handleSubmit}
               onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
+              variant="modal"
             />
           </div>
         </div>
       ) : null}
 
-      <LeadLoopTimeline timeline={leadLoopTimeline} hasSelectedLead={Boolean(selectedLead)} />
     </div>
   );
 }
 
-function LeadLoopTimeline({
-  timeline,
-  hasSelectedLead
-}: {
-  timeline: ReturnType<typeof createLeadLoopTimelineViewModel>;
-  hasSelectedLead: boolean;
-}) {
-  return (
-    <section className="xl:col-span-2 rounded-lg border border-border bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">Loop 1 map</h2>
-          <p className="text-sm text-muted-foreground">
-            {hasSelectedLead ? "Current marker follows the selected lead." : "Current marker uses the first visible lead until one is selected."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
-          <LoopLegendBadge mode="manual" label="Manual" />
-          <LoopLegendBadge mode="automatic" label="Automatic" />
-          <LoopLegendBadge mode="branch" label="Branch" />
-        </div>
-      </div>
-
-      <div className="mt-4 overflow-x-auto pb-1">
-        <ol className="grid min-w-[980px] grid-cols-9 gap-2">
-          {timeline.steps.map((step) => (
-            <li
-              key={step.id}
-              className={`relative grid min-h-32 content-start gap-2 rounded-lg border p-3 ${getLoopStepClassName(step)}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-xs font-bold shadow-sm">{step.id}</span>
-                <span className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase ${getLoopModeBadgeClassName(step.mode)}`}>
-                  {getLoopModeLabel(step.mode)}
-                </span>
-              </div>
-              <p className="text-xs font-semibold leading-snug text-foreground">{step.title}</p>
-              <p className="text-[11px] font-medium text-muted-foreground">{getLoopStatusLabel(step.status)}</p>
-              {step.isCurrent ? (
-                <span className="mt-auto rounded-md bg-foreground px-2 py-1 text-center text-[11px] font-semibold text-white">
-                  Current
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
-  );
-}
-
-function LoopLegendBadge({ mode, label }: { mode: LeadLoopStepMode; label: string }) {
-  return <span className={`rounded-md px-2 py-1 ${getLoopModeBadgeClassName(mode)}`}>{label}</span>;
-}
-
-function getLoopStepClassName(step: LeadLoopTimelineStep): string {
-  const baseByMode: Record<LeadLoopStepMode, string> = {
-    manual: "border-amber-200 bg-amber-50/80",
-    automatic: "border-emerald-200 bg-emerald-50/80",
-    branch: "border-sky-200 bg-sky-50/80"
+function getCompactLoopStepClassName(step: LeadLoopTimelineStep): string {
+  const doneByMode: Record<LeadLoopStepMode, string> = {
+    manual: "border-amber-300 bg-amber-100 text-amber-900",
+    automatic: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    branch: "border-sky-300 bg-sky-100 text-sky-900"
   };
-  return `${baseByMode[step.mode]} ${step.isCurrent ? "ring-2 ring-foreground ring-offset-2" : ""}`;
+  const upcomingByMode: Record<LeadLoopStepMode, string> = {
+    manual: "border-amber-100 bg-amber-50/40 text-amber-900/35",
+    automatic: "border-emerald-100 bg-emerald-50/40 text-emerald-900/35",
+    branch: "border-sky-100 bg-sky-50/40 text-sky-900/35"
+  };
+
+  if (step.progressState === "current") {
+    return `${doneByMode[step.mode]} ring-2 ring-foreground ring-offset-1`;
+  }
+
+  return step.progressState === "done" ? doneByMode[step.mode] : upcomingByMode[step.mode];
 }
 
 function getLoopModeBadgeClassName(mode: LeadLoopStepMode): string {
@@ -475,24 +467,6 @@ function getLoopModeBadgeClassName(mode: LeadLoopStepMode): string {
     branch: "bg-sky-100 text-sky-800"
   };
   return classes[mode];
-}
-
-function getLoopModeLabel(mode: LeadLoopStepMode): string {
-  const labels: Record<LeadLoopStepMode, string> = {
-    manual: "Manual",
-    automatic: "Auto",
-    branch: "Branch"
-  };
-  return labels[mode];
-}
-
-function getLoopStatusLabel(status: LeadLoopStepStatus): string {
-  const labels: Record<LeadLoopStepStatus, string> = {
-    implemented: "Implemented",
-    partial: "Partial",
-    gap: "Gap"
-  };
-  return labels[status];
 }
 
 function TruncatedCell({ value }: { value: string }) {
@@ -599,34 +573,106 @@ function LeadEditor({
   actionPlan,
   isSaving,
   isMarkingKpSent,
+  isUndoingKpSent,
   onClose,
   onSubmit,
-  onMarkKpSent
+  onMarkKpSent,
+  onUndoKpSent,
+  variant = "panel"
 }: {
   lead: LeadTableRow;
   actionPlan: LeadActionPlanItem[];
   isSaving: boolean;
   isMarkingKpSent: boolean;
+  isUndoingKpSent: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
+  onUndoKpSent: () => void;
+  variant?: "panel" | "modal" | "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
+  const timeline = createLeadLoopTimelineViewModel(lead);
+  const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
+  const nextAction = actionPlan[0];
 
   return (
-    <form key={lead.id} onSubmit={onSubmit} className="grid max-h-[calc(100vh-8rem)] gap-4 overflow-auto p-4">
+    <form
+      key={lead.id}
+      onSubmit={onSubmit}
+      className={`grid gap-4 overflow-auto p-4 ${variant === "fullscreen" ? "h-screen max-h-screen" : "max-h-[calc(100vh-8rem)]"}`}
+    >
       <input type="hidden" name="id" value={lead.id} />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected lead</p>
-          <h2 className="mt-1 text-lg font-semibold">{lead.leadId}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Created {lead.createdDate || "-"}</p>
+      <section className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3">
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 grid gap-3 border-b border-border bg-white/95 px-3 py-3 backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div className="grid min-w-0 gap-1 pr-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
+            <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadId}</h2>
+            <p className="text-xs text-muted-foreground">
+              Created <span className="font-semibold text-foreground">{lead.createdDate || "No data"}</span>
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+            <span
+              title={currentStep.description}
+              className={`rounded-md px-2 py-1 text-right text-[11px] font-bold ${getLoopModeBadgeClassName(currentStep.mode)}`}
+            >
+              Stage {currentStep.id} - {currentStep.title}
+            </span>
+            <button type="button" onClick={onClose} className="rounded-md border border-border bg-white px-2 py-1 text-xs font-semibold">
+              Close
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={onClose} className="rounded-md border border-border px-2 py-1 text-xs font-semibold">
-          Close
-        </button>
-      </div>
 
+        <CompactLeadLoopProgress timeline={timeline} />
+        <div className="rounded-md bg-white p-3 text-xs">
+          <span className="text-muted-foreground">Waiting for </span>
+          <span className="font-semibold text-foreground">{nextAction ? nextAction.title : "No immediate action"}</span>
+          <span className="text-muted-foreground">
+            {nextAction ? ` - ${nextAction.description}` : " - Lead is not waiting on a specific manual step."}
+          </span>
+        </div>
+        <LeadKpSummary lead={lead} />
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            <LeadDownloadButtons lead={lead} />
+            {lead.kpGeneratedDocumentId ? (
+              <a
+                href={`/documents?documentId=${encodeURIComponent(lead.kpGeneratedDocumentId)}`}
+                className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground"
+              >
+                Open KP record
+              </a>
+            ) : null}
+          </div>
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
+            {canMarkLeadKpSent(lead) ? (
+              <button
+                type="button"
+                disabled={isMarkingKpSent}
+                onClick={onMarkKpSent}
+                className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+              >
+                {isMarkingKpSent ? "Marking..." : "Mark KP sent"}
+              </button>
+            ) : null}
+            {canUndoLeadKpSent(lead) ? (
+              <button
+                type="button"
+                disabled={isUndoingKpSent}
+                onClick={onUndoKpSent}
+                className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+              >
+                {isUndoingKpSent ? "Undoing..." : "Undo KP sent"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
       <div className="grid gap-3">
@@ -653,49 +699,133 @@ function LeadEditor({
         <TextField label="Project ID" name="projectRecordId" defaultValue={lead.projectRecordId} />
       </div>
 
-      <div className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3">
-        <h3 className="text-sm font-semibold">Action plan</h3>
-        {actionPlan.map((item) => (
-          <div key={`${item.title}-${item.dueDate}`} className="rounded-lg bg-white p-3 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-semibold">{item.title}</p>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">{item.status}</span>
-            </div>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">{item.dueDate}</p>
-            <p className="mt-1 text-muted-foreground">{item.description}</p>
-          </div>
-        ))}
-      </div>
-
       <div className="grid gap-2 sm:grid-cols-2">
-        {lead.kpGeneratedDocumentId ? (
-          <a
-            href={`/documents?documentId=${encodeURIComponent(lead.kpGeneratedDocumentId)}`}
-            className="rounded-lg border border-border px-4 py-2 text-center text-sm font-semibold text-foreground"
-          >
-            Open KP document
-          </a>
-        ) : null}
-        {canMarkLeadKpSent(lead) ? (
-          <button
-            type="button"
-            disabled={isMarkingKpSent}
-            onClick={onMarkKpSent}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
-          >
-            {isMarkingKpSent ? "Marking..." : "Mark KP sent"}
-          </button>
-        ) : null}
         <button
           type="submit"
           disabled={isSaving}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60 sm:col-span-2"
         >
           {isSaving ? "Saving..." : "Save"}
         </button>
       </div>
     </form>
   );
+}
+
+function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
+  const baseName = createKpDownloadBaseName(lead);
+
+  return (
+    <>
+      {lead.kpPdfAttachmentId ? (
+        <a
+          href={`/documents/attachments/${encodeURIComponent(lead.kpPdfAttachmentId)}?download=1&filename=${encodeURIComponent(`${baseName}.pdf`)}`}
+          download={`${baseName}.pdf`}
+          className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
+        >
+          KP PDF
+        </a>
+      ) : null}
+      {lead.kpDocxAttachmentId ? (
+        <a
+          href={`/documents/attachments/${encodeURIComponent(lead.kpDocxAttachmentId)}?download=1&filename=${encodeURIComponent(`${baseName}.docx`)}`}
+          download={`${baseName}.docx`}
+          className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground"
+        >
+          KP DOC
+        </a>
+      ) : null}
+    </>
+  );
+}
+
+function createKpDownloadBaseName(lead: LeadTableRow): string {
+  return `${lead.leadId}-KP`.replace(/[^\w.-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <details
+      className="rounded-lg border border-border bg-muted/30 p-3"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-semibold">Action plan</summary>
+      <div className="mt-3 grid gap-2">
+        {actionPlan.length > 0 ? (
+          actionPlan.map((item) => (
+            <div key={`${item.title}-${item.dueDate}`} className="rounded-lg bg-white p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold">{item.title}</p>
+                <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">{item.status}</span>
+              </div>
+              <p className="mt-1 text-xs font-medium text-muted-foreground">{item.dueDate}</p>
+              <p className="mt-1 text-muted-foreground">{item.description}</p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No action is waiting right now.</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function CompactLeadLoopProgress({ timeline }: { timeline: ReturnType<typeof createLeadLoopTimelineViewModel> }) {
+  return (
+    <ol className="grid grid-cols-9 gap-1">
+      {timeline.steps.map((step) => (
+        <li key={step.id}>
+          <button
+            type="button"
+            title={`${step.id}. ${step.title}: ${step.description}`}
+            className={`grid h-8 w-full place-items-center rounded-md border text-[11px] font-bold transition ${getCompactLoopStepClassName(step)}`}
+          >
+            {step.id}
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
+  const fields = [
+    { label: "Temperature", value: lead.temperature, badge: <TemperatureBadge value={lead.temperature} /> },
+    { label: "Request", value: lead.requestType },
+    { label: "Address", value: lead.projectAddress },
+    { label: "BGF", value: lead.bgfM2 ? `${lead.bgfM2} m2` : "" },
+    { label: "Budget", value: lead.budgetEur ? `${lead.budgetEur} EUR` : "" },
+    { label: "Missing", value: lead.missingData || "No data" },
+    { label: "KP", value: lead.kpGeneratedDocumentId || "No data" }
+  ];
+
+  return (
+    <div className="grid gap-1.5 rounded-md bg-white p-3 sm:grid-cols-2">
+      {fields.map((field) => (
+        <div key={field.label} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 text-xs leading-tight">
+          <span className="text-muted-foreground">{field.label}</span>
+          {field.badge ?? <span className="truncate font-semibold text-foreground">{field.value || "No data"}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TemperatureBadge({ value }: { value: string }) {
+  const normalized = value.toLowerCase();
+  const classes =
+    normalized === "hot"
+      ? "bg-rose-100 text-rose-800"
+      : normalized === "warm"
+        ? "bg-amber-100 text-amber-800"
+        : normalized === "cold"
+          ? "bg-sky-100 text-sky-800"
+          : "bg-muted text-muted-foreground";
+
+  return <span className={`w-fit rounded-md px-2 py-0.5 text-[11px] font-bold ${classes}`}>{value || "No data"}</span>;
 }
 
 function SourceMaterialsPanel({
