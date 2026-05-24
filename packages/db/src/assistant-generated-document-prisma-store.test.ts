@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDocxPackageBytes, type DocxToPdfConverter } from "@app/documents";
+import { createDocxPackageBytes, DocxToPdfUnavailableError, type DocxToPdfConverter } from "@app/documents";
 import {
   createAssistantGeneratedDocumentPrismaStore,
   KpTemplateUnavailableError,
@@ -173,7 +173,7 @@ describe("assistant generated document Prisma store", () => {
     ).rejects.toBeInstanceOf(KpTemplateUnavailableError);
   });
 
-  it("stores the rendered DOCX without creating a fallback PDF when PDF export is not configured", async () => {
+  it("requires a PDF converter before storing generated KP artifacts", async () => {
     const { client, calls } = createFakeClientWithCurrentTemplate();
     const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
     const templateBytes = createDocxPackageBytes({
@@ -190,44 +190,29 @@ describe("assistant generated document Prisma store", () => {
       }
     });
 
-    await store.create({
-      workspaceId: "workspace-1",
-      documentId: "D-20260521-message-4",
-      documentType: "kp",
-      sourceRecordIds: ["L-2026-001"],
-      rawInput: "Generate KP for lead L-2026-001",
-      fieldSnapshot: {
-        clientName: "Katya",
-        requestType: "new_build",
-        projectAddress: "Chiemseeufer 7",
-        bgfM2: 180,
-        email: "katya@example.com",
-        phone: "+49 170 000",
-        missingData: []
-      },
-      requestedByUserId: "user-1"
-    });
+    await expect(
+      store.create({
+        workspaceId: "workspace-1",
+        documentId: "D-20260521-message-4",
+        documentType: "kp",
+        sourceRecordIds: ["L-2026-001"],
+        rawInput: "Generate KP for lead L-2026-001",
+        fieldSnapshot: {
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          phone: "+49 170 000",
+          missingData: []
+        },
+        requestedByUserId: "user-1"
+      })
+    ).rejects.toThrow(DocxToPdfUnavailableError);
 
-    expect(uploads).toHaveLength(1);
-    expect(uploads[0]).toEqual(
-      expect.objectContaining({
-        key: "workspaces/workspace-1/generated/kp/d-20260521-message-4.docx",
-        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      })
-    );
-    expect(calls.filter((call) => call.method === "attachment.create")).toHaveLength(1);
-    expect(calls.find((call) => call.method === "create")).toEqual({
-      method: "create",
-      args: expect.objectContaining({
-        data: expect.objectContaining({
-          docxAttachmentId: "attachment-docx-1",
-          pdfAttachmentId: undefined,
-          inputSnapshot: expect.objectContaining({
-            pdfExportError: "DOCX was generated from the current KP template, but PDF export is not configured."
-          })
-        })
-      })
-    });
+    expect(uploads).toEqual([]);
+    expect(calls.filter((call) => call.method === "attachment.create")).toEqual([]);
+    expect(calls.find((call) => call.method === "create")).toBeUndefined();
   });
 
   it("creates durable generated documents from the current uploaded template", async () => {

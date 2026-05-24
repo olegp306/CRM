@@ -82,6 +82,8 @@ STRIPE_SECRET_KEY=""
 STRIPE_WEBHOOK_SECRET=""
 ```
 
+`SOFFICE_PATH` must resolve to LibreOffice/soffice in environments where KP files are generated. Leave it empty only if `soffice` is available on `PATH`; otherwise set it to the absolute binary path, for example `/usr/bin/soffice`.
+
 The web app also loads values from the repository root `.env` at startup, without overriding variables already supplied by the process or production host.
 
 ## Telegram Lead Intake

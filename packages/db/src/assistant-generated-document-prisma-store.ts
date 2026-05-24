@@ -1,7 +1,7 @@
 import type { GeneratedKpDocumentRecord, GenerateKpDocumentFromAssistantInput } from "@app/assistant";
 import { createGeneratedDocumentAttachmentMetadata } from "@app/core";
 import type { ObjectStorage } from "@app/core/storage";
-import { renderDocxTemplatePackageBytes, type DocxToPdfConverter } from "@app/documents";
+import { DocxToPdfUnavailableError, renderDocxTemplatePackageBytes, type DocxToPdfConverter } from "@app/documents";
 
 export class KpTemplateUnavailableError extends Error {
   constructor(message = "Current KP template is not available.") {
@@ -86,18 +86,10 @@ export function createAssistantGeneratedDocumentPrismaStore(
         prependParagraphs: createKpDraftNoticeParagraphs(input)
       });
       const docxBody = renderedTemplate.bytes;
-      let pdfBody: Uint8Array | undefined;
-      let pdfExportError: string | undefined;
-
-      if (options.pdfConverter) {
-        try {
-          pdfBody = await options.pdfConverter.convertDocxToPdf(docxBody);
-        } catch (error) {
-          pdfExportError = error instanceof Error ? error.message : "DOCX to PDF conversion failed.";
-        }
-      } else {
-        pdfExportError = "DOCX was generated from the current KP template, but PDF export is not configured.";
+      if (!options.pdfConverter) {
+        throw new DocxToPdfUnavailableError("DOCX was generated from the current KP template, but PDF export is not configured.");
       }
+      const pdfBody = await options.pdfConverter.convertDocxToPdf(docxBody);
       const docxMetadata = createGeneratedDocumentAttachmentMetadata({
         workspaceId: input.workspaceId,
         documentId: input.documentId,
@@ -105,15 +97,13 @@ export function createAssistantGeneratedDocumentPrismaStore(
         format: "docx",
         createdByUserId: input.requestedByUserId
       });
-      const pdfMetadata =
-        pdfBody &&
-        createGeneratedDocumentAttachmentMetadata({
-          workspaceId: input.workspaceId,
-          documentId: input.documentId,
-          documentType: input.documentType,
-          format: "pdf",
-          createdByUserId: input.requestedByUserId
-        });
+      const pdfMetadata = createGeneratedDocumentAttachmentMetadata({
+        workspaceId: input.workspaceId,
+        documentId: input.documentId,
+        documentType: input.documentType,
+        format: "pdf",
+        createdByUserId: input.requestedByUserId
+      });
 
       if (options.objectStorage) {
         await options.objectStorage.putObject({
@@ -121,24 +111,19 @@ export function createAssistantGeneratedDocumentPrismaStore(
           body: docxBody,
           contentType: docxMetadata.mimeType
         });
-        if (pdfBody && pdfMetadata) {
-          await options.objectStorage.putObject({
-            key: pdfMetadata.storageKey,
-            body: pdfBody,
-            contentType: pdfMetadata.mimeType
-          });
-        }
+        await options.objectStorage.putObject({
+          key: pdfMetadata.storageKey,
+          body: pdfBody,
+          contentType: pdfMetadata.mimeType
+        });
       }
 
       const docxAttachment = await client.attachment.create({
         data: { ...docxMetadata, sizeBytes: docxBody.byteLength }
       });
-      const pdfAttachment =
-        pdfBody && pdfMetadata
-          ? await client.attachment.create({
-              data: { ...pdfMetadata, sizeBytes: pdfBody.byteLength }
-            })
-          : undefined;
+      const pdfAttachment = await client.attachment.create({
+        data: { ...pdfMetadata, sizeBytes: pdfBody.byteLength }
+      });
       const row = await client.generatedDocument.create({
         data: {
           workspaceId: input.workspaceId,
@@ -148,7 +133,7 @@ export function createAssistantGeneratedDocumentPrismaStore(
           sourceType: "assistant",
           sourceId: input.sourceRecordIds[0] ?? input.documentId,
           docxAttachmentId: docxAttachment.id,
-          pdfAttachmentId: pdfAttachment?.id,
+          pdfAttachmentId: pdfAttachment.id,
           status: "generated",
           inputSnapshot: {
             documentId: input.documentId,
@@ -156,7 +141,6 @@ export function createAssistantGeneratedDocumentPrismaStore(
             sourceRecordIds: input.sourceRecordIds,
             renderedContent: renderedTemplate.paragraphs.join("\n"),
             templateName: currentTemplate.templateName,
-            ...(pdfExportError ? { pdfExportError } : {}),
             fieldSnapshot: input.fieldSnapshot
           },
           generatedByUserId: input.requestedByUserId
