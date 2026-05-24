@@ -1,5 +1,8 @@
 import { resolveWorkspaceSession, type WorkspaceSessionContext, type WorkspaceSessionSource } from "@app/auth";
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
+import { authOptions, isGoogleAdminAuthConfigured, isSessionAllowed } from "@/auth";
 
 const cookieKeys: Record<keyof WorkspaceSessionContext, string> = {
   workspaceId: "crm_workspace_id",
@@ -31,5 +34,25 @@ export async function getWorkspaceSession(): Promise<WorkspaceSessionContext> {
     ])
   ) as WorkspaceSessionSource;
 
-  return resolveWorkspaceSession(source);
+  const workspaceSession = resolveWorkspaceSession(source);
+
+  if (!isGoogleAdminAuthConfigured()) {
+    return workspaceSession;
+  }
+
+  const googleSession = await getServerSession(authOptions);
+  if (!googleSession?.user?.email) {
+    redirect("/login");
+  }
+
+  if (!isSessionAllowed(googleSession)) {
+    redirect("/access-denied");
+  }
+
+  return {
+    ...workspaceSession,
+    userId: `google:${googleSession.user.email.toLowerCase()}`,
+    userName: googleSession.user.name ?? googleSession.user.email,
+    role: "admin"
+  };
 }

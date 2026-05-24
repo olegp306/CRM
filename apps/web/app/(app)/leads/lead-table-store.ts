@@ -491,12 +491,46 @@ export function createLeadKpMailtoHref(
   return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
+export function createKpDownloadBaseName(
+  lead: Pick<LeadTableRow, "leadId" | "createdDate" | "rawInput">
+): string {
+  const initials = extractLeadInitials(lead.rawInput);
+  const createdDate = lead.createdDate.trim() || new Date().toISOString().slice(0, 10);
+  return sanitizeFileName([initials, "KP", lead.leadId, createdDate].filter(Boolean).join("-"));
+}
+
 function createAbsoluteAttachmentUrl(origin: string, attachmentId: string): string {
   return `${origin.replace(/\/+$/, "")}/documents/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 function extractEmailFromLeadText(text: string): string {
   return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(text)?.[0] ?? "";
+}
+
+function extractLeadInitials(text: string): string {
+  const explicitClient = /(?:client|name)\s*[:=-]\s*([^\n,;]+)/i.exec(text)?.[1]?.trim();
+  const source = explicitClient || text;
+  const words = Array.from(source.matchAll(/\p{L}+/gu))
+    .map((match) => match[0])
+    .filter((word) => !isIgnoredInitialWord(word));
+  const initials = words
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+  return initials || "LEAD";
+}
+
+function isIgnoredInitialWord(word: string): boolean {
+  return new Set(["client", "name", "lead", "telegram", "need", "hello", "hallo"]).has(word.toLowerCase());
+}
+
+function sanitizeFileName(name: string): string {
+  return name
+    .replace(/[^\w.\- ]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
 }
 
 function createLeadAutomaticCheckDescription(
