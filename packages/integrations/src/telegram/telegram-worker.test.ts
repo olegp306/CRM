@@ -554,11 +554,12 @@ describe("telegram worker", () => {
     expect(finalMessageBody.text).toContain("KP document: D-telegram-12345-13");
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
       { text: "Open in CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
-      expect.objectContaining({ text: "Send KP" })
+      { text: "Open KP PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
+      { text: "Open KP DOCX", url: "https://files.example.com/kp.docx" }
     ]);
-    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("mailto:");
-    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("subject=KP%20L-2026-002");
-    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-pdf-1");
+    expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
+      urls.every((url) => /^https?:\/\//.test(url))
+    );
   });
 
   it("sends a CRM attachment URL when only an internal attachment id exists", async () => {
@@ -584,8 +585,14 @@ describe("telegram worker", () => {
         suggestedReply: "Ready."
       }))
     };
-    const fetchMock = vi.fn(async (url: string) => {
+    const fetchMock = vi.fn(async (url: string, init?: { body?: unknown }) => {
       if (url.includes("/sendMessage")) {
+        const body = JSON.parse(String(init?.body));
+        const urls = body.reply_markup?.inline_keyboard?.flat().map((button: { url?: string }) => button.url).filter(Boolean) ?? [];
+        if (!urls.every((buttonUrl: string) => /^https?:\/\//.test(buttonUrl))) {
+          return { ok: false, status: 400, statusText: "Bad Request" };
+        }
+
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
       }
 
