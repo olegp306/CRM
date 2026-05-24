@@ -37,6 +37,8 @@ apt-get update
 apt-get install -y libreoffice
 ```
 
+LibreOffice is required for KP generation. The app copies the current uploaded DOCX template, replaces placeholders in that copy, then exports the rendered DOCX to PDF through `soffice`. If `soffice` is missing or PDF export fails, KP generation fails visibly instead of saving a DOCX-only artifact.
+
 Create `/opt/apps/crm-staging/.env` from the project env and set staging-specific values:
 
 ```env
