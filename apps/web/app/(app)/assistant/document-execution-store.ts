@@ -1,6 +1,7 @@
 import type { GenerateKpDocumentFromAssistantInput, GeneratedKpDocumentRecord } from "@app/assistant";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma, type AssistantGeneratedDocumentStore } from "@app/db";
+import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { selectDatabaseBackedRuntime } from "../../../lib/database-runtime";
 
 const globalForAssistantDocuments = globalThis as typeof globalThis & {
@@ -61,7 +62,8 @@ function getAssistantGeneratedDocumentStore(): AssistantGeneratedDocumentStore {
 
   if (!globalForAssistantDocuments.assistantGeneratedDocumentPrismaStore) {
     globalForAssistantDocuments.assistantGeneratedDocumentPrismaStore = createAssistantGeneratedDocumentPrismaStore(prisma, {
-      objectStorage: createObjectStorageFromEnv()
+      objectStorage: createObjectStorageFromEnv(),
+      pdfConverter: createLibreOfficeDocxToPdfConverter()
     });
   }
 

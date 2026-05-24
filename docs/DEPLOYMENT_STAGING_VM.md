@@ -33,6 +33,8 @@ cd /opt/apps/crm-staging
 corepack enable
 corepack prepare pnpm@9.15.0 --activate
 pnpm install --frozen-lockfile
+apt-get update
+apt-get install -y libreoffice
 ```
 
 Create `/opt/apps/crm-staging/.env` from the project env and set staging-specific values:
@@ -48,6 +50,7 @@ TELEGRAM_TEST_CHAT_ID=""
 TELEGRAM_TEST_MESSAGE_ID=""
 TELEGRAM_TEST_RECEIVED_AT=""
 TELEGRAM_WORKER_MODE="loop"
+SOFFICE_PATH="soffice"
 ```
 
 Start the isolated database:
