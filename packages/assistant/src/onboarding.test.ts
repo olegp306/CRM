@@ -26,7 +26,7 @@ describe("onboarding assistant helpers", () => {
 
   it("summarizes current product context with the active app version", () => {
     expect(getCurrentOnboardingBrief()).toMatchObject({
-      appVersion: "0.1.3",
+      appVersion: "0.1.4",
       completed: expect.arrayContaining([expect.stringContaining("Loop 1")]),
       planned: expect.arrayContaining([expect.stringContaining("Gmail")])
     });
