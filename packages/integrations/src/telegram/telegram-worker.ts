@@ -1,4 +1,4 @@
-import { getNextBusinessId } from "@app/core";
+import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
 import { loadRootEnv } from "../env/root-env";
@@ -32,7 +32,24 @@ import {
 
 export type TelegramWorkerPrismaLike = {
   lead: {
-    findMany(args: unknown): Promise<Array<{ leadId: string; rawInput: string | null }>>;
+    findMany(
+      args: unknown
+    ): Promise<
+      Array<{
+        id?: string;
+        leadId: string;
+        status?: string | null;
+        rawInput: string | null;
+        clientName?: string | null;
+        requestType?: string | null;
+        projectAddress?: string | null;
+        bgfM2?: number | null;
+        email?: string | null;
+        phone?: string | null;
+        missingData?: string[] | null;
+        kpSentDate?: Date | string | null;
+      }>
+    >;
     create(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
     update?(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
   };
@@ -141,7 +158,7 @@ export function createTelegramTestUpdateFromEnv(env: TelegramTestEnv): TelegramU
 }
 
 export async function processTelegramUpdates(updates: TelegramUpdate[], config: TelegramWorkerConfig): Promise<TelegramWorkerResult> {
-  const client = config.prisma ?? defaultPrisma;
+  const client = (config.prisma ?? defaultPrisma) as TelegramWorkerPrismaLike;
   const fetchImpl = config.fetchImpl ?? fetch;
   const telegramDraftStore = config.telegramDraftStore ?? defaultTelegramDraftStore;
   const allowedMessages = createAllowedTelegramMessages(updates, config.allowedChatIds);
@@ -169,6 +186,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    if (isTelegramStartRequest(message)) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramWelcomeMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     if (isTelegramHelpRequest(message)) {
       await sendTelegramMessage({
         botToken: config.botToken,
@@ -181,6 +209,71 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     const sourceExternalIds = createTelegramSourceExternalIds(message);
+    const repliedLead = message.replyToMessageId
+      ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
+      : null;
+
+    if (repliedLead && isTelegramKpSentCommand(message) && !isTelegramKpSentUndoCommand(message)) {
+      if (!client.lead.update || !repliedLead.id) {
+        await sendTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
+          parseMode: "HTML",
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+
+      await client.lead.update({
+        where: { id: repliedLead.id },
+        data: createKpSentLeadUpdate(new Date(message.receivedAt))
+      });
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP marked as sent. Follow-up planned in 7 days.`,
+        parseMode: "HTML",
+        fetchImpl
+      });
+      processed += 1;
+      continue;
+    }
+
+    if (repliedLead && isTelegramKpSentUndoCommand(message)) {
+      if (!client.lead.update || !repliedLead.id) {
+        await sendTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
+          parseMode: "HTML",
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+
+      await client.lead.update({
+        where: { id: repliedLead.id },
+        data: {
+          kpSentDate: null,
+          followup1Date: null,
+          followupStatus: null,
+          status: "new"
+        }
+      });
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP sent mark was undone. We are back before sending KP.`,
+        parseMode: "HTML",
+        fetchImpl
+      });
+      processed += 1;
+      continue;
+    }
+
     const existingLeads = await client.lead.findMany({
       where: {
         workspaceId: config.workspaceId,
@@ -202,6 +295,47 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       select: { leadId: true, rawInput: true }
     });
     const draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
+
+    if (repliedLead) {
+      if (!client.lead.update || !repliedLead.id) {
+        await sendTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
+          parseMode: "HTML",
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+
+      if (isPossibleDifferentLead(createTelegramLeadSessionFromExistingLead(repliedLead, message), draft)) {
+        await sendTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: createTelegramLeadUpdateClarificationMessage(repliedLead, draft),
+          parseMode: "HTML",
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+
+      await client.lead.update({
+        where: { id: repliedLead.id },
+        data: createTelegramLeadUpdateData(repliedLead, draft, message)
+      });
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft),
+        parseMode: "HTML",
+        fetchImpl
+      });
+      processed += 1;
+      continue;
+    }
+
     const replySession = message.replyToMessageId
       ? await telegramDraftStore.getByTelegramMessage?.({
           workspaceId: config.workspaceId,
@@ -286,7 +420,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     const generatedDocumentPdfUrl =
       generatedDocument?.pdfDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId);
     const generatedDocumentDocxUrl =
-      generatedDocument?.docxDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
+      generatedDocument?.docxDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId, true);
     const generatedDocumentDeliveryUrl = generatedDocumentPdfUrl ?? generatedDocumentDocxUrl;
 
     let generatedDocumentDelivered = false;
@@ -306,7 +440,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
     await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
 
-    await sendTelegramMessage({
+    const finalMessage = await sendTelegramMessage({
       botToken: config.botToken,
       chatId: message.chatId,
       text: createTelegramLeadConfirmation({
@@ -316,6 +450,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         generatedDocumentId: generatedDocument?.documentId,
         generatedDocumentDelivered
       }),
+      parseMode: "HTML",
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
         email: session.draft.email,
         pdfUrl: generatedDocumentPdfUrl,
@@ -323,6 +458,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }),
       fetchImpl
     });
+    if (client.lead.update && created.id && finalMessage.messageId) {
+      await client.lead.update({
+        where: { id: created.id },
+        data: {
+          rawInput: appendTelegramBotLeadMessageMarker(session.draft.rawInput, message.chatId, finalMessage.messageId)
+        }
+      });
+    }
     processed += 1;
   }
 
@@ -505,6 +648,8 @@ function createAllowedTelegramMessageBatches(messages: AllowedTelegramMessage[],
     const canMerge =
       previous &&
       previous.chatId === message.chatId &&
+      previous.replyToMessageId === undefined &&
+      message.replyToMessageId === undefined &&
       Math.abs(messageTime - previousTime) <= batchWindowMs &&
       !isTelegramHelpRequest(previous) &&
       !isTelegramHelpRequest(message);
@@ -541,10 +686,20 @@ function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "a
   }
 
   return (
-    /^\/(start|help|about)(@\w+)?$/i.test(text) ||
+    /^\/(help|about)(@\w+)?$/i.test(text) ||
     /(what can you do|help|capabilities|что ты умеешь|что умеешь|помощь|как работает)/i.test(text) ||
     text.length < 12
   );
+}
+
+function isTelegramStartRequest(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0 || message.replyToMessageId !== undefined) {
+    return false;
+  }
+
+  return /^\/start(@\w+)?$/i.test(text);
 }
 
 function isTelegramNewLeadCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
@@ -557,16 +712,47 @@ function isTelegramNewLeadCommand(message: Pick<AllowedTelegramMessage, "text" |
   return /^\/(newlead|new_lead|lead)(@\w+)?$/i.test(text) || /^new lead$/i.test(text);
 }
 
+function isTelegramKpSentUndoCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  return /(undo|отмени|откат|верни|не отправ)/i.test(text) && /(kp|кп|commercial proposal|offer|отправ)/i.test(text);
+}
+
+function isTelegramKpSentCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  return /(kp|кп|commercial proposal|offer).{0,24}(sent|send|отправ|выслал|выслали)/i.test(text);
+}
+
 function createTelegramHelpMessage(): string {
   return [
     "Я умею принимать заявки на архитектурные проекты и создавать по ним лиды в CRM.",
     "",
     "Можно отправить одним скопом текст, несколько сообщений, фотографии или PDF. Я попробую разобрать это как одну заявку.",
     "",
-    "Пока я не редактирую существующие записи и не отправляю КП сам. После создания лида пришлю короткую карточку и ссылку на CRM."
+    "Ответом на карточку лида можно добавить недостающие данные, приложить материалы, отметить КП отправленным или отменить отправку КП. Если я не пойму действие, задам короткий уточняющий вопрос."
   ].join("\n");
 }
 
+function createTelegramWelcomeMessage(): string {
+  return [
+    "Здравствуйте! Я CRM-помощник Олега для архитектурных заявок.",
+    "",
+    "Я могу принять сообщение, фото или PDF из Telegram, разобрать заявку, создать лид в CRM, подготовить КП и дать ссылки на карточку лида и документы.",
+    "",
+    "Если отвечать reply на карточку лида, я смогу добавить недостающие данные, отметить КП отправленным или отменить эту отметку.",
+    "",
+    "Присылайте первую заявку свободным текстом. Мы очень ждём ваших впечатлений и замечаний: они помогают быстро сделать систему удобнее."
+  ].join("\n");
+}
 function createTelegramLeadConfirmation({
   leadId,
   status,
@@ -584,6 +770,7 @@ function createTelegramLeadConfirmation({
     ["Lead", leadId],
     ["Status", status],
     ["KP fields ready", "yes"],
+    ["Pricing branch", createTelegramPricingBranchLabel(draft)],
     ["KP document", generatedDocumentId],
     ["KP file", generatedDocumentId ? (generatedDocumentDelivered ? "sent to Telegram" : "saved in CRM") : ""],
     ["Request type", draft.requestType],
@@ -594,9 +781,15 @@ function createTelegramLeadConfirmation({
     ["Missing data", Array.isArray(draft.missingData) && draft.missingData.length > 0 ? draft.missingData.join(", ") : ""]
   ].filter(([, value]) => String(value ?? "").trim() !== "");
 
-  return ["Готово, я создал лид в CRM.", "", ...fields.map(([label, value]) => `${label}: ${value}`)].join("\n");
+  return [
+    "Done, I created a lead in CRM.",
+    "",
+    `<b>${escapeHtml(createTelegramPricingBranchHeadline(draft))}</b>`,
+    escapeHtml(createTelegramPricingBranchReason(draft)),
+    "",
+    ...fields.map(([label, value]) => `<b>${escapeHtml(String(label))}</b>: ${escapeHtml(String(value))}`)
+  ].join("\n");
 }
-
 function createTelegramKpDocumentId(message: AllowedTelegramMessageBatch): string {
   return `D-telegram-${message.chatId}-${message.sourceMessageIds.at(-1) ?? message.messageId}`;
 }
@@ -665,6 +858,154 @@ function createTelegramDraftFieldLines(session: TelegramLeadDraftSession): strin
   return fields.length > 0 ? fields.map(([label, value]) => `${label}: ${value}`) : ["No fields detected yet."];
 }
 
+async function findLeadByTelegramBotMessage(
+  client: TelegramWorkerPrismaLike,
+  workspaceId: string,
+  chatId: string,
+  messageId: number
+): Promise<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null> {
+  const marker = createTelegramBotLeadMessageMarker(chatId, messageId);
+  const leads = await client.lead.findMany({
+    where: {
+      workspaceId,
+      rawInput: { contains: marker }
+    },
+    select: {
+      id: true,
+      leadId: true,
+      status: true,
+      rawInput: true,
+      clientName: true,
+      requestType: true,
+      projectAddress: true,
+      bgfM2: true,
+      email: true,
+      phone: true,
+      missingData: true,
+      kpSentDate: true
+    }
+  });
+
+  return leads.find((lead) => lead.rawInput?.includes(marker)) ?? null;
+}
+
+function createTelegramLeadSessionFromExistingLead(
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
+  message: AllowedTelegramMessageBatch
+): TelegramLeadDraftSession {
+  return createTelegramLeadDraftSession({
+    chatId: message.chatId,
+    workspaceId: "",
+    receivedAt: message.receivedAt,
+    sourceMessageIds: message.sourceMessageIds,
+    draft: {
+      source: "telegram",
+      clientName: lead.clientName ?? null,
+      requestType: lead.requestType ?? null,
+      projectAddress: lead.projectAddress ?? null,
+      bgfM2: toOptionalNumber(lead.bgfM2),
+      email: lead.email ?? null,
+      phone: lead.phone ?? null,
+      rawInput: lead.rawInput ?? "",
+      missingData: lead.missingData ?? [],
+      isStandard: false,
+      telegramSourceExternalId: "",
+      temperature: "unknown"
+    }
+  });
+}
+
+function createTelegramLeadUpdateData(
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  message: AllowedTelegramMessageBatch
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {
+    rawInput: mergeTelegramLeadRawInput(lead.rawInput ?? "", draft.rawInput, message.chatId, message.sourceMessageIds)
+  };
+
+  addUpdateValue(update, "clientName", draft.clientName);
+  addUpdateValue(update, "requestType", draft.requestType);
+  addUpdateValue(update, "projectAddress", draft.projectAddress);
+  addUpdateValue(update, "bgfM2", draft.bgfM2);
+  addUpdateValue(update, "email", draft.email);
+  addUpdateValue(update, "phone", draft.phone);
+  update.missingData = mergeLeadMissingData(lead, draft, update);
+
+  if ((update.missingData as string[]).length === 0 && lead.status === "needs_data") {
+    update.status = "new";
+  }
+
+  return update;
+}
+
+function addUpdateValue(update: Record<string, unknown>, key: string, value: string | number | null | undefined): void {
+  if (typeof value === "number" ? Number.isFinite(value) : Boolean(value?.trim())) {
+    update[key] = value;
+  }
+}
+
+function mergeLeadMissingData(
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  update: Record<string, unknown>
+): string[] {
+  const unresolved = new Set([...(lead.missingData ?? []), ...draft.missingData]);
+  for (const field of ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone"]) {
+    if ((update[field] ?? lead[field as keyof typeof lead]) !== null && (update[field] ?? lead[field as keyof typeof lead]) !== undefined) {
+      unresolved.delete(field);
+    }
+  }
+
+  return Array.from(unresolved);
+}
+
+function mergeTelegramLeadRawInput(current: string, next: string, chatId: string, messageIds: number[]): string {
+  return [
+    current.trim(),
+    `Telegram update sources: ${messageIds.map((messageId) => `telegram:${chatId}:${messageId}`).join(", ")}`,
+    next.trim()
+  ]
+    .filter(Boolean)
+    .join("\n\n--- telegram lead update ---\n\n");
+}
+
+function createTelegramLeadUpdatedMessage(
+  leadId: string,
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
+): string {
+  const fields = [
+    ["Client", draft.clientName],
+    ["Request type", draft.requestType],
+    ["Project address", draft.projectAddress],
+    ["BGF m2", draft.bgfM2 === null || draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
+    ["Email", draft.email],
+    ["Phone", draft.phone]
+  ].filter(([, value]) => String(value ?? "").trim() !== "");
+
+  return [
+    `Updated lead <b>${escapeHtml(leadId)}</b>.`,
+    "",
+    ...fields.map(([label, value]) => `<b>${escapeHtml(String(label))}</b>: ${escapeHtml(String(value))}`),
+    "",
+    "Reply to the lead card again if you want to add more data, mark KP sent, or undo KP sent."
+  ].join("\n");
+}
+
+function createTelegramLeadUpdateClarificationMessage(
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
+): string {
+  return [
+    `I found lead <b>${escapeHtml(lead.leadId)}</b>, but the reply looks like it may describe a different client or address.`,
+    "",
+    `<b>Current</b>: ${escapeHtml(lead.clientName ?? "unknown client")} / ${escapeHtml(lead.projectAddress ?? "unknown address")}`,
+    `<b>Reply</b>: ${escapeHtml(draft.clientName ?? "unknown client")} / ${escapeHtml(draft.projectAddress ?? "unknown address")}`,
+    "",
+    "Please reply with: update this lead, or /newlead to start a separate lead."
+  ].join("\n");
+}
+
 function createEmptyTelegramLeadDraft(message: AllowedTelegramMessageBatch): Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>> {
   const sourceExternalIds = createTelegramSourceExternalIds(message);
 
@@ -684,6 +1025,46 @@ function createEmptyTelegramLeadDraft(message: AllowedTelegramMessageBatch): Awa
   };
 }
 
+function createTelegramPricingBranchLabel(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
+  return draft.isStandard ? "standard" : "custom";
+}
+
+function createTelegramPricingBranchHeadline(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
+  return draft.isStandard ? "Standard pricing branch" : "Custom pricing branch";
+}
+
+function createTelegramPricingBranchReason(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
+  if (draft.isStandard) {
+    return `Standard because the parser recognized a known ${draft.requestType ?? "project"} pattern with enough KP fields. Price is selected from the configured table when BGF matches.`;
+  }
+
+  return "Custom because the request does not fully match the standard pricing path or still needs manual pricing review.";
+}
+
+function appendTelegramBotLeadMessageMarker(rawInput: string, chatId: string, messageId: number): string {
+  return [rawInput.trim(), `Telegram lead card: ${createTelegramBotLeadMessageMarker(chatId, messageId)}`].filter(Boolean).join("\n");
+}
+
+function createTelegramBotLeadMessageMarker(chatId: string, messageId: number): string {
+  return `telegram-bot:${chatId}:${messageId}`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (value && typeof value === "object" && "toNumber" in value && typeof (value as { toNumber?: unknown }).toNumber === "function") {
+    return (value as { toNumber: () => number }).toNumber();
+  }
+
+  return null;
+}
+
 function createTelegramCrmReplyMarkup(
   crmBaseUrl: string | undefined,
   leadId: string,
@@ -695,17 +1076,24 @@ function createTelegramCrmReplyMarkup(
     return undefined;
   }
 
-  const row = [
+  const row: Array<{ text: string; url: string }> = [
     {
       text: "Open in CRM",
       url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
     }
   ];
-  const mailtoUrl = createTelegramKpMailtoUrl(leadId, kpMail);
-  if (mailtoUrl) {
+
+  if (isTelegramHttpUrl(kpMail?.pdfUrl)) {
     row.push({
-      text: "Send KP",
-      url: mailtoUrl
+      text: "Open KP PDF",
+      url: kpMail.pdfUrl
+    });
+  }
+
+  if (isTelegramHttpUrl(kpMail?.docxUrl)) {
+    row.push({
+      text: "Download KP DOCX",
+      url: kpMail.docxUrl
     });
   }
 
@@ -714,39 +1102,23 @@ function createTelegramCrmReplyMarkup(
   };
 }
 
-function createTelegramKpMailtoUrl(
-  leadId: string,
-  kpMail: { email?: string | null; pdfUrl?: string; docxUrl?: string } | undefined
-): string | undefined {
-  if (!kpMail?.pdfUrl && !kpMail?.docxUrl) {
-    return undefined;
-  }
-
-  const subject = `KP ${leadId}`;
-  const body = [
-    "Hallo,",
-    "",
-    "anbei finden Sie den Link zum vorbereiteten kommerziellen Angebot.",
-    kpMail.pdfUrl ? `PDF: ${kpMail.pdfUrl}` : "",
-    kpMail.docxUrl ? `DOCX: ${kpMail.docxUrl}` : "",
-    "",
-    "Viele Gruesse"
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const recipient = kpMail.email?.trim() ?? "";
-
-  return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+function isTelegramHttpUrl(value: string | undefined): value is string {
+  return typeof value === "string" && /^https?:\/\//i.test(value);
 }
 
-function createTelegramAttachmentDeliveryUrl(crmBaseUrl: string | undefined, attachmentId: string | undefined): string | undefined {
+function createTelegramAttachmentDeliveryUrl(
+  crmBaseUrl: string | undefined,
+  attachmentId: string | undefined,
+  download = false
+): string | undefined {
   const trimmedBaseUrl = crmBaseUrl?.replace(/\/+$/, "");
 
   if (!trimmedBaseUrl || !attachmentId) {
     return undefined;
   }
 
-  return `${trimmedBaseUrl}/documents/attachments/${encodeURIComponent(attachmentId)}`;
+  const url = `${trimmedBaseUrl}/documents/attachments/${encodeURIComponent(attachmentId)}`;
+  return download ? `${url}?download=1` : url;
 }
 
 if (process.argv[1]?.endsWith("telegram-worker.ts")) {

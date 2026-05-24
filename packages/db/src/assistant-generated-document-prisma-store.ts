@@ -1,7 +1,7 @@
 import type { GeneratedKpDocumentRecord, GenerateKpDocumentFromAssistantInput } from "@app/assistant";
 import { createGeneratedDocumentAttachmentMetadata } from "@app/core";
 import type { ObjectStorage } from "@app/core/storage";
-import { createDocxPackageBytes, renderDocumentTemplate } from "@app/documents";
+import { createDocxPackageBytes, renderDocxTemplatePackageBytes, renderDocumentTemplate } from "@app/documents";
 
 const ASSISTANT_KP_TEMPLATE_ID = "assistant-kp-template";
 const ASSISTANT_KP_TEMPLATE_VERSION_ID = "assistant-kp-template-v1";
@@ -19,9 +19,32 @@ type GeneratedDocumentRow = {
   generatedByUserId?: string | null;
 };
 
+type CurrentTemplateRow = {
+  id: string;
+  name: string;
+  currentVersionId: string | null;
+  versions?: Array<{
+    id: string;
+    attachmentId: string;
+    version: number;
+  }>;
+};
+
+type AttachmentRow = {
+  id: string;
+  workspaceId: string;
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+};
+
 export type AssistantGeneratedDocumentPrismaClientLike = {
   attachment?: {
     create(args: unknown): Promise<{ id: string }>;
+    findFirst?(args: unknown): Promise<AttachmentRow | null>;
+  };
+  documentTemplate?: {
+    findFirst(args: unknown): Promise<CurrentTemplateRow | null>;
   };
   generatedDocument: {
     findMany(args: unknown): Promise<GeneratedDocumentRow[]>;
@@ -57,10 +80,17 @@ export function createAssistantGeneratedDocumentPrismaStore(
         source_id: input.sourceRecordIds[0] ?? "assistant request"
       });
       const paragraphs = createKpDocumentParagraphs(input, rendered.content);
-      const docxBody = createDocxPackageBytes({
-        title: `KP document ${input.documentId}`,
-        paragraphs
-      });
+      const currentTemplate = await resolveCurrentKpTemplate(client, options.objectStorage, input.workspaceId, input.documentType);
+      const docxBody = currentTemplate
+        ? renderDocxTemplatePackageBytes({
+            templateBytes: currentTemplate.bytes,
+            values: createKpTemplateValues(input),
+            prependParagraphs: createKpDraftNoticeParagraphs(input)
+          }).bytes
+        : createDocxPackageBytes({
+            title: `KP document ${input.documentId}`,
+            paragraphs
+          });
       const pdfBody = createMinimalPdfBytes(input.documentId, paragraphs);
       const docxMetadata = createGeneratedDocumentAttachmentMetadata({
         workspaceId: input.workspaceId,
@@ -100,8 +130,8 @@ export function createAssistantGeneratedDocumentPrismaStore(
         data: {
           workspaceId: input.workspaceId,
           documentType: input.documentType,
-          templateId: ASSISTANT_KP_TEMPLATE_ID,
-          templateVersionId: ASSISTANT_KP_TEMPLATE_VERSION_ID,
+          templateId: currentTemplate?.templateId ?? ASSISTANT_KP_TEMPLATE_ID,
+          templateVersionId: currentTemplate?.templateVersionId ?? ASSISTANT_KP_TEMPLATE_VERSION_ID,
           sourceType: "assistant",
           sourceId: input.sourceRecordIds[0] ?? input.documentId,
           docxAttachmentId: docxAttachment.id,
@@ -112,6 +142,7 @@ export function createAssistantGeneratedDocumentPrismaStore(
             rawInput: input.rawInput,
             sourceRecordIds: input.sourceRecordIds,
             renderedContent: rendered.content,
+            templateName: currentTemplate?.templateName ?? "Assistant KP template",
             fieldSnapshot: input.fieldSnapshot
           },
           generatedByUserId: input.requestedByUserId
@@ -123,19 +154,85 @@ export function createAssistantGeneratedDocumentPrismaStore(
   };
 }
 
+async function resolveCurrentKpTemplate(
+  client: AssistantGeneratedDocumentPrismaClientLike,
+  objectStorage: ObjectStorage | undefined,
+  workspaceId: string,
+  documentType: string
+): Promise<{ templateId: string; templateVersionId: string; templateName: string; bytes: Uint8Array } | null> {
+  if (!client.documentTemplate || !client.attachment?.findFirst || !objectStorage) {
+    return null;
+  }
+
+  const template = await client.documentTemplate.findFirst({
+    where: { workspaceId, documentType, isActive: true },
+    orderBy: { createdAt: "desc" },
+    include: {
+      versions: {
+        orderBy: { version: "desc" },
+        take: 1
+      }
+    }
+  });
+  const version = template?.versions?.[0];
+
+  if (!template || !version) {
+    return null;
+  }
+
+  const attachment = await client.attachment.findFirst({
+    where: {
+      id: version.attachmentId,
+      workspaceId
+    }
+  });
+
+  if (!attachment) {
+    throw new Error(`Current ${documentType} template attachment is missing.`);
+  }
+
+  return {
+    templateId: template.id,
+    templateVersionId: version.id,
+    templateName: template.name,
+    bytes: await objectStorage.getObject(attachment.storageKey)
+  };
+}
+
+function createKpTemplateValues(input: GenerateKpDocumentFromAssistantInput): Record<string, string | number | null | undefined> {
+  const fields = input.fieldSnapshot;
+  const now = new Date();
+  const validUntil = new Date(now);
+  validUntil.setDate(validUntil.getDate() + 14);
+
+  return {
+    date: formatDate(now),
+    client_name: fields?.clientName,
+    client_address_line_1: null,
+    client_address_line_2: null,
+    project_name: input.sourceRecordIds[0] ?? input.documentId,
+    project_address: fields?.projectAddress,
+    bgf: fields?.bgfM2 === null || fields?.bgfM2 === undefined ? null : String(fields.bgfM2),
+    wohnflaeche: null,
+    project_type: fields?.requestType,
+    lp1_3_net: null,
+    lp4_net: null,
+    total_net: null,
+    mwst: null,
+    total_gross: null,
+    ms1_net: null,
+    ms2_net: null,
+    ms3_net: null,
+    offer_valid_until: formatDate(validUntil),
+    email: fields?.email,
+    phone: fields?.phone
+  };
+}
+
 function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput, renderedContent: string): string[] {
+  const draftNotice = createKpDraftNoticeParagraphs(input);
   const fields = input.fieldSnapshot;
   const missingData = fields?.missingData?.filter((field) => field.trim().length > 0) ?? [];
-  const draftNotice =
-    missingData.length > 0
-      ? [
-          `DRAFT: This commercial proposal is missing required data: ${missingData.join(", ")}.`,
-          "Please add the missing fields manually before sending the final proposal.",
-          "Processed lead brief",
-          input.rawInput,
-          "Prepared proposal text"
-        ]
-      : [];
   const fieldParagraphs = [
     ["Client", fields?.clientName],
     ["Request type", fields?.requestType],
@@ -155,6 +252,25 @@ function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput,
     `Source records: ${input.sourceRecordIds.length > 0 ? input.sourceRecordIds.join(", ") : "assistant request"}`,
     `Source material: ${input.rawInput}`
   ];
+}
+
+function createKpDraftNoticeParagraphs(input: GenerateKpDocumentFromAssistantInput): string[] {
+  const fields = input.fieldSnapshot;
+  const missingData = fields?.missingData?.filter((field) => field.trim().length > 0) ?? [];
+
+  return missingData.length > 0
+    ? [
+        `DRAFT: This commercial proposal is missing required data: ${missingData.join(", ")}.`,
+        "Please add the missing fields manually before sending the final proposal.",
+        "Processed lead brief",
+        input.rawInput,
+        "Prepared proposal text"
+      ]
+    : [];
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function createMinimalPdfBytes(documentId: string, paragraphs: string[]): Uint8Array {

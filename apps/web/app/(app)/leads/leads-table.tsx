@@ -717,8 +717,9 @@ function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
     <>
       {lead.kpPdfAttachmentId ? (
         <a
-          href={`/documents/attachments/${encodeURIComponent(lead.kpPdfAttachmentId)}?download=1&filename=${encodeURIComponent(`${baseName}.pdf`)}`}
-          download={`${baseName}.pdf`}
+          href={`/documents/attachments/${encodeURIComponent(lead.kpPdfAttachmentId)}?filename=${encodeURIComponent(`${baseName}.pdf`)}`}
+          target="_blank"
+          rel="noreferrer"
           className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground"
         >
           KP PDF
