@@ -186,6 +186,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    if (isTelegramStartRequest(message)) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramWelcomeMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     if (isTelegramHelpRequest(message)) {
       await sendTelegramMessage({
         botToken: config.botToken,
@@ -675,10 +686,20 @@ function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "a
   }
 
   return (
-    /^\/(start|help|about)(@\w+)?$/i.test(text) ||
+    /^\/(help|about)(@\w+)?$/i.test(text) ||
     /(what can you do|help|capabilities|что ты умеешь|что умеешь|помощь|как работает)/i.test(text) ||
     text.length < 12
   );
+}
+
+function isTelegramStartRequest(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0 || message.replyToMessageId !== undefined) {
+    return false;
+  }
+
+  return /^\/start(@\w+)?$/i.test(text);
 }
 
 function isTelegramNewLeadCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
@@ -718,6 +739,18 @@ function createTelegramHelpMessage(): string {
     "Можно отправить одним скопом текст, несколько сообщений, фотографии или PDF. Я попробую разобрать это как одну заявку.",
     "",
     "Ответом на карточку лида можно добавить недостающие данные, приложить материалы, отметить КП отправленным или отменить отправку КП. Если я не пойму действие, задам короткий уточняющий вопрос."
+  ].join("\n");
+}
+
+function createTelegramWelcomeMessage(): string {
+  return [
+    "Здравствуйте! Я CRM-помощник Олега для архитектурных заявок.",
+    "",
+    "Я могу принять сообщение, фото или PDF из Telegram, разобрать заявку, создать лид в CRM, подготовить КП и дать ссылки на карточку лида и документы.",
+    "",
+    "Если отвечать reply на карточку лида, я смогу добавить недостающие данные, отметить КП отправленным или отменить эту отметку.",
+    "",
+    "Присылайте первую заявку свободным текстом. Мы очень ждём ваших впечатлений и замечаний: они помогают быстро сделать систему удобнее."
   ].join("\n");
 }
 function createTelegramLeadConfirmation({
