@@ -130,7 +130,10 @@ function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput,
     missingData.length > 0
       ? [
           `DRAFT: This commercial proposal is missing required data: ${missingData.join(", ")}.`,
-          "Please add the missing fields manually before sending the final proposal."
+          "Please add the missing fields manually before sending the final proposal.",
+          "Processed lead brief",
+          input.rawInput,
+          "Prepared proposal text"
         ]
       : [];
   const fieldParagraphs = [

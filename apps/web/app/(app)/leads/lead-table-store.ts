@@ -463,6 +463,42 @@ export function createLeadHistory(
   return history;
 }
 
+export function createLeadKpMailtoHref(
+  lead: Pick<LeadTableRow, "leadId" | "rawInput"> & Pick<Partial<LeadTableRow>, "kpPdfAttachmentId" | "kpDocxAttachmentId">,
+  origin: string
+): string | null {
+  const pdfUrl = lead.kpPdfAttachmentId ? createAbsoluteAttachmentUrl(origin, lead.kpPdfAttachmentId) : "";
+  const docxUrl = lead.kpDocxAttachmentId ? createAbsoluteAttachmentUrl(origin, lead.kpDocxAttachmentId) : "";
+
+  if (!pdfUrl && !docxUrl) {
+    return null;
+  }
+
+  const recipient = extractEmailFromLeadText(lead.rawInput);
+  const subject = `KP ${lead.leadId}`;
+  const body = [
+    "Hallo,",
+    "",
+    "anbei finden Sie den Link zum vorbereiteten kommerziellen Angebot.",
+    pdfUrl ? `PDF: ${pdfUrl}` : "",
+    docxUrl ? `DOCX: ${docxUrl}` : "",
+    "",
+    "Viele Gruesse"
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function createAbsoluteAttachmentUrl(origin: string, attachmentId: string): string {
+  return `${origin.replace(/\/+$/, "")}/documents/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
+function extractEmailFromLeadText(text: string): string {
+  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(text)?.[0] ?? "";
+}
+
 function createLeadAutomaticCheckDescription(
   lead: Pick<LeadTableRow, "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate">
 ): string {

@@ -274,6 +274,9 @@ describe("assistant generated document Prisma store", () => {
     const pdfText = new TextDecoder().decode(uploads[1].body);
     const docxText = new TextDecoder().decode(uploads[0].body);
     expect(pdfText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
+    expect(docxText).toContain("Processed lead brief");
+    expect(docxText).toContain("Generate draft KP for lead L-2026-002");
+    expect(docxText).toContain("Prepared proposal text");
     expect(docxText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
     expect(docxText).not.toContain("Project address: null");
   });
