@@ -51,7 +51,8 @@ export function renderDocxTemplatePackageBytes(input: RenderDocxTemplatePackageI
   const documentXml = textDecoder.decode(documentEntry.bytes);
   const usedPlaceholders = parseDocumentPlaceholders(documentXml);
   const missingPlaceholders: string[] = [];
-  const renderedXml = documentXml.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_match, rawName: string) => {
+  const renderedXml = documentXml.replace(createPlaceholderPattern(), (_match, doubleBraceName: string, singleBraceName: string) => {
+    const rawName = doubleBraceName ?? singleBraceName;
     const name = rawName.trim();
     const value = input.values[name];
 
@@ -276,8 +277,12 @@ function concatUint8Arrays(parts: Uint8Array[]): Uint8Array {
 }
 
 function parseDocumentPlaceholders(documentXml: string): string[] {
-  const matches = documentXml.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g);
-  return Array.from(new Set(Array.from(matches, (match) => match[1].trim()))).sort();
+  const matches = documentXml.matchAll(createPlaceholderPattern());
+  return Array.from(new Set(Array.from(matches, (match) => (match[1] ?? match[2]).trim()))).sort();
+}
+
+function createPlaceholderPattern(): RegExp {
+  return /\{\{\s*([^{}]+?)\s*\}\}|\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}/g;
 }
 
 function prependDocumentParagraphs(documentXml: string, paragraphs: string[]): string {

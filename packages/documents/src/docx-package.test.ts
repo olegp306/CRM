@@ -53,6 +53,33 @@ describe("DOCX package generation", () => {
     expect(text).not.toContain("{{ client_name }}");
   });
 
+  it("copies the DOCX package and replaces single-brace and double-brace placeholders", () => {
+    const templateBytes = createDocxPackageBytes({
+      title: "KP for {{ client_name }}",
+      paragraphs: ["Address: {project_address}", "Phone: { phone }"]
+    });
+    const templateTextBefore = new TextDecoder().decode(templateBytes);
+
+    const result = renderDocxTemplatePackageBytes({
+      templateBytes,
+      values: {
+        client_name: "Anna Beispiel",
+        project_address: "Seestrasse 4",
+        phone: "+49 170 123456"
+      }
+    });
+    const renderedText = new TextDecoder().decode(result.bytes);
+    const templateTextAfter = new TextDecoder().decode(templateBytes);
+
+    expect(result.usedPlaceholders).toEqual(["client_name", "phone", "project_address"]);
+    expect(result.paragraphs).toEqual(["KP for Anna Beispiel", "Address: Seestrasse 4", "Phone: +49 170 123456"]);
+    expect(renderedText).toContain("KP for Anna Beispiel");
+    expect(renderedText).toContain("Address: Seestrasse 4");
+    expect(renderedText).not.toContain("{project_address}");
+    expect(templateTextAfter).toEqual(templateTextBefore);
+    expect(templateTextAfter).toContain("{project_address}");
+  });
+
   it("prepends draft paragraphs and reports missing placeholders", () => {
     const templateBytes = createDocxPackageBytes({
       title: "KP for {{ client_name }}",

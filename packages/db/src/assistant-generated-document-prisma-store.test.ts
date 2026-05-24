@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDocxPackageBytes } from "@app/documents";
+import { createDocxPackageBytes, type DocxToPdfConverter } from "@app/documents";
 import {
   createAssistantGeneratedDocumentPrismaStore,
   KpTemplateUnavailableError,
@@ -99,6 +99,17 @@ function createFakeClientWithCurrentTemplate() {
   return { client, calls: fake.calls };
 }
 
+function createFakePdfConverter(output: string | Uint8Array = "%PDF-CONVERTED-FROM-DOCX"): DocxToPdfConverter & { inputs: Uint8Array[] } {
+  const inputs: Uint8Array[] = [];
+  return {
+    inputs,
+    async convertDocxToPdf(docxBytes) {
+      inputs.push(docxBytes);
+      return typeof output === "string" ? new TextEncoder().encode(output) : output;
+    }
+  };
+}
+
 describe("assistant generated document Prisma store", () => {
   it("lists assistant-generated KP documents for a workspace", async () => {
     const { client, calls } = createFakeClient();
@@ -162,13 +173,72 @@ describe("assistant generated document Prisma store", () => {
     ).rejects.toBeInstanceOf(KpTemplateUnavailableError);
   });
 
+  it("stores the rendered DOCX without creating a fallback PDF when PDF export is not configured", async () => {
+    const { client, calls } = createFakeClientWithCurrentTemplate();
+    const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const templateBytes = createDocxPackageBytes({
+      title: "Custom KP for {{ client_name }}",
+      paragraphs: ["Project: {{ project_address }}"]
+    });
+    const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      objectStorage: {
+        putObject: async (input) => {
+          uploads.push(input);
+        },
+        getObject: async () => templateBytes,
+        deleteObject: async () => undefined
+      }
+    });
+
+    await store.create({
+      workspaceId: "workspace-1",
+      documentId: "D-20260521-message-4",
+      documentType: "kp",
+      sourceRecordIds: ["L-2026-001"],
+      rawInput: "Generate KP for lead L-2026-001",
+      fieldSnapshot: {
+        clientName: "Katya",
+        requestType: "new_build",
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: "katya@example.com",
+        phone: "+49 170 000",
+        missingData: []
+      },
+      requestedByUserId: "user-1"
+    });
+
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toEqual(
+      expect.objectContaining({
+        key: "workspaces/workspace-1/generated/kp/d-20260521-message-4.docx",
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      })
+    );
+    expect(calls.filter((call) => call.method === "attachment.create")).toHaveLength(1);
+    expect(calls.find((call) => call.method === "create")).toEqual({
+      method: "create",
+      args: expect.objectContaining({
+        data: expect.objectContaining({
+          docxAttachmentId: "attachment-docx-1",
+          pdfAttachmentId: undefined,
+          inputSnapshot: expect.objectContaining({
+            pdfExportError: "DOCX was generated from the current KP template, but PDF export is not configured."
+          })
+        })
+      })
+    });
+  });
+
   it("creates durable generated documents from the current uploaded template", async () => {
     const { client, calls } = createFakeClientWithCurrentTemplate();
     const templateBytes = createDocxPackageBytes({
       title: "Custom KP for {{ client_name }}",
       paragraphs: ["Project: {{ project_address }}"]
     });
+    const pdfConverter = createFakePdfConverter();
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      pdfConverter,
       objectStorage: {
         putObject: async () => undefined,
         getObject: async () => templateBytes,
@@ -266,7 +336,9 @@ describe("assistant generated document Prisma store", () => {
       title: "Custom KP for {{ client_name }}",
       paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}"]
     });
+    const pdfConverter = createFakePdfConverter();
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      pdfConverter,
       objectStorage: {
         putObject: async (input) => {
           uploads.push(input);
@@ -304,18 +376,18 @@ describe("assistant generated document Prisma store", () => {
         contentType: "application/pdf"
       })
     ]);
-    expect(new TextDecoder().decode(uploads[1].body)).toContain("%PDF-1.4");
     expect(uploads[0].body[0]).toBe(0x50);
     expect(uploads[0].body[1]).toBe(0x4b);
+    expect(pdfConverter.inputs).toHaveLength(1);
+    expect(pdfConverter.inputs[0]).toEqual(uploads[0].body);
     const docxText = new TextDecoder().decode(uploads[0].body);
     expect(docxText).toContain("word/document.xml");
     expect(docxText).toContain("Custom KP for Katya");
     expect(docxText).toContain("Project: Chiemseeufer 7");
     expect(docxText).toContain("BGF: 180");
     const pdfText = new TextDecoder().decode(uploads[1].body);
-    expect(pdfText).toContain("/MediaBox [0 0 595 842]");
-    expect(pdfText).toContain("Custom KP for Katya");
-    expect(pdfText).toContain("Project: Chiemseeufer 7");
+    expect(pdfText).toContain("%PDF-CONVERTED-FROM-DOCX");
+    expect(pdfText).not.toContain("/MediaBox [0 0 595 842]");
     expect(new TextDecoder().decode(uploads[1].body)).not.toContain("DRAFT:");
   });
 
@@ -326,7 +398,9 @@ describe("assistant generated document Prisma store", () => {
       title: "Custom KP for {{ client_name }}",
       paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}"]
     });
+    const pdfConverter = createFakePdfConverter("%PDF-DRAFT-FROM-DOCX");
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      pdfConverter,
       objectStorage: {
         putObject: async (input) => {
           uploads.push(input);
@@ -354,9 +428,9 @@ describe("assistant generated document Prisma store", () => {
       requestedByUserId: "user-1"
     });
 
-    const pdfText = new TextDecoder().decode(uploads[1].body);
     const docxText = new TextDecoder().decode(uploads[0].body);
-    expect(pdfText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
+    expect(new TextDecoder().decode(uploads[1].body)).toBe("%PDF-DRAFT-FROM-DOCX");
+    expect(pdfConverter.inputs[0]).toEqual(uploads[0].body);
     expect(docxText).toContain("Processed lead brief");
     expect(docxText).toContain("Generate draft KP for lead L-2026-002");
     expect(docxText).toContain("Prepared proposal text");
@@ -371,7 +445,9 @@ describe("assistant generated document Prisma store", () => {
       title: "Custom KP for {{ client_name }}",
       paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}", "Valid until {{ offer_valid_until }}"]
     });
+    const pdfConverter = createFakePdfConverter();
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      pdfConverter,
       objectStorage: {
         putObject: async (input) => {
           uploads.push(input);

@@ -1,7 +1,7 @@
 import type { GeneratedKpDocumentRecord, GenerateKpDocumentFromAssistantInput } from "@app/assistant";
 import { createGeneratedDocumentAttachmentMetadata } from "@app/core";
 import type { ObjectStorage } from "@app/core/storage";
-import { renderDocxTemplatePackageBytes } from "@app/documents";
+import { renderDocxTemplatePackageBytes, type DocxToPdfConverter } from "@app/documents";
 
 export class KpTemplateUnavailableError extends Error {
   constructor(message = "Current KP template is not available.") {
@@ -62,7 +62,7 @@ export type AssistantGeneratedDocumentStore = {
 
 export function createAssistantGeneratedDocumentPrismaStore(
   client: AssistantGeneratedDocumentPrismaClientLike,
-  options: { objectStorage?: ObjectStorage } = {}
+  options: { objectStorage?: ObjectStorage; pdfConverter?: DocxToPdfConverter } = {}
 ): AssistantGeneratedDocumentStore {
   return {
     async list(workspaceId) {
@@ -86,7 +86,18 @@ export function createAssistantGeneratedDocumentPrismaStore(
         prependParagraphs: createKpDraftNoticeParagraphs(input)
       });
       const docxBody = renderedTemplate.bytes;
-      const pdfBody = createMinimalPdfBytes(input.documentId, renderedTemplate.paragraphs);
+      let pdfBody: Uint8Array | undefined;
+      let pdfExportError: string | undefined;
+
+      if (options.pdfConverter) {
+        try {
+          pdfBody = await options.pdfConverter.convertDocxToPdf(docxBody);
+        } catch (error) {
+          pdfExportError = error instanceof Error ? error.message : "DOCX to PDF conversion failed.";
+        }
+      } else {
+        pdfExportError = "DOCX was generated from the current KP template, but PDF export is not configured.";
+      }
       const docxMetadata = createGeneratedDocumentAttachmentMetadata({
         workspaceId: input.workspaceId,
         documentId: input.documentId,
@@ -94,13 +105,15 @@ export function createAssistantGeneratedDocumentPrismaStore(
         format: "docx",
         createdByUserId: input.requestedByUserId
       });
-      const pdfMetadata = createGeneratedDocumentAttachmentMetadata({
-        workspaceId: input.workspaceId,
-        documentId: input.documentId,
-        documentType: input.documentType,
-        format: "pdf",
-        createdByUserId: input.requestedByUserId
-      });
+      const pdfMetadata =
+        pdfBody &&
+        createGeneratedDocumentAttachmentMetadata({
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+          documentType: input.documentType,
+          format: "pdf",
+          createdByUserId: input.requestedByUserId
+        });
 
       if (options.objectStorage) {
         await options.objectStorage.putObject({
@@ -108,19 +121,24 @@ export function createAssistantGeneratedDocumentPrismaStore(
           body: docxBody,
           contentType: docxMetadata.mimeType
         });
-        await options.objectStorage.putObject({
-          key: pdfMetadata.storageKey,
-          body: pdfBody,
-          contentType: pdfMetadata.mimeType
-        });
+        if (pdfBody && pdfMetadata) {
+          await options.objectStorage.putObject({
+            key: pdfMetadata.storageKey,
+            body: pdfBody,
+            contentType: pdfMetadata.mimeType
+          });
+        }
       }
 
       const docxAttachment = await client.attachment.create({
         data: { ...docxMetadata, sizeBytes: docxBody.byteLength }
       });
-      const pdfAttachment = await client.attachment.create({
-        data: { ...pdfMetadata, sizeBytes: pdfBody.byteLength }
-      });
+      const pdfAttachment =
+        pdfBody && pdfMetadata
+          ? await client.attachment.create({
+              data: { ...pdfMetadata, sizeBytes: pdfBody.byteLength }
+            })
+          : undefined;
       const row = await client.generatedDocument.create({
         data: {
           workspaceId: input.workspaceId,
@@ -130,7 +148,7 @@ export function createAssistantGeneratedDocumentPrismaStore(
           sourceType: "assistant",
           sourceId: input.sourceRecordIds[0] ?? input.documentId,
           docxAttachmentId: docxAttachment.id,
-          pdfAttachmentId: pdfAttachment.id,
+          pdfAttachmentId: pdfAttachment?.id,
           status: "generated",
           inputSnapshot: {
             documentId: input.documentId,
@@ -138,6 +156,7 @@ export function createAssistantGeneratedDocumentPrismaStore(
             sourceRecordIds: input.sourceRecordIds,
             renderedContent: renderedTemplate.paragraphs.join("\n"),
             templateName: currentTemplate.templateName,
+            ...(pdfExportError ? { pdfExportError } : {}),
             fieldSnapshot: input.fieldSnapshot
           },
           generatedByUserId: input.requestedByUserId
@@ -241,114 +260,6 @@ function createKpDraftNoticeParagraphs(input: GenerateKpDocumentFromAssistantInp
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-function createMinimalPdfBytes(documentId: string, paragraphs: string[]): Uint8Array {
-  const pageWidth = 595;
-  const pageHeight = 842;
-  const marginLeft = 56;
-  const marginTop = 64;
-  const marginBottom = 64;
-  const fontSize = 10;
-  const titleFontSize = 14;
-  const lineHeight = 15;
-  const maxChars = 92;
-  const lines = [`KP document ${documentId}`, ...paragraphs].flatMap((paragraph, index) =>
-    wrapPdfLine(toPdfSafeText(paragraph), index === 0 ? 76 : maxChars).map((line, lineIndex) => ({
-      text: line,
-      fontSize: index === 0 && lineIndex === 0 ? titleFontSize : fontSize
-    }))
-  );
-  const pages: Array<Array<{ text: string; fontSize: number }>> = [[]];
-  const maxLinesPerPage = Math.floor((pageHeight - marginTop - marginBottom) / lineHeight);
-
-  for (const line of lines) {
-    let page = pages[pages.length - 1];
-    if (!page || page.length >= maxLinesPerPage) {
-      page = [];
-      pages.push(page);
-    }
-    page.push(line);
-  }
-  const objects = [
-    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-    `2 0 obj << /Type /Pages /Kids [${pages.map((_page, index) => `${3 + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >> endobj`
-  ];
-  pages.forEach((page, pageIndex) => {
-    const pageObjectId = 3 + pageIndex * 2;
-    const contentObjectId = pageObjectId + 1;
-    const stream = [
-      "BT",
-      ...page.map((line, lineIndex) => {
-        const y = pageHeight - marginTop - lineIndex * lineHeight;
-        return `/F1 ${line.fontSize} Tf ${marginLeft} ${y} Td (${escapePdfText(line.text)}) Tj`;
-      }),
-      "ET"
-    ].join(" ");
-    objects.push(
-      `${pageObjectId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${
-        3 + pages.length * 2
-      } 0 R >> >> /Contents ${contentObjectId} 0 R >> endobj`,
-      `${contentObjectId} 0 obj << /Length ${stream.length} >> stream\n${stream}\nendstream endobj`
-    );
-  });
-  objects.push(`${3 + pages.length * 2} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`);
-  let body = "%PDF-1.4\n";
-  const offsets = [0];
-
-  for (const object of objects) {
-    offsets.push(body.length);
-    body += `${object}\n`;
-  }
-
-  const xrefOffset = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  body += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("");
-  body += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-
-  return new TextEncoder().encode(body);
-}
-
-function escapePdfText(value: string): string {
-  return value.replace(/[\\()]/g, "\\$&").replace(/\r?\n/g, " ");
-}
-
-function toPdfSafeText(value: string): string {
-  return value
-    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function wrapPdfLine(value: string, maxChars: number): string[] {
-  if (!value) {
-    return [];
-  }
-
-  const words = value.split(" ");
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length <= maxChars) {
-      current = next;
-      continue;
-    }
-    if (current) {
-      lines.push(current);
-    }
-    current = word.length > maxChars ? word.slice(0, maxChars) : word;
-  }
-
-  if (current) {
-    lines.push(current);
-  }
-
-  return lines;
 }
 
 function toGeneratedKpDocumentRecord(row: GeneratedDocumentRow): GeneratedKpDocumentRecord {
