@@ -1,6 +1,20 @@
+import { inflateRawSync } from "node:zlib";
+
 export type CreateDocxPackageInput = {
   title: string;
   paragraphs: string[];
+};
+
+export type RenderDocxTemplatePackageInput = {
+  templateBytes: Uint8Array;
+  values: Record<string, string | number | null | undefined>;
+  prependParagraphs?: string[];
+};
+
+export type RenderDocxTemplatePackageResult = {
+  bytes: Uint8Array;
+  usedPlaceholders: string[];
+  missingPlaceholders: string[];
 };
 
 type ZipEntry = {
@@ -10,6 +24,7 @@ type ZipEntry = {
 };
 
 const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 const crcTable = createCrcTable();
 
 export function createDocxPackageBytes(input: CreateDocxPackageInput): Uint8Array {
@@ -24,10 +39,45 @@ export function createDocxPackageBytes(input: CreateDocxPackageInput): Uint8Arra
   return createZipArchive(entries);
 }
 
+export function renderDocxTemplatePackageBytes(input: RenderDocxTemplatePackageInput): RenderDocxTemplatePackageResult {
+  const entries = readZipEntries(input.templateBytes);
+  const documentEntry = entries.find((entry) => entry.name === "word/document.xml");
+
+  if (!documentEntry) {
+    throw new Error("DOCX template is missing word/document.xml.");
+  }
+
+  const documentXml = textDecoder.decode(documentEntry.bytes);
+  const usedPlaceholders = parseDocumentPlaceholders(documentXml);
+  const missingPlaceholders: string[] = [];
+  const renderedXml = documentXml.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_match, rawName: string) => {
+    const name = rawName.trim();
+    const value = input.values[name];
+
+    if (value === null || value === undefined || String(value).trim().length === 0) {
+      missingPlaceholders.push(name);
+      return "";
+    }
+
+    return escapeXml(String(value));
+  });
+  const renderedWithNotice = prependDocumentParagraphs(renderedXml, input.prependParagraphs ?? []);
+
+  const renderedEntries = entries.map((entry) =>
+    entry.name === "word/document.xml" ? toZipEntry(entry.name, renderedWithNotice) : toBinaryZipEntry(entry.name, entry.bytes)
+  );
+
+  return {
+    bytes: createZipArchive(renderedEntries),
+    usedPlaceholders,
+    missingPlaceholders: Array.from(new Set(missingPlaceholders)).sort()
+  };
+}
+
 function createDocumentXml(input: CreateDocxPackageInput): string {
   const paragraphs = [input.title, ...input.paragraphs]
     .filter((paragraph) => paragraph.trim().length > 0)
-    .map((paragraph) => `<w:p><w:r><w:t>${escapeXml(paragraph)}</w:t></w:r></w:p>`)
+    .map(createParagraphXml)
     .join("");
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -62,6 +112,10 @@ function createEmptyRelationshipsXml(): string {
 
 function toZipEntry(name: string, content: string): ZipEntry {
   const bytes = textEncoder.encode(content);
+  return toBinaryZipEntry(name, bytes);
+}
+
+function toBinaryZipEntry(name: string, bytes: Uint8Array): ZipEntry {
   return { name, bytes, crc32: calculateCrc32(bytes) };
 }
 
@@ -103,6 +157,61 @@ function createLocalFileHeader(entry: ZipEntry): Uint8Array {
   bytes.set(nameBytes, 30);
 
   return bytes;
+}
+
+function readZipEntries(bytes: Uint8Array): ZipEntry[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const endOffset = findEndOfCentralDirectory(view);
+  const entryCount = view.getUint16(endOffset + 10, true);
+  let cursor = view.getUint32(endOffset + 16, true);
+  const entries: ZipEntry[] = [];
+
+  for (let index = 0; index < entryCount; index += 1) {
+    if (view.getUint32(cursor, true) !== 0x02014b50) {
+      throw new Error("Invalid DOCX central directory.");
+    }
+
+    const compressionMethod = view.getUint16(cursor + 10, true);
+    const compressedSize = view.getUint32(cursor + 20, true);
+    const fileNameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localHeaderOffset = view.getUint32(cursor + 42, true);
+    const nameBytes = bytes.slice(cursor + 46, cursor + 46 + fileNameLength);
+    const name = textDecoder.decode(nameBytes);
+    const localFileNameLength = view.getUint16(localHeaderOffset + 26, true);
+    const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
+    const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
+    const compressedBytes = bytes.slice(dataStart, dataStart + compressedSize);
+    const content = inflateZipEntry(compressionMethod, compressedBytes);
+
+    entries.push(toBinaryZipEntry(name, content));
+    cursor += 46 + fileNameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
+function inflateZipEntry(compressionMethod: number, compressedBytes: Uint8Array): Uint8Array {
+  if (compressionMethod === 0) {
+    return compressedBytes;
+  }
+
+  if (compressionMethod === 8) {
+    return new Uint8Array(inflateRawSync(compressedBytes));
+  }
+
+  throw new Error(`Unsupported DOCX ZIP compression method: ${compressionMethod}.`);
+}
+
+function findEndOfCentralDirectory(view: DataView): number {
+  for (let offset = view.byteLength - 22; offset >= 0; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      return offset;
+    }
+  }
+
+  throw new Error("Invalid DOCX ZIP package.");
 }
 
 function createCentralDirectoryHeader(entry: ZipEntry, localHeaderOffset: number): Uint8Array {
@@ -162,6 +271,28 @@ function concatUint8Arrays(parts: Uint8Array[]): Uint8Array {
   }
 
   return bytes;
+}
+
+function parseDocumentPlaceholders(documentXml: string): string[] {
+  const matches = documentXml.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g);
+  return Array.from(new Set(Array.from(matches, (match) => match[1].trim()))).sort();
+}
+
+function prependDocumentParagraphs(documentXml: string, paragraphs: string[]): string {
+  const noticeXml = paragraphs
+    .filter((paragraph) => paragraph.trim().length > 0)
+    .map(createParagraphXml)
+    .join("");
+
+  if (!noticeXml) {
+    return documentXml;
+  }
+
+  return documentXml.replace(/<w:body>/, `<w:body>${noticeXml}`);
+}
+
+function createParagraphXml(paragraph: string): string {
+  return `<w:p><w:r><w:t>${escapeXml(paragraph)}</w:t></w:r></w:p>`;
 }
 
 function calculateCrc32(bytes: Uint8Array): number {

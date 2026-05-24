@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDocxPackageBytes } from "./docx-package";
+import { createDocxPackageBytes, renderDocxTemplatePackageBytes } from "./docx-package";
 
 describe("DOCX package generation", () => {
   it("creates a Word-compatible OOXML zip package from plain paragraphs", () => {
@@ -26,5 +26,50 @@ describe("DOCX package generation", () => {
 
     expect(text).toContain("A&amp;B");
     expect(text).toContain("Client &lt;private&gt; needs 120 m2 &amp; ROI input");
+  });
+
+  it("renders placeholders inside an uploaded DOCX package", () => {
+    const templateBytes = createDocxPackageBytes({
+      title: "KP for {{ client_name }}",
+      paragraphs: ["Address: {{ project_address }}", "BGF: {{ bgf }}"]
+    });
+
+    const result = renderDocxTemplatePackageBytes({
+      templateBytes,
+      values: {
+        client_name: "Katya & Partner",
+        project_address: "Chiemseeufer 7",
+        bgf: 180
+      }
+    });
+    const text = new TextDecoder().decode(result.bytes);
+
+    expect(result.usedPlaceholders).toEqual(["bgf", "client_name", "project_address"]);
+    expect(result.missingPlaceholders).toEqual([]);
+    expect(text).toContain("KP for Katya &amp; Partner");
+    expect(text).toContain("Address: Chiemseeufer 7");
+    expect(text).toContain("BGF: 180");
+    expect(text).not.toContain("{{ client_name }}");
+  });
+
+  it("prepends draft paragraphs and reports missing placeholders", () => {
+    const templateBytes = createDocxPackageBytes({
+      title: "KP for {{ client_name }}",
+      paragraphs: ["Address: {{ project_address }}"]
+    });
+
+    const result = renderDocxTemplatePackageBytes({
+      templateBytes,
+      values: {
+        client_name: "Katya",
+        project_address: null
+      },
+      prependParagraphs: ["DRAFT: missing project address", "Processed lead brief"]
+    });
+    const text = new TextDecoder().decode(result.bytes);
+
+    expect(result.missingPlaceholders).toEqual(["project_address"]);
+    expect(text.indexOf("DRAFT: missing project address")).toBeLessThan(text.indexOf("KP for Katya"));
+    expect(text).toContain("Processed lead brief");
   });
 });

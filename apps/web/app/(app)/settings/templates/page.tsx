@@ -6,6 +6,7 @@ import { listDocumentTemplates } from "./template-store";
 export default async function TemplatesPage() {
   const session = await getWorkspaceSession();
   const templates = await listDocumentTemplates(session.workspaceId);
+  const currentKpTemplateId = templates.find((template) => template.documentType === "kp" && template.isActive)?.id;
 
   return (
     <section className="grid gap-5">
@@ -24,15 +25,20 @@ export default async function TemplatesPage() {
                   {template.documentType.toUpperCase()} · {template.language.toUpperCase()} · v{template.version ?? "-"}
                 </p>
               </div>
-              <span
-                className={
-                  template.validationStatus === "valid"
-                    ? "rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
-                    : "rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
-                }
-              >
-                {template.validationStatus === "valid" ? "Valid" : "Needs attention"}
-              </span>
+              <div className="flex flex-wrap gap-2">
+                {template.id === currentKpTemplateId ? (
+                  <span className="rounded-md bg-foreground px-2 py-1 text-xs font-semibold text-white">Current</span>
+                ) : null}
+                <span
+                  className={
+                    template.validationStatus === "valid"
+                      ? "rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                      : "rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700"
+                  }
+                >
+                  {template.validationStatus === "valid" ? "Valid" : "Needs attention"}
+                </span>
+              </div>
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">

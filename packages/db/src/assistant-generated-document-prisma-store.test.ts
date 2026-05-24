@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createDocxPackageBytes } from "@app/documents";
 import {
   createAssistantGeneratedDocumentPrismaStore,
   type AssistantGeneratedDocumentPrismaClientLike
@@ -62,6 +63,39 @@ function createFakeClient() {
   };
 
   return { client, calls };
+}
+
+function createFakeClientWithCurrentTemplate() {
+  const fake = createFakeClient();
+  const client: AssistantGeneratedDocumentPrismaClientLike = {
+    ...fake.client,
+    attachment: {
+      ...fake.client.attachment!,
+      findFirst: (args) => {
+        fake.calls.push({ method: "attachment.findFirst", args });
+        return Promise.resolve({
+          id: "template-attachment-1",
+          workspaceId: "workspace-1",
+          storageKey: "workspaces/workspace-1/templates/kp/KP_Template_LP1-4.docx",
+          fileName: "KP_Template_LP1-4.docx",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        });
+      }
+    },
+    documentTemplate: {
+      findFirst: (args) => {
+        fake.calls.push({ method: "documentTemplate.findFirst", args });
+        return Promise.resolve({
+          id: "template-kp-current",
+          name: "KP_Template_LP1-4",
+          currentVersionId: "template-kp-current-v1",
+          versions: [{ id: "template-kp-current-v1", attachmentId: "template-attachment-1", version: 1 }]
+        });
+      }
+    }
+  };
+
+  return { client, calls: fake.calls };
 }
 
 describe("assistant generated document Prisma store", () => {
@@ -172,6 +206,7 @@ describe("assistant generated document Prisma store", () => {
             rawInput: "Generate KP for lead L-2026-001",
             sourceRecordIds: ["L-2026-001"],
             renderedContent: "Commercial proposal for L-2026-001",
+            templateName: "Assistant KP template",
             fieldSnapshot: {
               clientName: "Katya",
               requestType: "new_build",
@@ -279,5 +314,83 @@ describe("assistant generated document Prisma store", () => {
     expect(docxText).toContain("Prepared proposal text");
     expect(docxText).toContain("DRAFT: This commercial proposal is missing required data: projectAddress, bgfM2.");
     expect(docxText).not.toContain("Project address: null");
+  });
+
+  it("uses the latest uploaded KP template when one is available", async () => {
+    const { client, calls } = createFakeClientWithCurrentTemplate();
+    const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const templateBytes = createDocxPackageBytes({
+      title: "Custom KP for {{ client_name }}",
+      paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}", "Valid until {{ offer_valid_until }}"]
+    });
+    const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      objectStorage: {
+        putObject: async (input) => {
+          uploads.push(input);
+        },
+        getObject: async (key) => {
+          expect(key).toBe("workspaces/workspace-1/templates/kp/KP_Template_LP1-4.docx");
+          return templateBytes;
+        },
+        deleteObject: async () => undefined
+      }
+    });
+
+    await store.create({
+      workspaceId: "workspace-1",
+      documentId: "D-20260521-message-4",
+      documentType: "kp",
+      sourceRecordIds: ["L-2026-001"],
+      rawInput: "Generate KP for lead L-2026-001",
+      fieldSnapshot: {
+        clientName: "Katya",
+        requestType: "new_build",
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: "katya@example.com",
+        phone: "+49 170 000",
+        missingData: []
+      },
+      requestedByUserId: "user-1"
+    });
+
+    const docxText = new TextDecoder().decode(uploads[0].body);
+    expect(calls[0]).toEqual({
+      method: "documentTemplate.findFirst",
+      args: {
+        where: { workspaceId: "workspace-1", documentType: "kp", isActive: true },
+        orderBy: { createdAt: "desc" },
+        include: {
+          versions: {
+            orderBy: { version: "desc" },
+            take: 1
+          }
+        }
+      }
+    });
+    expect(calls[1]).toEqual({
+      method: "attachment.findFirst",
+      args: {
+        where: {
+          id: "template-attachment-1",
+          workspaceId: "workspace-1"
+        }
+      }
+    });
+    expect(docxText).toContain("Custom KP for Katya");
+    expect(docxText).toContain("Project: Chiemseeufer 7");
+    expect(docxText).toContain("BGF: 180");
+    expect(calls.find((call) => call.method === "create")).toEqual({
+      method: "create",
+      args: expect.objectContaining({
+        data: expect.objectContaining({
+          templateId: "template-kp-current",
+          templateVersionId: "template-kp-current-v1",
+          inputSnapshot: expect.objectContaining({
+            templateName: "KP_Template_LP1-4"
+          })
+        })
+      })
+    });
   });
 });
