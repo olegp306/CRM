@@ -106,6 +106,7 @@ export async function sendTelegramMessage(config: {
   chatId: string;
   text: string;
   replyMarkup?: unknown;
+  parseMode?: "HTML";
   fetchImpl?: typeof fetch;
 }): Promise<{ messageId?: number }> {
   const fetchImpl = config.fetchImpl ?? fetch;
@@ -115,6 +116,7 @@ export async function sendTelegramMessage(config: {
     body: JSON.stringify({
       chat_id: config.chatId,
       text: config.text,
+      ...(config.parseMode ? { parse_mode: config.parseMode } : {}),
       ...(config.replyMarkup ? { reply_markup: config.replyMarkup } : {})
     })
   });
