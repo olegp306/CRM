@@ -400,8 +400,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
       }
     });
-    const generatedDocument = config.generateKpDocument
-      ? await config.generateKpDocument({
+    let generatedDocument: TelegramGeneratedKpDocumentRecord | null = null;
+    let generatedDocumentError: string | undefined;
+    if (config.generateKpDocument) {
+      try {
+        generatedDocument = await config.generateKpDocument({
           workspaceId: config.workspaceId,
           documentId: createTelegramKpDocumentId(message),
           documentType: "kp",
@@ -409,8 +412,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           rawInput: session.draft.rawInput,
           fieldSnapshot: createTelegramKpFieldSnapshot(session.draft),
           requestedByUserId: `telegram:${message.chatId}`
-        })
-      : null;
+        });
+      } catch (error) {
+        generatedDocumentError = createTelegramKpGenerationErrorMessage(error);
+        console.warn(error instanceof Error ? error.message : error);
+      }
+    }
     if (generatedDocument && client.lead.update && created.id) {
       await client.lead.update({
         where: { id: created.id },
@@ -448,7 +455,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         status: created.status,
         draft: session.draft,
         generatedDocumentId: generatedDocument?.documentId,
-        generatedDocumentDelivered
+        generatedDocumentDelivered,
+        generatedDocumentError
       }),
       parseMode: "HTML",
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
@@ -758,13 +766,15 @@ function createTelegramLeadConfirmation({
   status,
   draft,
   generatedDocumentId,
-  generatedDocumentDelivered
+  generatedDocumentDelivered,
+  generatedDocumentError
 }: {
   leadId: string;
   status: string;
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
   generatedDocumentId?: string;
   generatedDocumentDelivered?: boolean;
+  generatedDocumentError?: string;
 }): string {
   const fields = [
     ["Lead", leadId],
@@ -773,6 +783,7 @@ function createTelegramLeadConfirmation({
     ["Pricing branch", createTelegramPricingBranchLabel(draft)],
     ["KP document", generatedDocumentId],
     ["KP file", generatedDocumentId ? (generatedDocumentDelivered ? "sent to Telegram" : "saved in CRM") : ""],
+    ["KP generation", generatedDocumentError],
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
     ["Project address", draft.projectAddress],
@@ -789,6 +800,20 @@ function createTelegramLeadConfirmation({
     "",
     ...fields.map(([label, value]) => `<b>${escapeHtml(String(label))}</b>: ${escapeHtml(String(value))}`)
   ].join("\n");
+}
+
+function createTelegramKpGenerationErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/template/i.test(message)) {
+    return "lead created, but KP was not generated because the current KP template is missing or unavailable in Settings.";
+  }
+
+  if (/missing|required/i.test(message)) {
+    return "lead created, but KP was not generated because required data is missing.";
+  }
+
+  return "lead created, but KP was not generated because document generation failed.";
 }
 function createTelegramKpDocumentId(message: AllowedTelegramMessageBatch): string {
   return `D-telegram-${message.chatId}-${message.sourceMessageIds.at(-1) ?? message.messageId}`;

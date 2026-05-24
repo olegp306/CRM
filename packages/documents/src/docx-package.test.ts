@@ -46,6 +46,7 @@ describe("DOCX package generation", () => {
 
     expect(result.usedPlaceholders).toEqual(["bgf", "client_name", "project_address"]);
     expect(result.missingPlaceholders).toEqual([]);
+    expect(result.paragraphs).toEqual(["KP for Katya & Partner", "Address: Chiemseeufer 7", "BGF: 180"]);
     expect(text).toContain("KP for Katya &amp; Partner");
     expect(text).toContain("Address: Chiemseeufer 7");
     expect(text).toContain("BGF: 180");

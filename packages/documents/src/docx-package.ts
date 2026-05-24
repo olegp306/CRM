@@ -15,6 +15,7 @@ export type RenderDocxTemplatePackageResult = {
   bytes: Uint8Array;
   usedPlaceholders: string[];
   missingPlaceholders: string[];
+  paragraphs: string[];
 };
 
 type ZipEntry = {
@@ -70,7 +71,8 @@ export function renderDocxTemplatePackageBytes(input: RenderDocxTemplatePackageI
   return {
     bytes: createZipArchive(renderedEntries),
     usedPlaceholders,
-    missingPlaceholders: Array.from(new Set(missingPlaceholders)).sort()
+    missingPlaceholders: Array.from(new Set(missingPlaceholders)).sort(),
+    paragraphs: extractDocumentParagraphText(renderedWithNotice)
   };
 }
 
@@ -291,6 +293,16 @@ function prependDocumentParagraphs(documentXml: string, paragraphs: string[]): s
   return documentXml.replace(/<w:body>/, `<w:body>${noticeXml}`);
 }
 
+function extractDocumentParagraphText(documentXml: string): string[] {
+  const paragraphs = documentXml.match(/<w:p[\s\S]*?<\/w:p>/g) ?? [];
+  return paragraphs
+    .map((paragraph) =>
+      Array.from(paragraph.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g), (match) => unescapeXml(match[1] ?? "")).join("")
+    )
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
 function createParagraphXml(paragraph: string): string {
   return `<w:p><w:r><w:t>${escapeXml(paragraph)}</w:t></w:r></w:p>`;
 }
@@ -324,4 +336,13 @@ function escapeXml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+function unescapeXml(value: string): string {
+  return value
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
 }
