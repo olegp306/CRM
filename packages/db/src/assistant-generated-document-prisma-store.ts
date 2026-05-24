@@ -1,11 +1,14 @@
 import type { GeneratedKpDocumentRecord, GenerateKpDocumentFromAssistantInput } from "@app/assistant";
 import { createGeneratedDocumentAttachmentMetadata } from "@app/core";
 import type { ObjectStorage } from "@app/core/storage";
-import { createDocxPackageBytes, renderDocxTemplatePackageBytes, renderDocumentTemplate } from "@app/documents";
+import { renderDocxTemplatePackageBytes } from "@app/documents";
 
-const ASSISTANT_KP_TEMPLATE_ID = "assistant-kp-template";
-const ASSISTANT_KP_TEMPLATE_VERSION_ID = "assistant-kp-template-v1";
-const ASSISTANT_KP_TEMPLATE = "Commercial proposal for {{source_id}}";
+export class KpTemplateUnavailableError extends Error {
+  constructor(message = "Current KP template is not available.") {
+    super(message);
+    this.name = "KpTemplateUnavailableError";
+  }
+}
 
 type GeneratedDocumentRow = {
   id: string;
@@ -76,22 +79,14 @@ export function createAssistantGeneratedDocumentPrismaStore(
         throw new Error("Attachment storage is not available for generated documents.");
       }
 
-      const rendered = renderDocumentTemplate(ASSISTANT_KP_TEMPLATE, {
-        source_id: input.sourceRecordIds[0] ?? "assistant request"
-      });
-      const paragraphs = createKpDocumentParagraphs(input, rendered.content);
       const currentTemplate = await resolveCurrentKpTemplate(client, options.objectStorage, input.workspaceId, input.documentType);
-      const docxBody = currentTemplate
-        ? renderDocxTemplatePackageBytes({
-            templateBytes: currentTemplate.bytes,
-            values: createKpTemplateValues(input),
-            prependParagraphs: createKpDraftNoticeParagraphs(input)
-          }).bytes
-        : createDocxPackageBytes({
-            title: `KP document ${input.documentId}`,
-            paragraphs
-          });
-      const pdfBody = createMinimalPdfBytes(input.documentId, paragraphs);
+      const renderedTemplate = renderDocxTemplatePackageBytes({
+        templateBytes: currentTemplate.bytes,
+        values: createKpTemplateValues(input),
+        prependParagraphs: createKpDraftNoticeParagraphs(input)
+      });
+      const docxBody = renderedTemplate.bytes;
+      const pdfBody = createMinimalPdfBytes(input.documentId, renderedTemplate.paragraphs);
       const docxMetadata = createGeneratedDocumentAttachmentMetadata({
         workspaceId: input.workspaceId,
         documentId: input.documentId,
@@ -130,8 +125,8 @@ export function createAssistantGeneratedDocumentPrismaStore(
         data: {
           workspaceId: input.workspaceId,
           documentType: input.documentType,
-          templateId: currentTemplate?.templateId ?? ASSISTANT_KP_TEMPLATE_ID,
-          templateVersionId: currentTemplate?.templateVersionId ?? ASSISTANT_KP_TEMPLATE_VERSION_ID,
+          templateId: currentTemplate.templateId,
+          templateVersionId: currentTemplate.templateVersionId,
           sourceType: "assistant",
           sourceId: input.sourceRecordIds[0] ?? input.documentId,
           docxAttachmentId: docxAttachment.id,
@@ -141,8 +136,8 @@ export function createAssistantGeneratedDocumentPrismaStore(
             documentId: input.documentId,
             rawInput: input.rawInput,
             sourceRecordIds: input.sourceRecordIds,
-            renderedContent: rendered.content,
-            templateName: currentTemplate?.templateName ?? "Assistant KP template",
+            renderedContent: renderedTemplate.paragraphs.join("\n"),
+            templateName: currentTemplate.templateName,
             fieldSnapshot: input.fieldSnapshot
           },
           generatedByUserId: input.requestedByUserId
@@ -159,9 +154,9 @@ async function resolveCurrentKpTemplate(
   objectStorage: ObjectStorage | undefined,
   workspaceId: string,
   documentType: string
-): Promise<{ templateId: string; templateVersionId: string; templateName: string; bytes: Uint8Array } | null> {
+): Promise<{ templateId: string; templateVersionId: string; templateName: string; bytes: Uint8Array }> {
   if (!client.documentTemplate || !client.attachment?.findFirst || !objectStorage) {
-    return null;
+    throw new KpTemplateUnavailableError("Current KP template cannot be loaded because template storage is not configured.");
   }
 
   const template = await client.documentTemplate.findFirst({
@@ -177,7 +172,7 @@ async function resolveCurrentKpTemplate(
   const version = template?.versions?.[0];
 
   if (!template || !version) {
-    return null;
+    throw new KpTemplateUnavailableError("No current KP template is uploaded in Settings > Templates.");
   }
 
   const attachment = await client.attachment.findFirst({
@@ -188,7 +183,7 @@ async function resolveCurrentKpTemplate(
   });
 
   if (!attachment) {
-    throw new Error(`Current ${documentType} template attachment is missing.`);
+    throw new KpTemplateUnavailableError(`Current ${documentType} template attachment is missing.`);
   }
 
   return {
@@ -229,31 +224,6 @@ function createKpTemplateValues(input: GenerateKpDocumentFromAssistantInput): Re
   };
 }
 
-function createKpDocumentParagraphs(input: GenerateKpDocumentFromAssistantInput, renderedContent: string): string[] {
-  const draftNotice = createKpDraftNoticeParagraphs(input);
-  const fields = input.fieldSnapshot;
-  const missingData = fields?.missingData?.filter((field) => field.trim().length > 0) ?? [];
-  const fieldParagraphs = [
-    ["Client", fields?.clientName],
-    ["Request type", fields?.requestType],
-    ["Project address", fields?.projectAddress],
-    ["BGF m2", fields?.bgfM2 === null || fields?.bgfM2 === undefined ? "" : String(fields.bgfM2)],
-    ["Email", fields?.email],
-    ["Phone", fields?.phone],
-    ["Missing data", missingData.length > 0 ? missingData.join(", ") : ""]
-  ]
-    .filter(([, value]) => String(value ?? "").trim().length > 0)
-    .map(([label, value]) => `${label}: ${value}`);
-
-  return [
-    ...draftNotice,
-    renderedContent,
-    ...fieldParagraphs,
-    `Source records: ${input.sourceRecordIds.length > 0 ? input.sourceRecordIds.join(", ") : "assistant request"}`,
-    `Source material: ${input.rawInput}`
-  ];
-}
-
 function createKpDraftNoticeParagraphs(input: GenerateKpDocumentFromAssistantInput): string[] {
   const fields = input.fieldSnapshot;
   const missingData = fields?.missingData?.filter((field) => field.trim().length > 0) ?? [];
@@ -274,18 +244,55 @@ function formatDate(date: Date): string {
 }
 
 function createMinimalPdfBytes(documentId: string, paragraphs: string[]): Uint8Array {
-  const lines = [`KP document ${documentId}`, ...paragraphs].map(escapePdfText);
-  const lineOps = lines
-    .map((line, index) => `${index === 0 ? "/F1 14 Tf" : "/F1 10 Tf"} (${line}) Tj 0 -22 Td`)
-    .join(" ");
-  const stream = `BT 50 780 Td ${lineOps} ET`;
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const marginLeft = 56;
+  const marginTop = 64;
+  const marginBottom = 64;
+  const fontSize = 10;
+  const titleFontSize = 14;
+  const lineHeight = 15;
+  const maxChars = 92;
+  const lines = [`KP document ${documentId}`, ...paragraphs].flatMap((paragraph, index) =>
+    wrapPdfLine(toPdfSafeText(paragraph), index === 0 ? 76 : maxChars).map((line, lineIndex) => ({
+      text: line,
+      fontSize: index === 0 && lineIndex === 0 ? titleFontSize : fontSize
+    }))
+  );
+  const pages: Array<Array<{ text: string; fontSize: number }>> = [[]];
+  const maxLinesPerPage = Math.floor((pageHeight - marginTop - marginBottom) / lineHeight);
+
+  for (const line of lines) {
+    let page = pages[pages.length - 1];
+    if (!page || page.length >= maxLinesPerPage) {
+      page = [];
+      pages.push(page);
+    }
+    page.push(line);
+  }
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
-    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
-    `5 0 obj << /Length ${stream.length} >> stream\n${stream}\nendstream endobj`
+    `2 0 obj << /Type /Pages /Kids [${pages.map((_page, index) => `${3 + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >> endobj`
   ];
+  pages.forEach((page, pageIndex) => {
+    const pageObjectId = 3 + pageIndex * 2;
+    const contentObjectId = pageObjectId + 1;
+    const stream = [
+      "BT",
+      ...page.map((line, lineIndex) => {
+        const y = pageHeight - marginTop - lineIndex * lineHeight;
+        return `/F1 ${line.fontSize} Tf ${marginLeft} ${y} Td (${escapePdfText(line.text)}) Tj`;
+      }),
+      "ET"
+    ].join(" ");
+    objects.push(
+      `${pageObjectId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${
+        3 + pages.length * 2
+      } 0 R >> >> /Contents ${contentObjectId} 0 R >> endobj`,
+      `${contentObjectId} 0 obj << /Length ${stream.length} >> stream\n${stream}\nendstream endobj`
+    );
+  });
+  objects.push(`${3 + pages.length * 2} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`);
   let body = "%PDF-1.4\n";
   const offsets = [0];
 
@@ -306,7 +313,42 @@ function createMinimalPdfBytes(documentId: string, paragraphs: string[]): Uint8A
 }
 
 function escapePdfText(value: string): string {
-  return value.replace(/[\\()]/g, "\\$&").replace(/\r?\n/g, " ").slice(0, 220);
+  return value.replace(/[\\()]/g, "\\$&").replace(/\r?\n/g, " ");
+}
+
+function toPdfSafeText(value: string): string {
+  return value
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "?")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function wrapPdfLine(value: string, maxChars: number): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const words = value.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+    if (current) {
+      lines.push(current);
+    }
+    current = word.length > maxChars ? word.slice(0, maxChars) : word;
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
 }
 
 function toGeneratedKpDocumentRecord(row: GeneratedDocumentRow): GeneratedKpDocumentRecord {

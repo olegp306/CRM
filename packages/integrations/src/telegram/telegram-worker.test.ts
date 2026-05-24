@@ -718,6 +718,71 @@ describe("telegram worker", () => {
     expect(finalMessageBody.text).toContain("<b>KP file</b>: saved in CRM");
   });
 
+  it("confirms the lead with a clear KP error when template generation fails", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" })),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Katya",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Ready KP lead",
+        suggestedReply: "Ready."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 24,
+            message: {
+              message_id: 16,
+              date: 1779297200,
+              chat: { id: 12345 },
+              text: "Katya, new build, Chiemseeufer 7, BGF 180"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          generateKpDocument: async () => {
+            throw new Error("No current KP template is uploaded in Settings > Templates.");
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 24 });
+
+    const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
+    expect(finalMessageBody.text).toContain("<b>Lead</b>: L-2026-002");
+    expect(finalMessageBody.text).toContain("<b>KP generation</b>: lead created, but KP was not generated because the current KP template is missing");
+  });
+
   it("treats a reply to the bot draft message as an explicit update to that draft", async () => {
     const created: unknown[] = [];
     const client = {

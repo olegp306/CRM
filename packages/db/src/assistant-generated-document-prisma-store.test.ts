@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDocxPackageBytes } from "@app/documents";
 import {
   createAssistantGeneratedDocumentPrismaStore,
+  KpTemplateUnavailableError,
   type AssistantGeneratedDocumentPrismaClientLike
 } from "./assistant-generated-document-prisma-store";
 
@@ -136,9 +137,44 @@ describe("assistant generated document Prisma store", () => {
     });
   });
 
-  it("creates durable generated documents from assistant execution input", async () => {
-    const { client, calls } = createFakeClient();
+  it("requires an uploaded current KP template before generating documents", async () => {
+    const { client } = createFakeClient();
     const store = createAssistantGeneratedDocumentPrismaStore(client);
+
+    await expect(
+      store.create({
+        workspaceId: "workspace-1",
+        documentId: "D-20260521-message-4",
+        documentType: "kp",
+        sourceRecordIds: ["L-2026-001"],
+        rawInput: "Generate KP for lead L-2026-001",
+        fieldSnapshot: {
+          clientName: "Katya",
+          requestType: "new_build",
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          email: "katya@example.com",
+          phone: "+49 170 000",
+          missingData: []
+        },
+        requestedByUserId: "user-1"
+      })
+    ).rejects.toBeInstanceOf(KpTemplateUnavailableError);
+  });
+
+  it("creates durable generated documents from the current uploaded template", async () => {
+    const { client, calls } = createFakeClientWithCurrentTemplate();
+    const templateBytes = createDocxPackageBytes({
+      title: "Custom KP for {{ client_name }}",
+      paragraphs: ["Project: {{ project_address }}"]
+    });
+    const store = createAssistantGeneratedDocumentPrismaStore(client, {
+      objectStorage: {
+        putObject: async () => undefined,
+        getObject: async () => templateBytes,
+        deleteObject: async () => undefined
+      }
+    });
 
     await store.create({
       workspaceId: "workspace-1",
@@ -158,7 +194,7 @@ describe("assistant generated document Prisma store", () => {
       requestedByUserId: "user-1"
     });
 
-    expect(calls[0]).toEqual({
+    expect(calls[2]).toEqual({
       method: "attachment.create",
       args: {
         data: {
@@ -173,7 +209,7 @@ describe("assistant generated document Prisma store", () => {
         }
       }
     });
-    expect(calls[1]).toEqual({
+    expect(calls[3]).toEqual({
       method: "attachment.create",
       args: {
         data: {
@@ -188,14 +224,14 @@ describe("assistant generated document Prisma store", () => {
         }
       }
     });
-    expect(calls[2]).toEqual({
+    expect(calls[4]).toEqual({
       method: "create",
       args: {
         data: {
           workspaceId: "workspace-1",
           documentType: "kp",
-          templateId: "assistant-kp-template",
-          templateVersionId: "assistant-kp-template-v1",
+          templateId: "template-kp-current",
+          templateVersionId: "template-kp-current-v1",
           sourceType: "assistant",
           sourceId: "L-2026-001",
           docxAttachmentId: "attachment-docx-1",
@@ -205,8 +241,8 @@ describe("assistant generated document Prisma store", () => {
             documentId: "D-20260521-message-4",
             rawInput: "Generate KP for lead L-2026-001",
             sourceRecordIds: ["L-2026-001"],
-            renderedContent: "Commercial proposal for L-2026-001",
-            templateName: "Assistant KP template",
+            renderedContent: "Custom KP for Katya\nProject: Chiemseeufer 7",
+            templateName: "KP_Template_LP1-4",
             fieldSnapshot: {
               clientName: "Katya",
               requestType: "new_build",
@@ -223,15 +259,19 @@ describe("assistant generated document Prisma store", () => {
     });
   });
 
-  it("writes generated document artifacts to object storage when configured", async () => {
-    const { client } = createFakeClient();
+  it("writes generated document artifacts rendered from the uploaded template to object storage", async () => {
+    const { client } = createFakeClientWithCurrentTemplate();
     const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const templateBytes = createDocxPackageBytes({
+      title: "Custom KP for {{ client_name }}",
+      paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}"]
+    });
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
       objectStorage: {
         putObject: async (input) => {
           uploads.push(input);
         },
-        getObject: async () => new Uint8Array(),
+        getObject: async () => templateBytes,
         deleteObject: async () => undefined
       }
     });
@@ -269,21 +309,29 @@ describe("assistant generated document Prisma store", () => {
     expect(uploads[0].body[1]).toBe(0x4b);
     const docxText = new TextDecoder().decode(uploads[0].body);
     expect(docxText).toContain("word/document.xml");
-    expect(docxText).toContain("Client: Katya");
-    expect(docxText).toContain("Project address: Chiemseeufer 7");
-    expect(docxText).toContain("BGF m2: 180");
+    expect(docxText).toContain("Custom KP for Katya");
+    expect(docxText).toContain("Project: Chiemseeufer 7");
+    expect(docxText).toContain("BGF: 180");
+    const pdfText = new TextDecoder().decode(uploads[1].body);
+    expect(pdfText).toContain("/MediaBox [0 0 595 842]");
+    expect(pdfText).toContain("Custom KP for Katya");
+    expect(pdfText).toContain("Project: Chiemseeufer 7");
     expect(new TextDecoder().decode(uploads[1].body)).not.toContain("DRAFT:");
   });
 
   it("marks generated KP artifacts as drafts when required data is missing", async () => {
-    const { client } = createFakeClient();
+    const { client } = createFakeClientWithCurrentTemplate();
     const uploads: Array<{ key: string; body: Uint8Array; contentType: string }> = [];
+    const templateBytes = createDocxPackageBytes({
+      title: "Custom KP for {{ client_name }}",
+      paragraphs: ["Project: {{ project_address }}", "BGF: {{ bgf }}"]
+    });
     const store = createAssistantGeneratedDocumentPrismaStore(client, {
       objectStorage: {
         putObject: async (input) => {
           uploads.push(input);
         },
-        getObject: async () => new Uint8Array(),
+        getObject: async () => templateBytes,
         deleteObject: async () => undefined
       }
     });
