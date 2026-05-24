@@ -558,7 +558,7 @@ describe("telegram worker", () => {
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
       { text: "Open in CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
       { text: "Open KP PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
-      { text: "Open KP DOCX", url: "https://files.example.com/kp.docx" }
+      { text: "Download KP DOCX", url: "https://files.example.com/kp.docx" }
     ]);
     expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
       urls.every((url) => /^https?:\/\//.test(url))
@@ -640,7 +640,7 @@ describe("telegram worker", () => {
     ];
     expect(JSON.parse(String(documentCall[1].body))).toMatchObject({
       chat_id: "12345",
-      document: "https://crm.example.com/documents/attachments/attachment-docx-1"
+      document: "https://crm.example.com/documents/attachments/attachment-docx-1?download=1"
     });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("<b>KP document</b>: D-telegram-12345-14");

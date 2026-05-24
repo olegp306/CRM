@@ -409,7 +409,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     const generatedDocumentPdfUrl =
       generatedDocument?.pdfDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId);
     const generatedDocumentDocxUrl =
-      generatedDocument?.docxDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
+      generatedDocument?.docxDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId, true);
     const generatedDocumentDeliveryUrl = generatedDocumentPdfUrl ?? generatedDocumentDocxUrl;
 
     let generatedDocumentDelivered = false;
@@ -1059,7 +1059,7 @@ function createTelegramCrmReplyMarkup(
 
   if (isTelegramHttpUrl(kpMail?.docxUrl)) {
     row.push({
-      text: "Open KP DOCX",
+      text: "Download KP DOCX",
       url: kpMail.docxUrl
     });
   }
@@ -1073,14 +1073,19 @@ function isTelegramHttpUrl(value: string | undefined): value is string {
   return typeof value === "string" && /^https?:\/\//i.test(value);
 }
 
-function createTelegramAttachmentDeliveryUrl(crmBaseUrl: string | undefined, attachmentId: string | undefined): string | undefined {
+function createTelegramAttachmentDeliveryUrl(
+  crmBaseUrl: string | undefined,
+  attachmentId: string | undefined,
+  download = false
+): string | undefined {
   const trimmedBaseUrl = crmBaseUrl?.replace(/\/+$/, "");
 
   if (!trimmedBaseUrl || !attachmentId) {
     return undefined;
   }
 
-  return `${trimmedBaseUrl}/documents/attachments/${encodeURIComponent(attachmentId)}`;
+  const url = `${trimmedBaseUrl}/documents/attachments/${encodeURIComponent(attachmentId)}`;
+  return download ? `${url}?download=1` : url;
 }
 
 if (process.argv[1]?.endsWith("telegram-worker.ts")) {
