@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const pageSource = readFileSync(join(__dirname, "page.tsx"), "utf8");
+const tableSource = readFileSync(join(__dirname, "leads-table.tsx"), "utf8");
 
 describe("leads page layout", () => {
   it("keeps the leads route focused on the editable lead table", () => {
@@ -12,5 +13,15 @@ describe("leads page layout", () => {
     expect(pageSource).not.toContain("Create lead");
     expect(pageSource).not.toContain("Telegram intake");
     expect(pageSource).not.toContain("Create from Telegram");
+  });
+
+  it("keeps the Telegram lead card focused on download and close actions", () => {
+    expect(tableSource).not.toContain("Open KP record");
+    expect(tableSource).toContain("absolute right-3 top-3");
+    expect(tableSource).toContain("pr-28");
+    expect(tableSource).toContain("bg-black");
+    expect(tableSource).toContain("text-white");
+    expect(tableSource).toContain("Close");
+    expect(tableSource).toContain("Send KP");
   });
 });

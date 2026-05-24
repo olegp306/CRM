@@ -5,6 +5,7 @@ import {
   clampLeadColumnSizing,
   createLeadActionPlan,
   createLeadHistory,
+  createLeadKpMailtoHref,
   createLeadLoopTimelineViewModel,
   createLeadTableRows,
   getLeadSourceMaterials,
@@ -336,6 +337,27 @@ describe("lead table model", () => {
       actor: "Operator",
       stageLabel: "Step 5"
     });
+  });
+
+  it("builds a KP mailto link from lead files and raw email", () => {
+    const href = createLeadKpMailtoHref(
+      {
+        leadId: "L-2026-004",
+        rawInput: "Katya email katya@example.com asks for a KP.",
+        kpPdfAttachmentId: "attachment-pdf-1",
+        kpDocxAttachmentId: "attachment-docx-1"
+      },
+      "https://crm.example.com"
+    );
+
+    expect(href).toContain("mailto:katya%40example.com");
+    expect(href).toContain("subject=KP%20L-2026-004");
+    expect(href).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-pdf-1");
+    expect(href).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-docx-1");
+  });
+
+  it("does not build a KP mailto link without KP files", () => {
+    expect(createLeadKpMailtoHref({ leadId: "L-2026-004", rawInput: "katya@example.com" }, "https://crm.example.com")).toBeNull();
   });
 
   it("enables the KP sent quick action only for generated unsent KP leads", () => {

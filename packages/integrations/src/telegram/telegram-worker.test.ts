@@ -550,7 +550,15 @@ describe("telegram worker", () => {
       caption: "KP document D-telegram-12345-13 is ready."
     });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
-    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("KP document: D-telegram-12345-13");
+    const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
+    expect(finalMessageBody.text).toContain("KP document: D-telegram-12345-13");
+    expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
+      { text: "Open in CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
+      expect.objectContaining({ text: "Send KP" })
+    ]);
+    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("mailto:");
+    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("subject=KP%20L-2026-002");
+    expect(finalMessageBody.reply_markup.inline_keyboard[0][1].url).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-pdf-1");
   });
 
   it("sends a CRM attachment URL when only an internal attachment id exists", async () => {

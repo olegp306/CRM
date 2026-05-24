@@ -283,11 +283,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         data: { kpGeneratedDocumentId: generatedDocument.documentId }
       });
     }
-    const generatedDocumentDeliveryUrl =
-      generatedDocument?.pdfDeliveryUrl ??
-      createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId) ??
-      generatedDocument?.docxDeliveryUrl ??
-      createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
+    const generatedDocumentPdfUrl =
+      generatedDocument?.pdfDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId);
+    const generatedDocumentDocxUrl =
+      generatedDocument?.docxDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.docxAttachmentId);
+    const generatedDocumentDeliveryUrl = generatedDocumentPdfUrl ?? generatedDocumentDocxUrl;
 
     let generatedDocumentDelivered = false;
     if (generatedDocumentDeliveryUrl && generatedDocument) {
@@ -316,7 +316,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         generatedDocumentId: generatedDocument?.documentId,
         generatedDocumentDelivered
       }),
-      replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId),
+      replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
+        email: session.draft.email,
+        pdfUrl: generatedDocumentPdfUrl,
+        docxUrl: generatedDocumentDocxUrl
+      }),
       fetchImpl
     });
     processed += 1;
@@ -680,23 +684,59 @@ function createEmptyTelegramLeadDraft(message: AllowedTelegramMessageBatch): Awa
   };
 }
 
-function createTelegramCrmReplyMarkup(crmBaseUrl: string | undefined, leadId: string): unknown | undefined {
+function createTelegramCrmReplyMarkup(
+  crmBaseUrl: string | undefined,
+  leadId: string,
+  kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string }
+): unknown | undefined {
   const trimmedBaseUrl = crmBaseUrl?.trim().replace(/\/$/, "");
 
   if (!trimmedBaseUrl) {
     return undefined;
   }
 
+  const row = [
+    {
+      text: "Open in CRM",
+      url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
+    }
+  ];
+  const mailtoUrl = createTelegramKpMailtoUrl(leadId, kpMail);
+  if (mailtoUrl) {
+    row.push({
+      text: "Send KP",
+      url: mailtoUrl
+    });
+  }
+
   return {
-    inline_keyboard: [
-      [
-        {
-          text: "Open in CRM",
-          url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
-        }
-      ]
-    ]
+    inline_keyboard: [row]
   };
+}
+
+function createTelegramKpMailtoUrl(
+  leadId: string,
+  kpMail: { email?: string | null; pdfUrl?: string; docxUrl?: string } | undefined
+): string | undefined {
+  if (!kpMail?.pdfUrl && !kpMail?.docxUrl) {
+    return undefined;
+  }
+
+  const subject = `KP ${leadId}`;
+  const body = [
+    "Hallo,",
+    "",
+    "anbei finden Sie den Link zum vorbereiteten kommerziellen Angebot.",
+    kpMail.pdfUrl ? `PDF: ${kpMail.pdfUrl}` : "",
+    kpMail.docxUrl ? `DOCX: ${kpMail.docxUrl}` : "",
+    "",
+    "Viele Gruesse"
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const recipient = kpMail.email?.trim() ?? "";
+
+  return `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function createTelegramAttachmentDeliveryUrl(crmBaseUrl: string | undefined, attachmentId: string | undefined): string | undefined {
