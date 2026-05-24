@@ -18,6 +18,7 @@ import {
   createLeadActionPlan,
   createLeadHistory,
   createLeadKpMailtoHref,
+  createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
@@ -741,10 +742,6 @@ function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
       ) : null}
     </>
   );
-}
-
-function createKpDownloadBaseName(lead: LeadTableRow): string {
-  return `${lead.leadId}-KP`.replace(/[^\w.-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {

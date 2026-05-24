@@ -6,6 +6,7 @@ import {
   createLeadActionPlan,
   createLeadHistory,
   createLeadKpMailtoHref,
+  createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
   createLeadTableRows,
   getLeadSourceMaterials,
@@ -354,6 +355,16 @@ describe("lead table model", () => {
     expect(href).toContain("subject=KP%20L-2026-004");
     expect(href).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-pdf-1");
     expect(href).toContain("https%3A%2F%2Fcrm.example.com%2Fdocuments%2Fattachments%2Fattachment-docx-1");
+  });
+
+  it("builds a readable KP download filename from lead initials, id, and created date", () => {
+    expect(
+      createKpDownloadBaseName({
+        leadId: "L-2026-004",
+        createdDate: "2026-05-21",
+        rawInput: "Client: Anna Beispiel\nNeed a standard KP."
+      })
+    ).toBe("AB-KP-L-2026-004-2026-05-21");
   });
 
   it("does not build a KP mailto link without KP files", () => {
