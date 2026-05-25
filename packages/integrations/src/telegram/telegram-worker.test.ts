@@ -973,7 +973,6 @@ describe("telegram worker", () => {
         where: { id: "lead-record-2" },
         data: expect.objectContaining({
           bgfM2: 180,
-          email: "katya@example.com",
           missingData: [],
           status: "new",
           rawInput: expect.stringContaining("telegram lead update")

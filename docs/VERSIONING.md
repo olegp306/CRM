@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.1.4`
+Current stable version: `0.1.5`
 
 Stable tag format:
 

@@ -40,6 +40,7 @@ export type TelegramWorkerPrismaLike = {
         leadId: string;
         status?: string | null;
         rawInput: string | null;
+        client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
         clientName?: string | null;
         requestType?: string | null;
         projectAddress?: string | null;
@@ -900,12 +901,10 @@ async function findLeadByTelegramBotMessage(
       leadId: true,
       status: true,
       rawInput: true,
-      clientName: true,
+      client: { select: { name: true, email: true, phone: true } },
       requestType: true,
       projectAddress: true,
       bgfM2: true,
-      email: true,
-      phone: true,
       missingData: true,
       kpSentDate: true
     }
@@ -925,12 +924,12 @@ function createTelegramLeadSessionFromExistingLead(
     sourceMessageIds: message.sourceMessageIds,
     draft: {
       source: "telegram",
-      clientName: lead.clientName ?? null,
+      clientName: getLeadClientName(lead),
       requestType: lead.requestType ?? null,
       projectAddress: lead.projectAddress ?? null,
       bgfM2: toOptionalNumber(lead.bgfM2),
-      email: lead.email ?? null,
-      phone: lead.phone ?? null,
+      email: getLeadEmail(lead),
+      phone: getLeadPhone(lead),
       rawInput: lead.rawInput ?? "",
       missingData: lead.missingData ?? [],
       isStandard: false,
@@ -949,12 +948,9 @@ function createTelegramLeadUpdateData(
     rawInput: mergeTelegramLeadRawInput(lead.rawInput ?? "", draft.rawInput, message.chatId, message.sourceMessageIds)
   };
 
-  addUpdateValue(update, "clientName", draft.clientName);
   addUpdateValue(update, "requestType", draft.requestType);
   addUpdateValue(update, "projectAddress", draft.projectAddress);
   addUpdateValue(update, "bgfM2", draft.bgfM2);
-  addUpdateValue(update, "email", draft.email);
-  addUpdateValue(update, "phone", draft.phone);
   update.missingData = mergeLeadMissingData(lead, draft, update);
 
   if ((update.missingData as string[]).length === 0 && lead.status === "needs_data") {
@@ -970,14 +966,34 @@ function addUpdateValue(update: Record<string, unknown>, key: string, value: str
   }
 }
 
+function getLeadClientName(lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]): string | null {
+  return lead.client?.name ?? lead.clientName ?? null;
+}
+
+function getLeadEmail(lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]): string | null {
+  return lead.client?.email ?? lead.email ?? null;
+}
+
+function getLeadPhone(lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]): string | null {
+  return lead.client?.phone ?? lead.phone ?? null;
+}
+
 function mergeLeadMissingData(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
   update: Record<string, unknown>
 ): string[] {
   const unresolved = new Set([...(lead.missingData ?? []), ...draft.missingData]);
+  const fieldValues: Record<string, unknown> = {
+    clientName: draft.clientName ?? getLeadClientName(lead),
+    requestType: update.requestType ?? lead.requestType,
+    projectAddress: update.projectAddress ?? lead.projectAddress,
+    bgfM2: update.bgfM2 ?? lead.bgfM2,
+    email: draft.email ?? getLeadEmail(lead),
+    phone: draft.phone ?? getLeadPhone(lead)
+  };
   for (const field of ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone"]) {
-    if ((update[field] ?? lead[field as keyof typeof lead]) !== null && (update[field] ?? lead[field as keyof typeof lead]) !== undefined) {
+    if (fieldValues[field] !== null && fieldValues[field] !== undefined && String(fieldValues[field]).trim().length > 0) {
       unresolved.delete(field);
     }
   }
@@ -1024,7 +1040,7 @@ function createTelegramLeadUpdateClarificationMessage(
   return [
     `I found lead <b>${escapeHtml(lead.leadId)}</b>, but the reply looks like it may describe a different client or address.`,
     "",
-    `<b>Current</b>: ${escapeHtml(lead.clientName ?? "unknown client")} / ${escapeHtml(lead.projectAddress ?? "unknown address")}`,
+    `<b>Current</b>: ${escapeHtml(getLeadClientName(lead) ?? "unknown client")} / ${escapeHtml(lead.projectAddress ?? "unknown address")}`,
     `<b>Reply</b>: ${escapeHtml(draft.clientName ?? "unknown client")} / ${escapeHtml(draft.projectAddress ?? "unknown address")}`,
     "",
     "Please reply with: update this lead, or /newlead to start a separate lead."
