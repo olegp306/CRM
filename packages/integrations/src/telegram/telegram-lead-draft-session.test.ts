@@ -38,6 +38,30 @@ describe("telegram lead draft session", () => {
     });
   });
 
+  it("can use current template placeholders as KP-required fields", () => {
+    expect(getKpRequiredFieldStatus(baseSession.draft, ["clientName", "projectAddress"])).toEqual({
+      ready: false,
+      present: ["clientName"],
+      missing: ["projectAddress"]
+    });
+
+    expect(
+      getKpRequiredFieldStatus(
+        {
+          ...baseSession.draft,
+          projectAddress: "Ленина 12",
+          requestType: null,
+          bgfM2: null
+        },
+        ["clientName", "projectAddress"]
+      )
+    ).toEqual({
+      ready: true,
+      present: ["clientName", "projectAddress"],
+      missing: []
+    });
+  });
+
   it("merges follow-up Telegram drafts without losing existing fields", () => {
     const update = createDraftUpdate({
       projectAddress: "Chiemseeufer 7",

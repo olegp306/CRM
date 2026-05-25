@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@app/core": "workspace:*",
-    "@app/db": "workspace:*"
+    "@app/db": "workspace:*",
+    "@app/documents": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

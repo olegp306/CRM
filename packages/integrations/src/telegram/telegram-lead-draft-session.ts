@@ -25,11 +25,11 @@ export type TelegramLeadDraftSessionStore = {
   clear(input: { workspaceId: string; chatId: string }): Promise<void>;
 };
 
-export function getKpRequiredFieldStatus(draft: TelegramLeadIntakeDraft): KpRequiredFieldStatus {
+export function getKpRequiredFieldStatus(draft: TelegramLeadIntakeDraft, requiredFields = getKpRequiredFields(draft)): KpRequiredFieldStatus {
   const present: KpRequiredField[] = [];
   const missing: KpRequiredField[] = [];
 
-  for (const field of getKpRequiredFields(draft)) {
+  for (const field of requiredFields) {
     const value = draft[field];
     if (typeof value === "number" ? Number.isFinite(value) : Boolean(value?.trim())) {
       present.push(field);

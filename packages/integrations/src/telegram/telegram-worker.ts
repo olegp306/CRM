@@ -1,6 +1,7 @@
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
+import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import {
   createLeadDraftFromTelegramMessage,
@@ -26,6 +27,7 @@ import {
   getKpRequiredFieldStatus,
   isPossibleDifferentLead,
   mergeTelegramLeadDraftSession,
+  type KpRequiredField,
   type TelegramLeadDraftSession,
   type TelegramLeadDraftSessionStore
 } from "./telegram-lead-draft-session";
@@ -89,6 +91,7 @@ export type TelegramWorkerConfig = {
   parser: OpenAiLeadParserClient;
   crmBaseUrl?: string;
   batchWindowMs?: number;
+  kpRequiredFields?: KpRequiredField[];
   telegramDraftStore?: TelegramLeadDraftSessionStore;
   generateKpDocument?: (input: TelegramGenerateKpDocumentInput) => Promise<TelegramGeneratedKpDocumentRecord>;
   prisma?: TelegramWorkerPrismaLike;
@@ -368,7 +371,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           sourceMessageIds: message.sourceMessageIds,
           draft
         });
-    const kpStatus = getKpRequiredFieldStatus(session.draft);
+    const kpStatus = getKpRequiredFieldStatus(session.draft, config.kpRequiredFields);
 
     if (!kpStatus.ready) {
       const sent = await sendTelegramMessage({
@@ -387,17 +390,18 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       now: new Date(hydratedMessage.receivedAt),
       existingIds: existingIds.map((lead) => lead.leadId)
     });
+    const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
     const created = await client.lead.create({
       data: {
         workspaceId: config.workspaceId,
         leadId,
-        status: session.draft.missingData.length > 0 ? "needs_data" : "new",
+        status: templateAwareMissingData.length > 0 ? "needs_data" : "new",
         rawInput: session.draft.rawInput,
         requestType: session.draft.requestType,
         projectAddress: session.draft.projectAddress,
         bgfM2: session.draft.bgfM2,
         isStandard: session.draft.isStandard,
-        missingData: session.draft.missingData,
+        missingData: templateAwareMissingData,
         temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
       }
     });
@@ -411,7 +415,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           documentType: "kp",
           sourceRecordIds: [created.leadId],
           rawInput: session.draft.rawInput,
-          fieldSnapshot: createTelegramKpFieldSnapshot(session.draft),
+          fieldSnapshot: createTelegramKpFieldSnapshot({ ...session.draft, missingData: templateAwareMissingData }),
           requestedByUserId: `telegram:${message.chatId}`
         });
       } catch (error) {
@@ -523,8 +527,10 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     workspaceId: env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo",
     crmBaseUrl: env.TELEGRAM_CRM_BASE_URL ?? env.NEXT_PUBLIC_APP_URL,
     generateKpDocument: createAssistantGeneratedDocumentPrismaStore(defaultPrisma, {
-      objectStorage: createObjectStorageFromEnv()
+      objectStorage: createObjectStorageFromEnv(),
+      pdfConverter: createLibreOfficeDocxToPdfConverter()
     }).create,
+    kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo"),
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: env.OPENAI_MODEL ?? "gpt-4o-mini"
@@ -806,6 +812,10 @@ function createTelegramLeadConfirmation({
 function createTelegramKpGenerationErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
 
+  if (/pdf|soffice|libreoffice|converter|conversion|export/i.test(message)) {
+    return "lead created, but KP was not generated because PDF export is not configured or failed.";
+  }
+
   if (/template/i.test(message)) {
     return "lead created, but KP was not generated because the current KP template is missing or unavailable in Settings.";
   }
@@ -1033,6 +1043,68 @@ function createTelegramLeadUpdatedMessage(
   ].join("\n");
 }
 
+function filterMissingDataForKpRequiredFields(missingData: string[], requiredFields: KpRequiredField[] | undefined): string[] {
+  if (!requiredFields) {
+    return missingData;
+  }
+
+  const required = new Set(requiredFields);
+  return missingData.filter((field) => required.has(field as KpRequiredField));
+}
+
+type TelegramTemplatePrismaLike = {
+  documentTemplate?: {
+    findFirst(args: unknown): Promise<{ versions?: Array<{ detectedPlaceholders?: unknown }> } | null>;
+  };
+};
+
+async function resolveCurrentKpRequiredFields(client: TelegramTemplatePrismaLike, workspaceId: string): Promise<KpRequiredField[] | undefined> {
+  if (!client.documentTemplate) {
+    return undefined;
+  }
+
+  const template = await client.documentTemplate.findFirst({
+    where: { workspaceId, documentType: "kp", isActive: true },
+    orderBy: { createdAt: "desc" },
+    include: {
+      versions: {
+        orderBy: { version: "desc" },
+        take: 1
+      }
+    }
+  });
+  const placeholders = template?.versions?.[0]?.detectedPlaceholders;
+  if (!Array.isArray(placeholders)) {
+    return undefined;
+  }
+
+  const requiredFields = mapKpTemplatePlaceholdersToRequiredFields(placeholders);
+  return requiredFields.length > 0 ? requiredFields : undefined;
+}
+
+function mapKpTemplatePlaceholdersToRequiredFields(placeholders: unknown[]): KpRequiredField[] {
+  const fields = new Set<KpRequiredField>();
+
+  for (const placeholder of placeholders) {
+    switch (String(placeholder).trim()) {
+      case "client_name":
+        fields.add("clientName");
+        break;
+      case "project_address":
+        fields.add("projectAddress");
+        break;
+      case "project_type":
+        fields.add("requestType");
+        break;
+      case "bgf":
+        fields.add("bgfM2");
+        break;
+    }
+  }
+
+  return Array.from(fields);
+}
+
 function createTelegramLeadUpdateClarificationMessage(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
@@ -1126,14 +1198,14 @@ function createTelegramCrmReplyMarkup(
 
   if (isTelegramHttpUrl(kpMail?.pdfUrl)) {
     row.push({
-      text: "Open KP PDF",
+      text: "Скачать PDF",
       url: kpMail.pdfUrl
     });
   }
 
   if (isTelegramHttpUrl(kpMail?.docxUrl)) {
     row.push({
-      text: "Download KP DOCX",
+      text: "Скачать DOCX",
       url: kpMail.docxUrl
     });
   }

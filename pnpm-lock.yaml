@@ -164,6 +164,9 @@ importers:
       '@app/db':
         specifier: workspace:*
         version: link:../db
+      '@app/documents':
+        specifier: workspace:*
+        version: link:../documents
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
