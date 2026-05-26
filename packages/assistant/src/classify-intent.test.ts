@@ -43,6 +43,10 @@ describe("classifyIntent", () => {
     expect(classifyIntent("Help me add this address to lead L-2026-004")).toBe("crm_action");
   });
 
+  it("classifies UX feedback before broad CRM action matching", () => {
+    expect(classifyIntent("Adding leads is confusing")).toBe("ux_feedback");
+  });
+
   it("captures explicit product requests as feature requests", () => {
     expect(classifyIntent("Добавьте кнопку для сравнения версий коммерческого предложения")).toBe("feature_request");
     expect(classifyIntent("It would be nice to upload several lead photos in the web assistant")).toBe(

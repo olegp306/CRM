@@ -31,6 +31,10 @@ export function classifyIntent(message: string): AssistantIntent {
     return "crm_action";
   }
 
+  if (/(confusing|uncomfortable|neudobno|neponyatno|неудобно|непонятно)/.test(text)) {
+    return "ux_feedback";
+  }
+
   if (
     /(\b(what|where|when|status)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
       text,
@@ -61,10 +65,6 @@ export function classifyIntent(message: string): AssistantIntent {
     )
   ) {
     return "crm_action";
-  }
-
-  if (/(confusing|uncomfortable|neudobno|neponyatno|неудобно|непонятно)/.test(text)) {
-    return "ux_feedback";
   }
 
   return "other";
