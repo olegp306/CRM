@@ -176,4 +176,24 @@ describe("assistant submission orchestration", () => {
     expect(result.feedback).toBeNull();
     expect(result.actionPreview).toBeNull();
   });
+
+  it("keeps source-material uploads in assistant context without creating feature feedback", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Проверь этот план и создай лид, если данных хватает",
+      threadId: "thread-upload",
+      messageId: "message-upload",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "photo",
+          fileName: "site.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    });
+
+    expect(result.feedback).toBeNull();
+  });
 });

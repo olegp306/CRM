@@ -93,7 +93,7 @@ export async function createOpenAIAssistantSubmissionResult(
     content: trimmedContent,
     receivedAt: new Date().toISOString(),
     context: input.context,
-    attachments: []
+    attachments: input.attachments ?? []
   });
 
   let feedback: FeedbackItemDraft | null = null;

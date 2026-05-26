@@ -59,7 +59,8 @@ export function AssistantDrawer() {
         context,
         content: text,
         threadId,
-        messageId
+        messageId,
+        attachments
       });
       const { result: nextResult, saved } = response;
       const displayUserContent =
@@ -92,6 +93,7 @@ export function AssistantDrawer() {
       setConfirmation("idle");
       setExecutionSummary(null);
       setText("");
+      setAttachments([]);
     } finally {
       setSubmitting(false);
     }

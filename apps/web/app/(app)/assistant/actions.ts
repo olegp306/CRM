@@ -26,6 +26,7 @@ import {
   createPlatformReleaseTriage,
   createPlatformReleaseWorkflow,
   type AuditReviewFilters,
+  type AssistantChannelAttachment,
   type AssistantContext,
   type AssistantSubmissionResult,
   type FeedbackTriageEvent,
@@ -42,15 +43,22 @@ export type SubmitAssistantMessageInput = {
   content: string;
   threadId: string;
   messageId: string;
+  attachments?: AssistantChannelAttachment[];
 };
 
 export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
 
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
-  const result = await createOpenAIAssistantSubmissionResult(input, {
-    apiKey: getRequiredOpenAiApiKey(),
-    model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
-  });
+  const result = await createOpenAIAssistantSubmissionResult(
+    {
+      ...input,
+      attachments: input.attachments ?? []
+    },
+    {
+      apiKey: getRequiredOpenAiApiKey(),
+      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
+    }
+  );
   const persistenceDraft = createAssistantPersistenceDraft(result, {
     threadId: input.threadId,
     messageId: input.messageId
@@ -88,13 +96,15 @@ export async function submitOnboardingAssistantMessageAction(input: SubmitOnboar
         context,
         content: input.content,
         threadId: input.threadId,
-        messageId: input.messageId
+        messageId: input.messageId,
+        attachments: input.attachments ?? []
       })
     : createAssistantSubmissionResult({
         context,
         content: createOnboardingConversationFeedbackContent(input.content),
         threadId: input.threadId,
-        messageId: input.messageId
+        messageId: input.messageId,
+        attachments: input.attachments ?? []
       });
   const persistenceDraft = createAssistantPersistenceDraft(result, {
     threadId: input.threadId,

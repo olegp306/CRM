@@ -1,5 +1,6 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
 import { createAssistantChannelResponse } from "./channel-engine";
+import type { AssistantChannelAttachment } from "./channel-message";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -16,6 +17,7 @@ export type AssistantSubmissionInput = {
   content: string;
   threadId: string;
   messageId: string;
+  attachments?: AssistantChannelAttachment[];
 };
 
 export type AssistantSubmissionResult = {
@@ -32,7 +34,8 @@ export function createAssistantSubmissionResult({
   context,
   content,
   threadId,
-  messageId
+  messageId,
+  attachments
 }: AssistantSubmissionInput): AssistantSubmissionResult {
   const trimmedContent = content.trim();
   const thread = createAssistantThreadDraft({
@@ -94,7 +97,7 @@ export function createAssistantSubmissionResult({
     content: trimmedContent,
     receivedAt: new Date().toISOString(),
     context,
-    attachments: []
+    attachments: attachments ?? []
   });
 
   let feedback: FeedbackItemDraft | null = null;

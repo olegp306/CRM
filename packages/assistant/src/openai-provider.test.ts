@@ -149,4 +149,51 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.actionPreview).toBeNull();
     expect(result.confirmationStatus).toBeNull();
   });
+
+  it("accepts source-material uploads without persisting feature feedback when OpenAI returns no action", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can review the uploaded source material.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Проверь этот план и создай лид, если данных хватает",
+        threadId: "thread-upload",
+        messageId: "message-upload",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "photo",
+            fileName: "site.jpg",
+            mimeType: "image/jpeg",
+            base64: "abcd"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+  });
 });
