@@ -192,6 +192,19 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       }
     );
 
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const requestBody = JSON.parse(String(requestInit?.body)) as { messages: Array<{ role: string; content: string }> };
+    const userPayload = JSON.parse(requestBody.messages.find((message) => message.role === "user")?.content ?? "{}") as {
+      attachments?: Array<{ fileName?: string; kind?: string; mimeType?: string }>;
+    };
+
+    expect(userPayload.attachments).toEqual([
+      expect.objectContaining({
+        fileName: "site.jpg",
+        kind: "photo",
+        mimeType: "image/jpeg"
+      })
+    ]);
     expect(result.feedback).toBeNull();
     expect(result.actionPreview).toBeNull();
     expect(result.confirmationStatus).toBeNull();

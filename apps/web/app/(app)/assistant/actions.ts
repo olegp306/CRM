@@ -65,7 +65,7 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   });
   const repository = getAssistantRepository();
 
-  repository.save(persistenceDraft);
+  await repository.save(persistenceDraft);
   const [threads, messages, feedback, actions] = await Promise.all([
     repository.listThreads(input.context.workspaceId),
     repository.listMessages(input.threadId),
