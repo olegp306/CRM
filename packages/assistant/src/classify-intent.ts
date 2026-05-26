@@ -15,6 +15,10 @@ export function classifyIntent(message: string): AssistantIntent {
     return "bug_report";
   }
 
+  if (/(confusing|uncomfortable|neudobno|neponyatno|неудобно|непонятно)/.test(text)) {
+    return "ux_feedback";
+  }
+
   if (
     /\b(add|create|build|upload)\b.*\b(button|column|tab|view|theme|upload|feature|interface|assistant ui|ui|version compare|compare kp versions)\b/.test(
       text,
@@ -29,10 +33,6 @@ export function classifyIntent(message: string): AssistantIntent {
     )
   ) {
     return "crm_action";
-  }
-
-  if (/(confusing|uncomfortable|neudobno|neponyatno|неудобно|непонятно)/.test(text)) {
-    return "ux_feedback";
   }
 
   if (

@@ -51,6 +51,8 @@ describe("classifyIntent", () => {
 
   it("classifies UX feedback before broad CRM action matching", () => {
     expect(classifyIntent("Adding leads is confusing")).toBe("ux_feedback");
+    expect(classifyIntent("Add lead button is confusing")).toBe("ux_feedback");
+    expect(classifyIntent("Add lead is confusing")).toBe("ux_feedback");
   });
 
   it("captures explicit product requests as feature requests", () => {
