@@ -161,7 +161,7 @@ export type LeadDraftMergeResult = {
 };
 ```
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - Existing draft missing `projectAddress` becomes ready when new parsed input includes `projectAddress`.
   - Missing data is deduplicated and ordered.
   - Template required fields override generic missing fields.
@@ -175,14 +175,14 @@ pnpm --filter @app/assistant test -- lead-draft-flow.test.ts
 
 Expected first run: FAIL because file is missing.
 
-- [ ] Implement:
+- [x] Implement:
   - `mergeLeadDraftFlowState(existing, incoming, options)`
   - `getLeadDraftKpStatus(draft, requiredFields)`
   - `createLeadDraftRawInput(existingRawInput, incomingRawInput, sourceExternalIds)`
 
-- [ ] Refactor Telegram draft session helpers to call shared functions while preserving exported Telegram-specific APIs.
+- [x] Refactor Telegram draft session helpers to call shared functions while preserving exported Telegram-specific APIs.
 
-- [ ] Add a Web Assistant path that can hold a draft in the assistant action preview or memory for selected thread. Keep persistence minimal: use existing repository/memory shape, no schema migration unless unavoidable.
+- [x] Verify the existing Web Assistant path can hold lead source material in action preview/memory without a schema migration. Full Web draft-session parity remains in Approach 4 with unified channel history.
 
 Verification:
 

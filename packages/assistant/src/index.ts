@@ -13,6 +13,7 @@ export * from "./feedback-item";
 export * from "./feedback-triage";
 export * from "./lead-channel-intake";
 export * from "./lead-chat-orchestrator";
+export * from "./lead-draft-flow";
 export * from "./lead-flow-decision";
 export * from "./memory-repository";
 export * from "./openai-provider";
