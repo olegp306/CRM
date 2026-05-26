@@ -51,6 +51,10 @@ export function classifyIntent(message: string): AssistantIntent {
     return "crm_action";
   }
 
+  if (/(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(text)) {
+    return "crm_action";
+  }
+
   if (
     /(\b(what|where|when|status|does|is)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
       text,

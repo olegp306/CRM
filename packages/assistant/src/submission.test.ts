@@ -176,6 +176,23 @@ describe("assistant submission orchestration", () => {
     ]);
   });
 
+  it("previews Russian follow-up schedule commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
+      content: "Напомни по этому лиду завтра",
+      threadId: "thread-ru-followup",
+      messageId: "message-ru-followup"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "schedule_followup",
+      summary: "Schedule follow-up from assistant request",
+      changes: [{ field: "followup.sourceText", from: null, to: "Напомни по этому лиду завтра" }],
+      requiresConfirmation: true
+    });
+    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+  });
+
   it("previews project task update actions when the request targets project tasks", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/projects", module: "projects", selectedRecordIds: ["P-2026-001"] },
@@ -194,7 +211,7 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared an update project task preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a project task update preview. Confirm before I execute it.");
     expect(result.responseButtons).toEqual([
       { label: "Confirm", action: "confirm" },
       { label: "Cancel", action: "cancel" }
@@ -220,7 +237,7 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a generate KP preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
     expect(result.responseButtons).toEqual([
       { label: "Confirm", action: "confirm" },
       { label: "Cancel", action: "cancel" }
@@ -245,7 +262,7 @@ describe("assistant submission orchestration", () => {
       ]
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a generate KP preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
   });
 
   it("previews KP sent actions for selected leads", () => {
@@ -266,7 +283,7 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a mark KP sent preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a KP sent update preview. Confirm before I execute it.");
     expect(result.responseButtons).toEqual([
       { label: "Confirm", action: "confirm" },
       { label: "Cancel", action: "cancel" }

@@ -24,6 +24,8 @@ describe("classifyIntent", () => {
     expect(classifyIntent("КП отправлено")).toBe("crm_action");
     expect(classifyIntent("Отмени отправку КП")).toBe("crm_action");
     expect(classifyIntent("Сгенерируй КП для этого лида")).toBe("crm_action");
+    expect(classifyIntent("Напомни по этому лиду завтра")).toBe("crm_action");
+    expect(classifyIntent("Запланируй follow-up по этому лиду")).toBe("crm_action");
   });
 
   it("classifies identity and capability questions as support requests, not feature requests", () => {

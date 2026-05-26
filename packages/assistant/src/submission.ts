@@ -309,7 +309,10 @@ function isUndoKpSentRequest(content: string): boolean {
 }
 
 function isScheduleFollowupRequest(content: string): boolean {
-  return /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content);
+  return (
+    /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content) ||
+    /(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(content)
+  );
 }
 
 function getActionPreviewLabel(actionType: string): string {
@@ -322,19 +325,19 @@ function getActionPreviewLabel(actionType: string): string {
   }
 
   if (actionType === "update_project_task") {
-    return "an update project task";
+    return "a project task update";
   }
 
   if (actionType === "generate_kp") {
-    return "a generate KP";
+    return "a KP generation";
   }
 
   if (actionType === "mark_kp_sent") {
-    return "a mark KP sent";
+    return "a KP sent update";
   }
 
   if (actionType === "undo_kp_sent") {
-    return "an undo KP sent";
+    return "a KP sent undo";
   }
 
   return actionType.replace(/_/g, " ");
