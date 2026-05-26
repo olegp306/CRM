@@ -2,7 +2,7 @@ import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
 import { markLeadKpSentAction, undoLeadKpSentAction, updateLeadAction } from "./actions";
 import { LeadsTable } from "./leads-table";
-import { createLeadTableRows } from "./lead-table-store";
+import { createLeadTableRows, type LeadChannelEventsByLeadId } from "./lead-table-store";
 
 export default async function LeadsPage() {
   const session = await getWorkspaceSession();
@@ -52,6 +52,20 @@ export default async function LeadsPage() {
         }
       })
     : [];
+  const channelEventAuditLogs = leadBusinessIds.length > 0
+    ? await prisma.auditLog.findMany({
+        where: {
+          workspaceId: session.workspaceId,
+          action: "assistant.channel.event",
+          targetType: "AssistantChannelEvent"
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          createdAt: true,
+          metadata: true
+        }
+      })
+    : [];
   const leadRows = createLeadTableRows(
     leadRecords,
     generatedDocuments
@@ -60,7 +74,8 @@ export default async function LeadsPage() {
         docxAttachmentId: document.docxAttachmentId,
         pdfAttachmentId: document.pdfAttachmentId
       }))
-      .filter((document) => document.documentId)
+      .filter((document) => document.documentId),
+    createLeadChannelEventsByLeadId(channelEventAuditLogs, leadBusinessIds)
   );
 
   return (
@@ -73,6 +88,36 @@ export default async function LeadsPage() {
       />
     </section>
   );
+}
+
+function createLeadChannelEventsByLeadId(
+  auditLogs: Array<{ createdAt: Date; metadata: unknown }>,
+  leadIds: string[]
+): LeadChannelEventsByLeadId {
+  const leadIdSet = new Set(leadIds);
+  const eventsByLeadId: LeadChannelEventsByLeadId = {};
+
+  for (const auditLog of auditLogs) {
+    const metadata = auditLog.metadata;
+    if (!metadata || typeof metadata !== "object" || !("leadId" in metadata)) {
+      continue;
+    }
+
+    const leadId = String((metadata as { leadId?: unknown }).leadId ?? "");
+    if (!leadIdSet.has(leadId)) {
+      continue;
+    }
+
+    eventsByLeadId[leadId] = [
+      ...(eventsByLeadId[leadId] ?? []),
+      {
+        createdAt: auditLog.createdAt.toISOString(),
+        metadata
+      }
+    ];
+  }
+
+  return eventsByLeadId;
 }
 
 function extractGeneratedDocumentId(inputSnapshot: unknown): string {

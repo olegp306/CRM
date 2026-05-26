@@ -327,9 +327,9 @@ Expected first run: FAIL because event mapper is missing.
 
 - [x] Persist Web Assistant events through existing assistant repository/audit-log first. Avoid database schema migration in this approach unless the repository already requires it.
 
-- [ ] Add Telegram worker audit-event persistence through an injected assistant repository port.
+- [x] Add Telegram worker audit-event persistence through an injected assistant repository port.
 
-- [ ] Update lead card history rendering to include web and Telegram events with channel labels.
+- [x] Update lead card history rendering to include web and Telegram events with channel labels.
 
 Verification:
 

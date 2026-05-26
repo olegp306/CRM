@@ -1,7 +1,20 @@
-import { createAssistantChannelResponse, createLeadChatActions, decideLeadFlow, type AssistantChannelMessage } from "@app/assistant";
+import {
+  createAssistantChannelResponse,
+  createKpGeneratedEvent,
+  createKpSentMarkedEvent,
+  createKpSentUndoneEvent,
+  createLeadChatActions,
+  createLeadCreatedEvent,
+  createLeadDraftUpdatedEvent,
+  createMessageReceivedEvent,
+  decideLeadFlow,
+  type AssistantAuditEventDraft,
+  type AssistantChannelEvent,
+  type AssistantChannelMessage
+} from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
-import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
+import { createAssistantGeneratedDocumentPrismaStore, createAssistantPrismaRepository, prisma as defaultPrisma } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import {
@@ -95,6 +108,7 @@ export type TelegramWorkerConfig = {
   kpRequiredFields?: KpRequiredField[];
   telegramDraftStore?: TelegramLeadDraftSessionStore;
   generateKpDocument?: (input: TelegramGenerateKpDocumentInput) => Promise<TelegramGeneratedKpDocumentRecord>;
+  saveAuditEvent?: (event: AssistantAuditEventDraft) => void | Promise<void>;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -216,6 +230,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     const sourceExternalIds = createTelegramSourceExternalIds(message);
+    await saveTelegramChannelEvent(
+      config,
+      message,
+      createMessageReceivedEvent({
+        type: "message_received",
+        channel: "telegram",
+        threadId: createTelegramThreadId(message.chatId),
+        messageId: String(message.messageId),
+        summary: message.text
+      })
+    );
     const repliedLead = message.replyToMessageId
       ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
       : null;
@@ -265,6 +290,16 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         parseMode: "HTML",
         fetchImpl
       });
+      await saveTelegramChannelEvent(
+        config,
+        message,
+        createKpSentMarkedEvent({
+          type: "kp_sent_marked",
+          channel: "telegram",
+          threadId: createTelegramThreadId(message.chatId),
+          leadId: repliedLead.leadId
+        })
+      );
       processed += 1;
       continue;
     }
@@ -298,6 +333,16 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         parseMode: "HTML",
         fetchImpl
       });
+      await saveTelegramChannelEvent(
+        config,
+        message,
+        createKpSentUndoneEvent({
+          type: "kp_sent_undone",
+          channel: "telegram",
+          threadId: createTelegramThreadId(message.chatId),
+          leadId: repliedLead.leadId
+        })
+      );
       processed += 1;
       continue;
     }
@@ -371,6 +416,18 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         where: { id: repliedLead.id },
         data: createTelegramLeadUpdateData(repliedLead, draft, message)
       });
+      await saveTelegramChannelEvent(
+        config,
+        message,
+        createLeadDraftUpdatedEvent({
+          type: "lead_draft_updated",
+          channel: "telegram",
+          threadId: createTelegramThreadId(message.chatId),
+          leadId: repliedLead.leadId,
+          fieldsChanged: createDetectedTelegramLeadFields(draft),
+          missingData: draft.missingData
+        })
+      );
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -447,6 +504,18 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
       }
     });
+    await saveTelegramChannelEvent(
+      config,
+      message,
+      createLeadCreatedEvent({
+        type: "lead_created",
+        channel: "telegram",
+        threadId: createTelegramThreadId(message.chatId),
+        leadId: created.leadId,
+        fieldsCreated: createDetectedTelegramLeadFields(session.draft),
+        missingData: templateAwareMissingData
+      })
+    );
     let generatedDocument: TelegramGeneratedKpDocumentRecord | null = null;
     let generatedDocumentError: string | undefined;
     if (config.generateKpDocument) {
@@ -470,6 +539,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         where: { id: created.id },
         data: { kpGeneratedDocumentId: generatedDocument.documentId }
       });
+      await saveTelegramChannelEvent(
+        config,
+        message,
+        createKpGeneratedEvent({
+          type: "kp_generated",
+          channel: "telegram",
+          threadId: createTelegramThreadId(message.chatId),
+          leadId: created.leadId,
+          documentId: generatedDocument.documentId
+        })
+      );
     }
     const generatedDocumentPdfUrl =
       generatedDocument?.pdfDeliveryUrl ?? createTelegramAttachmentDeliveryUrl(config.crmBaseUrl, generatedDocument?.pdfAttachmentId);
@@ -572,6 +652,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       objectStorage: createObjectStorageFromEnv(),
       pdfConverter: createLibreOfficeDocxToPdfConverter()
     }).create,
+    saveAuditEvent: createAssistantPrismaRepository(defaultPrisma).saveAuditEvent,
     kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo"),
     parser: createOpenAiLeadParserClient({
       apiKey,
@@ -918,6 +999,47 @@ function createTelegramKpFieldSnapshot(draft: Awaited<ReturnType<typeof createLe
     phone: draft.phone,
     missingData: draft.missingData
   };
+}
+
+async function saveTelegramChannelEvent(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "saveAuditEvent">,
+  message: Pick<AllowedTelegramMessageBatch, "chatId">,
+  event: AssistantChannelEvent
+): Promise<void> {
+  if (!config.saveAuditEvent) {
+    return;
+  }
+
+  await config.saveAuditEvent({
+    workspaceId: config.workspaceId,
+    actorUserId: `telegram:${message.chatId}`,
+    action: "assistant.channel.event",
+    targetType: "AssistantChannelEvent",
+    targetId: createTelegramChannelEventTargetId(event),
+    metadata: event
+  });
+}
+
+function createTelegramChannelEventTargetId(event: AssistantChannelEvent): string {
+  const leadOrMessageId = "leadId" in event && event.leadId ? event.leadId : "messageId" in event ? event.messageId : "none";
+  return `${event.channel}:${event.type}:${event.threadId}:${leadOrMessageId}`;
+}
+
+function createTelegramThreadId(chatId: string): string {
+  return `telegram:${chatId}`;
+}
+
+function createDetectedTelegramLeadFields(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string[] {
+  const fields = [
+    ["clientName", draft.clientName],
+    ["requestType", draft.requestType],
+    ["projectAddress", draft.projectAddress],
+    ["bgfM2", draft.bgfM2],
+    ["email", draft.email],
+    ["phone", draft.phone]
+  ];
+
+  return fields.flatMap(([field, value]) => (value !== null && value !== undefined && String(value).trim().length > 0 ? [String(field)] : []));
 }
 
 function createTelegramLeadDraftMessage(session: TelegramLeadDraftSession): string {

@@ -705,6 +705,94 @@ describe("telegram worker", () => {
     );
   });
 
+  it("persists Telegram channel events when a KP-ready lead is created", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" })),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Katya",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        projectAddress: "Chiemseeufer 7",
+        bgfM2: 180,
+        email: "katya@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Ready KP lead",
+        suggestedReply: "Ready."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage") || url.includes("/sendDocument")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 118,
+          message: {
+            message_id: 113,
+            date: 1779296800,
+            chat: { id: 12345 },
+            text: "Katya, new build, Chiemseeufer 7, BGF 180"
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        crmBaseUrl: "https://crm.example.com",
+        parser,
+        prisma: client,
+        generateKpDocument: async (input) => ({
+          id: "generated-document-record-1",
+          ...input,
+          docxAttachmentId: "attachment-docx-1",
+          pdfAttachmentId: "attachment-pdf-1"
+        }),
+        saveAuditEvent: async (event) => {
+          auditEvents.push(event);
+        },
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(auditEvents.map((event) => (event as { metadata: { type: string } }).metadata.type)).toEqual([
+      "message_received",
+      "lead_created",
+      "kp_generated"
+    ]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        actorUserId: "telegram:12345",
+        action: "assistant.channel.event",
+        targetType: "AssistantChannelEvent",
+        targetId: "telegram:lead_created:telegram:12345:L-2026-002",
+        metadata: expect.objectContaining({
+          type: "lead_created",
+          channel: "telegram",
+          threadId: "telegram:12345",
+          leadId: "L-2026-002",
+          fieldsCreated: expect.arrayContaining(["clientName", "requestType", "projectAddress", "bgfM2", "email"]),
+          missingData: []
+        })
+      })
+    );
+  });
+
   it("sends a CRM attachment URL when only an internal attachment id exists", async () => {
     const client = {
       lead: {
