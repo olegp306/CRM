@@ -29,6 +29,7 @@ const result: AssistantSubmissionResult = {
   response: "I prepared a create lead preview. Confirm before I execute it.",
   feedback: null,
   actionPreview: null,
+  responseButtons: [],
   confirmationStatus: "awaiting_confirmation",
   permissionBlocked: null
 };

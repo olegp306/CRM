@@ -159,6 +159,7 @@ function createOnboardingTranslationResult({
     response: createRussianOnboardingAssistantMessage(),
     feedback: null,
     actionPreview: null,
+    responseButtons: [],
     confirmationStatus: null,
     permissionBlocked: null
   };

@@ -116,9 +116,14 @@ describe("createOpenAIAssistantSubmissionResult", () => {
 
     expect(fetchMock).toHaveBeenCalled();
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel from this source material" }]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
   it("blocks OpenAI-requested actions when the user role lacks permission", async () => {
@@ -259,7 +264,11 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       })
     ]);
     expect(result.feedback).toBeNull();
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material"
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 });

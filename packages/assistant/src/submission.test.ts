@@ -86,9 +86,14 @@ describe("assistant submission orchestration", () => {
     });
 
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel from this source material" }]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
   it("routes clear source-material intake text to lead intake before create lead previews", () => {
@@ -100,9 +105,14 @@ describe("assistant submission orchestration", () => {
     });
 
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [{ field: "lead.sourceText", from: null, to: "Create a lead from this client request with address and BGF" }]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
   it("previews schedule follow-up actions when the request asks for a reminder", () => {

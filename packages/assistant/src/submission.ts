@@ -1,6 +1,11 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
 import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
-import type { AssistantChannelAttachment, AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
+import type {
+  AssistantChannelAttachment,
+  AssistantChannelMessage,
+  AssistantChannelResponse,
+  AssistantChannelResponseButton
+} from "./channel-message";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -26,6 +31,7 @@ export type AssistantSubmissionResult = {
   response: string;
   feedback: FeedbackItemDraft | null;
   actionPreview: ActionPreview | null;
+  responseButtons: AssistantChannelResponseButton[];
   confirmationStatus: ActionConfirmationStatus | null;
   permissionBlocked: PermissionBlockedResponse | null;
 };
@@ -65,7 +71,7 @@ export function createAssistantSubmissionResult({
     if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
       const channelResponse = createAssistantChannelResponse(channelMessage);
 
-      return createResultFromChannelResponse({
+      return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
         channelResponse,
@@ -96,6 +102,7 @@ export function createAssistantSubmissionResult({
         response: permissionBlocked.message,
         feedback,
         actionPreview: null,
+        responseButtons: [],
         confirmationStatus: "cancelled",
         permissionBlocked
       };
@@ -107,6 +114,7 @@ export function createAssistantSubmissionResult({
       response: `I prepared ${getActionPreviewLabel(actionPreview.actionType)} preview. Confirm before I execute it.`,
       feedback: null,
       actionPreview,
+      responseButtons: [],
       confirmationStatus: advanceActionConfirmation("draft", "preview"),
       permissionBlocked: null
     };
@@ -114,7 +122,7 @@ export function createAssistantSubmissionResult({
 
   const channelResponse = createAssistantChannelResponse(channelMessage);
 
-  return createResultFromChannelResponse({
+  return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
     channelResponse,
@@ -124,7 +132,7 @@ export function createAssistantSubmissionResult({
   });
 }
 
-function createResultFromChannelResponse({
+export function createAssistantSubmissionResultFromChannelResponse({
   thread,
   message,
   channelResponse,
@@ -140,6 +148,9 @@ function createResultFromChannelResponse({
   messageId: string;
 }): AssistantSubmissionResult {
   let feedback: FeedbackItemDraft | null = null;
+  const actionPreview = canUseAssistantActionMode(context.role)
+    ? createChannelActionPreview(channelResponse, message.content)
+    : null;
 
   if (channelResponse.shouldPersistFeedback) {
     const feedbackType = channelResponse.feedbackType;
@@ -163,10 +174,25 @@ function createResultFromChannelResponse({
     message,
     response: channelResponse.text,
     feedback,
-    actionPreview: null,
-    confirmationStatus: null,
+    actionPreview,
+    responseButtons: channelResponse.buttons,
+    confirmationStatus: actionPreview ? advanceActionConfirmation("draft", "preview") : null,
     permissionBlocked: null
   };
+}
+
+function createChannelActionPreview(channelResponse: AssistantChannelResponse, sourceText: string): ActionPreview | null {
+  const hasConfirmButton = channelResponse.buttons.some((button) => button.action === "confirm");
+
+  if (channelResponse.intent !== "lead_intake" || !hasConfirmButton) {
+    return null;
+  }
+
+  return createActionPreview({
+    actionType: "create_lead",
+    summary: "Create lead from assistant source material",
+    changes: [{ field: "lead.sourceText", from: null, to: sourceText }]
+  });
 }
 
 function canUseAssistantActionMode(role: string): boolean {

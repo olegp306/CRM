@@ -1,12 +1,16 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
 import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
-import type { AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
+import type { AssistantChannelMessage } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
-import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
+import { createFeedbackItemFromMessage } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
-import type { AssistantSubmissionInput, AssistantSubmissionResult } from "./submission";
-import { createAssistantMessageDraft, createAssistantThreadDraft, type AssistantMessageDraft, type AssistantThreadDraft } from "./thread-message";
+import {
+  createAssistantSubmissionResultFromChannelResponse,
+  type AssistantSubmissionInput,
+  type AssistantSubmissionResult
+} from "./submission";
+import { createAssistantMessageDraft, createAssistantThreadDraft } from "./thread-message";
 
 export type OpenAIAssistantFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -71,7 +75,7 @@ export async function createOpenAIAssistantSubmissionResult(
     if (plan.action.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
       const channelResponse = createAssistantChannelResponse(channelMessage);
 
-      return createResultFromChannelResponse({
+      return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
         channelResponse,
@@ -104,6 +108,7 @@ export async function createOpenAIAssistantSubmissionResult(
         response: permissionBlocked.message,
         feedback,
         actionPreview: null,
+        responseButtons: [],
         confirmationStatus: "cancelled",
         permissionBlocked
       };
@@ -115,6 +120,7 @@ export async function createOpenAIAssistantSubmissionResult(
       response: plan.response,
       feedback: null,
       actionPreview,
+      responseButtons: [],
       confirmationStatus: advanceActionConfirmation("draft", "preview"),
       permissionBlocked: null
     };
@@ -122,7 +128,7 @@ export async function createOpenAIAssistantSubmissionResult(
 
   const channelResponse = createAssistantChannelResponse(channelMessage);
 
-  return createResultFromChannelResponse({
+  return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
     channelResponse,
@@ -130,51 +136,6 @@ export async function createOpenAIAssistantSubmissionResult(
     threadId: input.threadId,
     messageId: input.messageId
   });
-}
-
-function createResultFromChannelResponse({
-  thread,
-  message,
-  channelResponse,
-  context,
-  threadId,
-  messageId
-}: {
-  thread: AssistantThreadDraft;
-  message: AssistantMessageDraft;
-  channelResponse: AssistantChannelResponse;
-  context: AssistantContext;
-  threadId: string;
-  messageId: string;
-}): AssistantSubmissionResult {
-  let feedback: FeedbackItemDraft | null = null;
-
-  if (channelResponse.shouldPersistFeedback) {
-    const feedbackType = channelResponse.feedbackType;
-
-    if (!feedbackType) {
-      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
-    }
-
-    feedback = createFeedbackItemFromMessage({
-      workspaceId: context.workspaceId,
-      sourceThreadId: threadId,
-      sourceMessageId: messageId,
-      intent: feedbackType,
-      moduleContext: context.module,
-      role: context.role
-    });
-  }
-
-  return {
-    thread,
-    message,
-    response: channelResponse.text,
-    feedback,
-    actionPreview: null,
-    confirmationStatus: null,
-    permissionBlocked: null
-  };
 }
 
 async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAIAssistantConfig): Promise<OpenAIPlan> {

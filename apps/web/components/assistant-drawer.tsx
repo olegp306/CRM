@@ -187,6 +187,31 @@ export function AssistantDrawer() {
                     {savedSummary ? <p>Memory: {savedSummary}</p> : null}
                   </div>
                 ) : null}
+                {latestResult?.responseButtons.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {latestResult.responseButtons.map((button) =>
+                      button.url ? (
+                        <a
+                          key={`${button.label}-${button.url}`}
+                          href={button.url}
+                          className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                        >
+                          {button.label}
+                        </a>
+                      ) : (
+                        <button
+                          key={`${button.label}-${button.action ?? "button"}`}
+                          type="button"
+                          onClick={button.action === "confirm" && latestResult.actionPreview ? confirmLatestAction : undefined}
+                          disabled={button.action === "confirm" && !latestResult.actionPreview}
+                          className="h-9 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {button.label}
+                        </button>
+                      )
+                    )}
+                  </div>
+                ) : null}
                 {latestResult?.actionPreview ? (
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-sm font-semibold">{latestResult.actionPreview.summary}</p>
