@@ -376,13 +376,13 @@ describe("assistant channel parity", () => {
 });
 ```
 
-- [ ] Write `channel-parity.test.ts` with paired Web/Telegram inputs and compare:
+- [x] Write `channel-parity.test.ts` with paired Web/Telegram inputs and compare:
   - `intent`
   - normalized action types
   - feedback persistence
   - lead target id
 
-- [ ] Run it and verify it fails on any remaining channel-specific divergence.
+- [x] Run it and verify it fails on any remaining channel-specific divergence.
 
 Run:
 
@@ -390,15 +390,15 @@ Run:
 pnpm --filter @app/assistant test -- channel-parity.test.ts
 ```
 
-- [ ] Remove duplicated channel-specific decision logic that parity tests reveal:
+- [x] Remove duplicated channel-specific decision logic that parity tests reveal:
   - Telegram should not independently decide feature/capability/support behavior except `/start` transport details.
   - Web onboarding should not intercept CRM/capability/lead-flow messages.
 
-- [ ] Update version:
-  - Bump `package.json` from `0.1.7` to the next version chosen for this feature release.
+- [x] Update version:
+  - Bump `package.json` from `0.1.7` to `0.2.0` for this feature release.
   - Update `docs/VERSIONING.md` with a note that shared Web/Telegram assistant channel architecture is included.
 
-- [ ] Run full verification:
+- [x] Run full verification:
 
 ```powershell
 pnpm typecheck
@@ -407,6 +407,7 @@ pnpm --filter @app/web build
 ```
 
 - [ ] Manually verify locally:
+  - Web app restarted on `http://localhost:3002/leads` and returned HTTP 200 after the build.
   - Start web app.
   - Ask web assistant: `а есть цветовая схема или тема темная для вечера ?`.
   - Click `Nocturne`, confirm visual theme changes.

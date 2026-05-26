@@ -66,6 +66,9 @@ function createThemeSwitchingResponse(message: AssistantChannelMessage): Assista
 
 function isThemeCapabilityRequest(content: string): boolean {
   const text = content.toLowerCase();
+  if (/(?:С†РІРµС‚РѕРІ|СЃС…РµРј|С‚РµРјРЅ|С‚РµРјР°).*(?:РµСЃС‚|РјРѕР¶РЅ|С…РѕС‡)|(?:РµСЃС‚|РјРѕР¶РЅ|С…РѕС‡).*(?:С†РІРµС‚РѕРІ|СЃС…РµРј|С‚РµРјРЅ|С‚РµРјР°)/i.test(text)) {
+    return true;
+  }
   const hasThemeSignal =
     /\b(theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(text) ||
     /(тема|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(text);

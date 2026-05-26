@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.1.7`
+Current stable version: `0.2.0`
 
 Stable tag format:
 
@@ -138,3 +138,11 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.2.0
+
+Shared Web Assistant and Telegram assistant channel architecture:
+
+- Web and Telegram now share lead-flow decisions, draft merge rules, KP missing-field readiness, normalized lead actions, and channel event history contracts.
+- Lead history can include channel events from both Web and Telegram audit logs.
+- Theme/dark-mode questions are routed as assistant capability requests instead of lead intake.

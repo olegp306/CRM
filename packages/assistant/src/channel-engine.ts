@@ -3,10 +3,14 @@ import { createCapabilityResponse } from "./capability-registry";
 import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
 import {
   createLeadChatOrchestratorResponse,
+  type LeadChatSnapshot,
   isLeadChatSourceMaterial
 } from "./lead-chat-orchestrator";
 
-export function createAssistantChannelResponse(message: AssistantChannelMessage): AssistantChannelResponse {
+export function createAssistantChannelResponse(
+  message: AssistantChannelMessage,
+  options: { lead?: LeadChatSnapshot | null } = {}
+): AssistantChannelResponse {
   const intent = classifyIntent(message.content);
   const capabilityResponse = createCapabilityResponse(message);
 
@@ -36,7 +40,11 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
-  const leadChatResponse = createLeadChatOrchestratorResponse({ message });
+  const leadChatResponse = createLeadChatOrchestratorResponse({ message, lead: options.lead });
+  if (options.lead && leadChatResponse) {
+    return leadChatResponse;
+  }
+
   if (leadChatResponse && (intent !== "support_request" || isExplicitLeadIntakeText(message.content))) {
     return leadChatResponse;
   }
