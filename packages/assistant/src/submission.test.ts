@@ -48,7 +48,7 @@ describe("assistant submission orchestration", () => {
       role: "admin",
       appVersion: "0.1.6"
     });
-    expect(result.response).toBe("Captured as feature_request feedback for the platform team.");
+    expect(result.response).toBe("I saved this as product feedback for review.");
   });
 
   it("previews create lead actions for owner and admin roles", () => {
@@ -162,5 +162,18 @@ describe("assistant submission orchestration", () => {
     expect(result.permissionBlocked?.feedbackType).toBe("permission_blocked");
     expect(result.feedback?.type).toBe("permission_blocked");
     expect(result.confirmationStatus).toBe("cancelled");
+  });
+
+  it("answers assistant identity questions without creating feedback", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Кто ты и что умеешь?",
+      threadId: "thread-help",
+      messageId: "message-help"
+    });
+
+    expect(result.response).toContain("I can create and update leads");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
   });
 });

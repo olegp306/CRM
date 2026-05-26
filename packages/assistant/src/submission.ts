@@ -1,4 +1,5 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
+import { createAssistantChannelResponse } from "./channel-engine";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -86,21 +87,31 @@ export function createAssistantSubmissionResult({
     };
   }
 
-  const feedback = createFeedbackItemFromMessage({
-    workspaceId: context.workspaceId,
-    sourceThreadId: threadId,
-    sourceMessageId: messageId,
-    intent: message.intent,
-    moduleContext: context.module,
-    role: context.role
+  const channelResponse = createAssistantChannelResponse({
+    channel: "web",
+    threadId,
+    messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context,
+    attachments: []
   });
+
+  const feedback = channelResponse.shouldPersistFeedback
+    ? createFeedbackItemFromMessage({
+        workspaceId: context.workspaceId,
+        sourceThreadId: threadId,
+        sourceMessageId: messageId,
+        intent: channelResponse.feedbackType ?? message.intent,
+        moduleContext: context.module,
+        role: context.role
+      })
+    : null;
 
   return {
     thread,
     message,
-    response: feedback
-      ? `Captured as ${feedback.type} feedback for the platform team.`
-      : "I captured your message and will use the current workspace context.",
+    response: channelResponse.text,
     feedback,
     actionPreview: null,
     confirmationStatus: null,
