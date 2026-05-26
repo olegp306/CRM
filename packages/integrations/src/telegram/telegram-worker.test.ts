@@ -250,6 +250,472 @@ describe("telegram worker", () => {
     });
   });
 
+  it("transcribes a Telegram voice message before creating a CRM lead", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-voice", leadId: "L-2026-001", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async (input) => ({
+        clientName: "Oleg Voice",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        bgfM2: 190,
+        projectAddress: "Gartenweg 9",
+        email: "voice@example.com",
+        phone: "+49 170 123456",
+        missingData: [],
+        summary: input.text,
+        suggestedReply: "Ready."
+      }))
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => ({ text: "Нужен проект дома Gartenweg 9, BGF 190, бюджет 32000 EUR." }))
+    };
+    const saveSourceAttachment = vi.fn(async () => ({
+      attachmentId: "attachment-voice-source-501",
+      storageKey: "workspaces/workspace-demo/telegram-source/12345/501-voice-file-telegram-voice-501.ogg"
+    }));
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/file_501.ogg" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode("voice bytes").buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 50,
+            message: {
+              message_id: 501,
+              date: 1779299000,
+              chat: { id: 12345 },
+              from: { id: 7, first_name: "Oleg", username: "olegp" },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg", duration: 18 }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          audioTranscriber,
+          saveSourceAttachment,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 50 });
+
+    expect(saveSourceAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        chatId: "12345",
+        messageId: 501,
+        fileId: "voice-file",
+        kind: "audio",
+        fileName: "telegram-voice-501.ogg",
+        mimeType: "audio/ogg",
+        body: new TextEncoder().encode("voice bytes"),
+        requestedByUserId: "telegram:12345"
+      })
+    );
+    expect(audioTranscriber.transcribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        base64: Buffer.from("voice bytes").toString("base64"),
+        mimeType: "audio/ogg",
+        fileName: "telegram-voice-501.ogg"
+      })
+    );
+    expect(parser.parseLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Audio transcript 1 (telegram-voice-501.ogg):")
+      })
+    );
+    expect(parser.parseLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Author: Oleg (@olegp)")
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("Telegram attachment 1: audio (telegram-voice-501.ogg, source voice-file, saved attachment-voice-source-501)")
+        })
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("Нужен проект дома Gartenweg 9")
+        })
+      })
+    );
+  });
+
+  it("transcribes a Telegram audio file sent as a document before creating a CRM lead", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-audio-file", leadId: "L-2026-001", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async (input) => ({
+        clientName: "Irina Audio",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        bgfM2: 195,
+        projectAddress: "Gartenweg 9, Bad Aibling",
+        email: "irina@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        summary: input.text,
+        suggestedReply: "Ready."
+      }))
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => ({
+        text: "Ирина Шнайдер просит КП на Neubau EFH, Gartenweg 9 Bad Aibling, BGF 195 м2, бюджет 32000 EUR."
+      }))
+    };
+    const saveSourceAttachment = vi.fn(async () => ({
+      attachmentId: "attachment-audio-document-601",
+      storageKey: "workspaces/workspace-demo/telegram-source/12345/601-audio-document-client-brief.mp3"
+    }));
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "documents/client-brief.mp3" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode("mp3 bytes").buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 60,
+            message: {
+              message_id: 601,
+              date: 1779299300,
+              chat: { id: 12345 },
+              document: { file_id: "audio-document", file_name: "client-brief.mp3", mime_type: "audio/mpeg" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          audioTranscriber,
+          saveSourceAttachment,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 60 });
+
+    expect(saveSourceAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 601,
+        fileId: "audio-document",
+        kind: "audio",
+        fileName: "client-brief.mp3",
+        mimeType: "audio/mpeg",
+        body: new TextEncoder().encode("mp3 bytes")
+      })
+    );
+    expect(audioTranscriber.transcribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        base64: Buffer.from("mp3 bytes").toString("base64"),
+        mimeType: "audio/mpeg",
+        fileName: "client-brief.mp3"
+      })
+    );
+    expect(parser.parseLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Audio transcript 1 (client-brief.mp3):")
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("Telegram attachment 1: audio (client-brief.mp3, source audio-document, saved attachment-audio-document-601)")
+        })
+      })
+    );
+  });
+
+  it("combines nearby Telegram photos and voice transcripts into one lead", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-mixed", leadId: "L-2026-001", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async (input) => ({
+        clientName: "Mixed Source",
+        requestType: "renovation",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 145,
+        projectAddress: "Seestrasse 2",
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: input.text,
+        suggestedReply: "Ready."
+      }))
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => ({ text: "На фото планировка, адрес Seestrasse 2, площадь 145 м2." }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile") && url.includes("photo-large")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "photos/photo-large.jpg" } }) };
+      }
+
+      if (url.includes("/getFile") && url.includes("voice-file")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/file_502.ogg" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode(String(url)).buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 51,
+            message: {
+              message_id: 501,
+              date: 1779299000,
+              chat: { id: 12345 },
+              caption: "Планировка",
+              photo: [{ file_id: "photo-large", width: 1280, height: 960 }]
+            }
+          },
+          {
+            update_id: 52,
+            message: {
+              message_id: 502,
+              date: 1779299060,
+              chat: { id: 12345 },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          audioTranscriber,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 52 });
+
+    expect(parser.parseLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("[Telegram image attachment: photo-large]")
+      })
+    );
+    expect(parser.parseLead).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Audio transcript 2 (telegram-voice-502.ogg):")
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("Telegram sources: telegram:12345:501, telegram:12345:502")
+        })
+      })
+    );
+  });
+
+  it("asks a clarification question for ambiguous Telegram audio instead of creating a lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        bgfM2: undefined,
+        projectAddress: undefined,
+        email: null,
+        phone: null,
+        missingData: ["clientName", "requestType", "projectAddress"],
+        summary: "Unclear casual audio.",
+        suggestedReply: "Please clarify."
+      }))
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => ({ text: "Я не уверен, что с этим нужно сделать, просто посмотри потом." }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/file_503.ogg" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode("unclear voice").buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 53,
+            message: {
+              message_id: 503,
+              date: 1779299120,
+              chat: { id: 12345 },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          audioTranscriber,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 53 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("Should I create a new lead, update an existing lead, or save this as feedback?");
+  });
+
+  it("asks for a resend when Telegram audio transcription fails", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => {
+        throw new Error("transcription unavailable");
+      })
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/file_504.ogg" } }) };
+      }
+
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode("voice bytes").buffer };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 54,
+            message: {
+              message_id: 504,
+              date: 1779299180,
+              chat: { id: 12345 },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          audioTranscriber,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 54 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("I received the audio, but I could not transcribe it");
+  });
+
   it("starts an empty lead draft from the new lead command", async () => {
     const client = {
       lead: {
@@ -1581,6 +2047,7 @@ describe("telegram worker", () => {
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
     expect(body.text).toContain("I can create and update leads");
+    expect(body.text).toContain("voice messages");
   });
 
   it("answers /help with the shared assistant capability text", async () => {

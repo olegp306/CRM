@@ -40,7 +40,7 @@ describe("telegram polling", () => {
         chatId: "123",
         text: "See attached request\n\n[Telegram image attachment: large]",
         receivedAt: "2026-05-20T17:00:00.000Z",
-        attachments: [{ kind: "photo", fileId: "large", mimeType: "image/jpeg" }]
+        attachments: [{ kind: "photo", sourceMessageId: 10, fileId: "large", mimeType: "image/jpeg" }]
       }
     ]);
   });
@@ -71,5 +71,77 @@ describe("telegram polling", () => {
         new Set(["123"])
       ).map((message) => message.text)
     ).toEqual(["[Telegram PDF attachment: lead.pdf]"]);
+  });
+
+  it("accepts allowed Telegram voice messages as source material", () => {
+    expect(
+      createAllowedTelegramMessages(
+        [
+          {
+            update_id: 50,
+            message: {
+              message_id: 501,
+              date: 1779299000,
+              chat: { id: 12345 },
+              from: { id: 7, first_name: "Oleg", username: "olegp" },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg", duration: 18 }
+            }
+          }
+        ],
+        new Set(["12345"])
+      )
+    ).toEqual([
+      expect.objectContaining({
+        updateId: 50,
+        messageId: 501,
+        chatId: "12345",
+        text: "[Telegram audio attachment: voice-file]",
+        authorName: "Oleg",
+        authorUsername: "olegp",
+        attachments: [
+          expect.objectContaining({
+            kind: "audio",
+            sourceMessageId: 501,
+            fileId: "voice-file",
+            fileName: "telegram-voice-501.ogg",
+            mimeType: "audio/ogg"
+          })
+        ]
+      })
+    ]);
+  });
+
+  it("accepts Telegram audio files sent as documents", () => {
+    expect(
+      createAllowedTelegramMessages(
+        [
+          {
+            update_id: 60,
+            message: {
+              message_id: 601,
+              date: 1779299300,
+              chat: { id: 12345 },
+              document: { file_id: "audio-document", file_name: "client-brief.mp3", mime_type: "audio/mpeg" }
+            }
+          }
+        ],
+        new Set(["12345"])
+      )
+    ).toEqual([
+      expect.objectContaining({
+        updateId: 60,
+        messageId: 601,
+        text: "[Telegram audio attachment: audio-document]",
+        attachments: [
+          expect.objectContaining({
+            kind: "audio",
+            sourceMessageId: 601,
+            fileId: "audio-document",
+            fileName: "client-brief.mp3",
+            mimeType: "audio/mpeg"
+          })
+        ]
+      })
+    ]);
   });
 });

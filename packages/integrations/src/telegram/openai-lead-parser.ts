@@ -6,14 +6,21 @@ export type TelegramLeadMessage = {
   chatId: string;
   text: string;
   receivedAt: string;
+  authorName?: string;
+  authorUsername?: string;
   attachments?: TelegramLeadAttachment[];
 };
 
 export type TelegramLeadAttachment = {
-  kind: "photo" | "pdf";
+  kind: "photo" | "pdf" | "audio";
   mimeType: string;
   base64: string;
   fileName?: string;
+  sourceFileId?: string;
+  sourceAttachmentId?: string;
+  sourceStorageKey?: string;
+  transcript?: string;
+  transcriptError?: string;
 };
 
 export type ParsedTelegramLeadInput = {
@@ -39,6 +46,11 @@ type ResponsesApiContentBlock = {
   type?: unknown;
   text?: unknown;
 };
+
+type OpenAiUserContentBlock =
+  | { type: "input_text"; text: string }
+  | { type: "input_image"; image_url: string; detail: "high" }
+  | { type: "input_file"; filename: string; file_data: string };
 
 export type OpenAiLeadParserClient = {
   parseLead(input: { text: string; receivedAt: string; attachments?: TelegramLeadAttachment[] }): Promise<ParsedTelegramLeadInput>;
@@ -104,6 +116,17 @@ function createTelegramAttachmentSummary(attachments: TelegramLeadAttachment[] |
       const number = index + 1;
       if (attachment.kind === "photo") {
         return `Telegram attachment ${number}: photo (${attachment.mimeType})`;
+      }
+
+      if (attachment.kind === "audio") {
+        const source = attachment.sourceFileId ? `, source ${attachment.sourceFileId}` : "";
+        const saved = attachment.sourceAttachmentId ? `, saved ${attachment.sourceAttachmentId}` : "";
+        return [
+          `Telegram attachment ${number}: audio (${attachment.fileName ?? "telegram-audio"}${source}${saved})`,
+          attachment.transcript ? `Audio transcript ${number}: ${attachment.transcript}` : ""
+        ]
+          .filter(Boolean)
+          .join("\n");
       }
 
       return `Telegram attachment ${number}: PDF (${attachment.fileName ?? "telegram-lead.pdf"})`;
@@ -202,24 +225,30 @@ function createOpenAiUserContent(input: { text: string; receivedAt: string; atta
     return text;
   }
 
-  return [
+  const content: OpenAiUserContentBlock[] = [
     { type: "input_text", text },
-    ...attachments.map((attachment) => {
+    ...attachments.flatMap<OpenAiUserContentBlock>((attachment) => {
       if (attachment.kind === "photo") {
-        return {
+        return [{
           type: "input_image",
           image_url: `data:${attachment.mimeType};base64,${attachment.base64}`,
           detail: "high"
-        };
+        }];
       }
 
-      return {
+      if (attachment.kind === "audio") {
+        return [];
+      }
+
+      return [{
         type: "input_file",
         filename: attachment.fileName ?? "telegram-lead.pdf",
         file_data: attachment.base64
-      };
+      }];
     })
   ];
+
+  return content;
 }
 
 function extractResponseOutputText(body: unknown): string | undefined {
