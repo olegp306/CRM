@@ -30,6 +30,11 @@ describe("getAssistantResponseButtonUiAction", () => {
     expect(getAssistantResponseButtonUiAction({ label: "Create lead", action: "confirm" })).toBe("confirm");
   });
 
+  it("maps selected lead state action buttons to confirmation", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Mark KP sent", action: "mark_kp_sent" })).toBe("confirm");
+    expect(getAssistantResponseButtonUiAction({ label: "Undo", action: "undo_kp_sent" })).toBe("confirm");
+  });
+
   it("keeps plain links as links", () => {
     expect(getAssistantResponseButtonUiAction({ label: "CRM", url: "/leads?leadId=L-2026-004" })).toBe("link");
   });

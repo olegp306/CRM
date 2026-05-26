@@ -22,7 +22,18 @@ export function getAssistantResponseButtonUiAction(button: AssistantResponseButt
     return "link";
   }
 
-  if (button.action === "confirm" || button.action === "cancel" || button.action === "open_upload" || button.action === "set_theme") {
+  if (
+    button.action === "confirm" ||
+    button.action === "mark_kp_sent" ||
+    button.action === "undo_kp_sent" ||
+    button.action === "cancel" ||
+    button.action === "open_upload" ||
+    button.action === "set_theme"
+  ) {
+    if (button.action === "mark_kp_sent" || button.action === "undo_kp_sent") {
+      return "confirm";
+    }
+
     return button.action;
   }
 

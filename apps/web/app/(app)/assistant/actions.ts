@@ -39,11 +39,12 @@ import {
   type FeedbackTriageEvent,
   type PlatformFeedbackFilters
 } from "@app/assistant";
-import { generateAssistantKpDocument } from "./document-execution-store";
+import { generateAssistantKpDocument, listAssistantGeneratedDocuments } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
 import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent, undoAssistantLeadKpSent } from "./lead-execution-store";
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
+import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
 
 export type SubmitAssistantMessageInput = {
   context: AssistantContext;
@@ -58,10 +59,16 @@ export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
 const assistantThemePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
 
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
+  const selectedLeadId = input.context.selectedRecordIds?.[0];
+  const [leads, generatedDocuments] = selectedLeadId
+    ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
+    : [[], []];
+  const selectedLead = selectedLeadId ? createSelectedLeadChatSnapshot(selectedLeadId, leads, generatedDocuments) : null;
   const result = await createOpenAIAssistantSubmissionResult(
     {
       ...input,
-      attachments: input.attachments ?? []
+      attachments: input.attachments ?? [],
+      lead: selectedLead
     },
     {
       apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
