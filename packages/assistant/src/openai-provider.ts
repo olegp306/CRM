@@ -76,7 +76,7 @@ export async function createOpenAIAssistantSubmissionResult(
     context: input.context,
     attachments: input.attachments ?? []
   };
-  const deterministicChannelResponse = createAssistantChannelResponse(channelMessage);
+  const deterministicChannelResponse = createAssistantChannelResponse(channelMessage, { lead: input.lead });
 
   if (shouldUseChannelResponseBeforeOpenAI(deterministicChannelResponse)) {
     return createAssistantSubmissionResultFromChannelResponse({
@@ -162,6 +162,7 @@ function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof
     channelResponse.intent === "help" ||
     channelResponse.intent === "capability_request" ||
     channelResponse.intent === "lead_intake" ||
+    (channelResponse.intent === "crm_action" && Boolean(channelResponse.normalizedActions?.length)) ||
     channelResponse.intent === "support_request" ||
     channelResponse.shouldPersistFeedback
   );

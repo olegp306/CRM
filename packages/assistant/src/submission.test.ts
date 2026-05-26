@@ -379,6 +379,41 @@ describe("assistant submission orchestration", () => {
     expect(result.actionPreview).toBeNull();
   });
 
+  it("answers selected KP-ready lead questions with shared lead actions", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+      content: "Is KP ready?",
+      threadId: "thread-selected-kp-ready",
+      messageId: "message-selected-kp-ready",
+      lead: {
+        leadId: "L-2026-004",
+        missingFields: [],
+        kpReady: true,
+        pdfUrl: "/documents/attachments/pdf-1",
+        docxUrl: "/documents/attachments/docx-1?download=1",
+        canSendKp: true
+      }
+    });
+
+    expect(result.response).toContain("has enough data for KP");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "mark_kp_sent",
+      summary: "Mark KP sent from selected lead",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        { field: "lead.sourceText", from: null, to: "Is KP ready?" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "CRM", action: "open_crm", url: "/leads?leadId=L-2026-004" },
+      { label: "PDF", action: "open_pdf", url: "/documents/attachments/pdf-1" },
+      { label: "DOC", action: "download_doc", url: "/documents/attachments/docx-1?download=1" },
+      { label: "Send KP", action: "send_kp", url: "mailto:?subject=KP%20L-2026-004" },
+      { label: "Mark KP sent", action: "mark_kp_sent" }
+    ]);
+  });
+
   it("keeps source-material uploads in assistant context without creating feature feedback", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/leads", module: "leads" },

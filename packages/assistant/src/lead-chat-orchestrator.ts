@@ -11,6 +11,8 @@ export type LeadChatSnapshot = {
   docxUrl?: string;
   canSendKp?: boolean;
   kpSent?: boolean;
+  clientEmail?: string | null;
+  mailtoUrl?: string;
 };
 
 export type LeadChatOrchestratorInput = {
@@ -111,7 +113,13 @@ export function isLeadChatSourceMaterial(message: AssistantChannelMessage): bool
 }
 
 function isLeadUpdateSourceMaterial(message: AssistantChannelMessage): boolean {
-  return message.attachments.length > 0 || message.content.trim().length > 0;
+  const content = message.content.trim();
+  return (
+    message.attachments.length > 0 ||
+    isLeadChatSourceMaterial(message) ||
+    /\b(?:add|attach|update|fill|merge|save|append)\b/i.test(content) ||
+    /(РґРѕР±Р°РІ|РѕР±РЅРѕРІ|Р·Р°РїРѕР»РЅ|РїСЂРёРєСЂРµРї|СЃРѕС…СЂР°РЅ)/i.test(content)
+  );
 }
 
 function getReferencedLeadId(message: AssistantChannelMessage): string | null {

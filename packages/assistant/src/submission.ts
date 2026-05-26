@@ -9,6 +9,7 @@ import type {
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
+import type { LeadChatSnapshot } from "./lead-chat-orchestrator";
 import { getPermissionBlockedResponse, type PermissionBlockedResponse } from "./permission-blocked";
 import {
   createAssistantMessageDraft,
@@ -23,6 +24,7 @@ export type AssistantSubmissionInput = {
   threadId: string;
   messageId: string;
   attachments?: AssistantChannelAttachment[];
+  lead?: LeadChatSnapshot | null;
 };
 
 export type AssistantSubmissionResult = {
@@ -41,7 +43,8 @@ export function createAssistantSubmissionResult({
   content,
   threadId,
   messageId,
-  attachments
+  attachments,
+  lead
 }: AssistantSubmissionInput): AssistantSubmissionResult {
   const trimmedContent = content.trim();
   const thread = createAssistantThreadDraft({
@@ -69,7 +72,7 @@ export function createAssistantSubmissionResult({
     const actionPreview = createCrmActionPreview(trimmedContent, context);
 
     if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
-      const channelResponse = createAssistantChannelResponse(channelMessage);
+      const channelResponse = createAssistantChannelResponse(channelMessage, { lead });
 
       return createAssistantSubmissionResultFromChannelResponse({
         thread,
@@ -121,7 +124,7 @@ export function createAssistantSubmissionResult({
       };
   }
 
-  const channelResponse = createAssistantChannelResponse(channelMessage);
+  const channelResponse = createAssistantChannelResponse(channelMessage, { lead });
 
   return createAssistantSubmissionResultFromChannelResponse({
     thread,
@@ -190,6 +193,27 @@ function createChannelActionPreview(
   sourceText: string,
   attachments: AssistantChannelAttachment[]
 ): ActionPreview | null {
+  const leadActionButton = channelResponse.buttons.find(
+    (button) => button.action === "mark_kp_sent" || button.action === "undo_kp_sent"
+  );
+
+  if (leadActionButton?.action === "mark_kp_sent" || leadActionButton?.action === "undo_kp_sent") {
+    const leadId = channelResponse.normalizedActions?.includes(leadActionButton.action)
+      ? extractLeadIdFromButtons(channelResponse.buttons)
+      : null;
+
+    if (leadId) {
+      return createActionPreview({
+        actionType: leadActionButton.action,
+        summary: leadActionButton.action === "undo_kp_sent" ? "Undo KP sent from selected lead" : "Mark KP sent from selected lead",
+        changes: [
+          { field: "lead.selectedRecordIds", from: null, to: [leadId] },
+          { field: "lead.sourceText", from: null, to: sourceText }
+        ]
+      });
+    }
+  }
+
   const hasConfirmButton = channelResponse.buttons.some((button) => button.action === "confirm");
 
   if (channelResponse.intent !== "lead_intake" || !hasConfirmButton) {
@@ -201,6 +225,12 @@ function createChannelActionPreview(
     summary: "Create lead from assistant source material",
     changes: [{ field: "lead.sourceText", from: null, to: appendAttachmentSummary(sourceText, attachments) }]
   });
+}
+
+function extractLeadIdFromButtons(buttons: AssistantChannelResponseButton[]): string | null {
+  const crmUrl = buttons.find((button) => button.action === "open_crm" || button.label === "CRM")?.url;
+  const leadId = /[?&]leadId=([^&]+)/.exec(crmUrl ?? "")?.[1];
+  return leadId ? decodeURIComponent(leadId) : null;
 }
 
 function appendAttachmentSummary(sourceText: string, attachments: AssistantChannelAttachment[]): string {

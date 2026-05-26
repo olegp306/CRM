@@ -294,6 +294,36 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.confirmationStatus).toBeNull();
   });
 
+  it("answers selected KP-ready lead questions without calling OpenAI", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+        content: "Is KP ready?",
+        threadId: "thread-selected-kp-ready",
+        messageId: "message-selected-kp-ready",
+        lead: {
+          leadId: "L-2026-004",
+          missingFields: [],
+          kpReady: true,
+          pdfUrl: "/documents/attachments/pdf-1",
+          docxUrl: "/documents/attachments/docx-1?download=1",
+          canSendKp: true
+        }
+      },
+      {
+        apiKey: "",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("has enough data for KP");
+    expect(result.responseButtons.map((button) => button.label)).toEqual(["CRM", "PDF", "DOC", "Send KP", "Mark KP sent"]);
+  });
+
   it("accepts source-material uploads without persisting feature feedback when OpenAI returns no action", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(

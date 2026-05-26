@@ -441,6 +441,26 @@ After Approach 5: **100% for this parity milestone**.
 
 ---
 
+## Approach 6: Web Selected Lead Runtime Snapshot
+
+**Resulting product state:** When the Web Assistant is opened from a lead card URL, it can answer about that exact lead with the same KP-ready action set as Telegram lead cards.
+
+- [x] Add a pure selected-lead mapper from stored lead/document records into `LeadChatSnapshot`.
+- [x] Pass the selected lead snapshot into deterministic assistant submission and OpenAI fallback paths.
+- [x] Keep ordinary create-lead requests in the OpenAI planning path unless the shared engine returned real normalized actions.
+- [x] Treat selected-lead `Mark KP sent` / `Undo` buttons as confirmation actions in the Web Assistant UI.
+
+Verification:
+
+```powershell
+pnpm --filter @app/assistant test -- submission.test.ts openai-provider.test.ts lead-chat-orchestrator.test.ts channel-parity.test.ts
+pnpm --filter @app/web test -- selected-lead-snapshot.test.ts assistant-route-context.test.ts
+pnpm --filter @app/assistant typecheck
+pnpm --filter @app/web typecheck
+```
+
+---
+
 ## Self-Review
 
 Spec coverage:
