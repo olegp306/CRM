@@ -27,6 +27,11 @@ describe("classifyIntent", () => {
     expect(classifyIntent("Почему у лида L-2026-004 нет коммерческого предложения?")).toBe("support_request");
   });
 
+  it("classifies English why and how questions as support requests", () => {
+    expect(classifyIntent("Why does lead L-2026-004 have no KP?")).toBe("support_request");
+    expect(classifyIntent("How can I update this lead?")).toBe("support_request");
+  });
+
   it("captures explicit product requests as feature requests", () => {
     expect(classifyIntent("Добавьте кнопку для сравнения версий коммерческого предложения")).toBe("feature_request");
     expect(classifyIntent("It would be nice to upload several lead photos in the web assistant")).toBe(

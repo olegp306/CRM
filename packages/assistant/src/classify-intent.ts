@@ -16,7 +16,7 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   if (
-    /(who are you|what can you do|help|how do i|translate|kak sdelat|pomogi|переведи|кто ты|что умеешь|помоги|как сделать|почему|зачем|РєР°Рє СЃРґРµР»Р°С‚СЊ|РїРѕРјРѕРіРё)/.test(
+    /(who are you|what can you do|help|\bhow\b|\bwhy\b|translate|kak sdelat|pomogi|переведи|кто ты|что умеешь|помоги|как сделать|почему|зачем|РєР°Рє СЃРґРµР»Р°С‚СЊ|РїРѕРјРѕРіРё)/.test(
       text,
     )
   ) {
