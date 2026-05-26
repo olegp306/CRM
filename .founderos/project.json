@@ -170,5 +170,23 @@
                                       "ban_allowed_for_repeated_or_severe_abuse":  true,
                                       "expose_scores_or_thresholds_to_user":  false,
                                       "user_facing_response":  "This assistant can help with supported product tasks, but cannot help with unrelated or abusive use."
-                                  }
+                                  },
+    "local_development":  {
+                              "assigned_ports":  {
+                                                     "web":  4300,
+                                                     "api":  4301,
+                                                     "aux":  4302
+                                                 },
+                              "port_registry":  "C:\\repos\\PORTS.md",
+                              "machine_port_registry":  "C:\\repos\\.founderos\\ports.json",
+                              "strict_port_ownership":  true,
+                              "check_port_before_start":  true,
+                              "stop_stale_process_before_preview":  true,
+                              "fresh_build_required_before_preview":  true,
+                              "share_localhost_link_for_visual_work":  true,
+                              "share_lan_link_for_phone_preview":  true,
+                              "lan_bind_host":  "0.0.0.0",
+                              "localhost_url":  "http://localhost:4300",
+                              "lan_url_template":  "http://\u003cLAN_IP\u003e:4300"
+                          }
 }

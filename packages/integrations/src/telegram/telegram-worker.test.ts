@@ -192,7 +192,7 @@ describe("telegram worker", () => {
     const sendBody = JSON.parse(String(sendCall[1]?.body));
     expect(sendBody.text).toContain("<b>Missing data</b>: budget");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Open in CRM",
+      text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
   });
@@ -642,9 +642,9 @@ describe("telegram worker", () => {
     expect(finalMessageBody.text).toContain("<b>Pricing branch</b>: standard");
     expect(finalMessageBody.text).toContain("<b>KP document</b>: D-telegram-12345-13");
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
-      { text: "Open in CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
-      { text: "Скачать PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
-      { text: "Скачать DOCX", url: "https://files.example.com/kp.docx" }
+      { text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
+      { text: "PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
+      { text: "DOC", url: "https://files.example.com/kp.docx" }
     ]);
     expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
       urls.every((url) => /^https?:\/\//.test(url))

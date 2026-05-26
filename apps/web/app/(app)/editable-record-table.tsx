@@ -212,7 +212,7 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction }:
           <form
             key={selectedRow.id}
             onSubmit={handleSubmit}
-            className="grid max-h-[90vh] w-full max-w-2xl gap-4 overflow-auto rounded-lg border border-border bg-white p-5 shadow-xl"
+            className="grid max-h-[90vh] w-full max-w-2xl gap-4 overflow-auto rounded-lg border border-border bg-white p-5 pb-32 scroll-pb-32 shadow-xl"
           >
             <input type="hidden" name="id" value={selectedRow.id} />
             <div className="flex items-start justify-between gap-3">

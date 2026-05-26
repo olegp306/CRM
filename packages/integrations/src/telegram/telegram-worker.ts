@@ -1187,21 +1187,21 @@ function createTelegramCrmReplyMarkup(
 
   const row: Array<{ text: string; url: string }> = [
     {
-      text: "Open in CRM",
+      text: "CRM",
       url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
     }
   ];
 
   if (isTelegramHttpUrl(kpMail?.pdfUrl)) {
     row.push({
-      text: "Скачать PDF",
+      text: "PDF",
       url: kpMail.pdfUrl
     });
   }
 
   if (isTelegramHttpUrl(kpMail?.docxUrl)) {
     row.push({
-      text: "Скачать DOCX",
+      text: "DOC",
       url: kpMail.docxUrl
     });
   }

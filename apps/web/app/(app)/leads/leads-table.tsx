@@ -605,12 +605,12 @@ function LeadEditor({
     <form
       key={lead.id}
       onSubmit={onSubmit}
-      className={`grid gap-4 overflow-auto p-4 ${variant === "fullscreen" ? "h-screen max-h-screen" : "max-h-[calc(100vh-8rem)]"}`}
+      className={`grid gap-4 overflow-auto p-4 pb-32 scroll-pb-32 ${variant === "fullscreen" ? "h-screen max-h-screen" : "max-h-[calc(100vh-8rem)]"}`}
     >
       <input type="hidden" name="id" value={lead.id} />
-      <section className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="sticky top-0 z-20 -mx-3 -mt-3 grid gap-3 border-b border-border bg-white/95 px-3 py-3 pr-28 backdrop-blur sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-          <div className="grid min-w-0 gap-1 pr-1">
+      <section className="grid gap-1 rounded-lg border border-border bg-muted/20 p-3">
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
+          <div className="grid min-w-0 gap-1 pr-28">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
             <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadId}</h2>
             <p className="text-xs text-muted-foreground">
@@ -620,10 +620,10 @@ function LeadEditor({
           <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white">
             Close
           </button>
-          <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+          <div className="grid">
             <span
               title={currentStep.description}
-              className={`rounded-md px-2 py-1 text-right text-[11px] font-bold ${getLoopModeBadgeClassName(currentStep.mode)}`}
+              className={`w-full rounded-md px-2 py-1 text-left text-[11px] font-bold ${getLoopModeBadgeClassName(currentStep.mode)}`}
             >
               Stage {currentStep.id} - {currentStep.title}
             </span>
@@ -631,13 +631,7 @@ function LeadEditor({
         </div>
 
         <CompactLeadLoopProgress timeline={timeline} />
-        <div className="rounded-md bg-white p-3 text-xs">
-          <span className="text-muted-foreground">Waiting for </span>
-          <span className="font-semibold text-foreground">{nextAction ? nextAction.title : "No immediate action"}</span>
-          <span className="text-muted-foreground">
-            {nextAction ? ` - ${nextAction.description}` : " - Lead is not waiting on a specific manual step."}
-          </span>
-        </div>
+        <LeadNextActionRow lead={lead} nextAction={nextAction} />
         <LeadKpSummary lead={lead} />
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -673,7 +667,7 @@ function LeadEditor({
       <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
-      <div className="grid gap-3">
+      <div id="lead-edit-fields" className="grid gap-3">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />
         <TextField label="Temperature" name="temperature" defaultValue={lead.temperature} />
         <TextField label="Request type" name="requestType" defaultValue={lead.requestType} />
@@ -712,7 +706,6 @@ function LeadEditor({
 
 function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
   const baseName = createKpDownloadBaseName(lead);
-  const mailtoHref = createLeadKpMailtoHref(lead, typeof window === "undefined" ? "" : window.location.origin);
 
   return (
     <>
@@ -735,12 +728,68 @@ function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
           KP DOC
         </a>
       ) : null}
-      {mailtoHref ? (
-        <a href={mailtoHref} className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground">
-          Send KP
-        </a>
-      ) : null}
     </>
+  );
+}
+
+function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextAction: LeadActionPlanItem | undefined }) {
+  const mailtoHref = createLeadKpMailtoHref(lead, typeof window === "undefined" ? "" : window.location.origin);
+  const isKpAction = nextAction ? ["Complete missing data", "Generate KP", "Send KP"].includes(nextAction.title) : false;
+  const canSendKp = isKpAction && Boolean(mailtoHref) && lead.missingData.trim().length === 0;
+  const hasManualAction = Boolean(nextAction);
+  const actionLabel = isKpAction ? "Send KP" : (nextAction?.title ?? "Action");
+  const disabledReason =
+    isKpAction && lead.missingData.trim().length > 0
+      ? `Add missing data first: ${lead.missingData}`
+      : isKpAction && !lead.kpGeneratedDocumentId.trim()
+        ? "Generate the KP document first."
+        : isKpAction && !mailtoHref
+          ? "Create PDF or DOC before sending KP."
+          : "";
+
+  function handleGenericAction() {
+    document.getElementById("lead-edit-fields")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  return (
+    <div className="grid gap-2 rounded-md bg-white p-2 text-xs sm:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)] sm:items-stretch">
+      <div className="min-w-0 self-center px-1 py-1">
+        <span className="text-muted-foreground">Waiting for </span>
+        <span className="font-semibold text-foreground">{nextAction ? nextAction.title : "No immediate action"}</span>
+        <span className="text-muted-foreground">
+          {nextAction ? ` - ${nextAction.description}` : " - Lead is not waiting on a specific manual step."}
+        </span>
+      </div>
+      {canSendKp && mailtoHref ? (
+        <a
+          href={mailtoHref}
+          className="inline-flex min-h-9 items-center justify-center rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+        >
+          {actionLabel}
+        </a>
+      ) : isKpAction ? (
+        <button
+          type="button"
+          disabled
+          title={disabledReason}
+          className="inline-flex min-h-9 items-center justify-center rounded-md bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground opacity-70"
+          aria-label={`${actionLabel} unavailable. ${disabledReason}`}
+        >
+          {actionLabel}
+        </button>
+      ) : hasManualAction ? (
+        <button
+          type="button"
+          onClick={handleGenericAction}
+          className="inline-flex min-h-9 items-center justify-center rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+          aria-label={`Open action for ${nextAction?.title}`}
+        >
+          {actionLabel}
+        </button>
+      ) : (
+        <div className="hidden sm:block" aria-hidden="true" />
+      )}
+    </div>
   );
 }
 
