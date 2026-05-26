@@ -461,6 +461,27 @@ pnpm --filter @app/web typecheck
 
 ---
 
+## Approach 7: Telegram Lead Action Callback Buttons
+
+**Resulting product state:** Telegram lead cards expose the same primary lead actions as Web Assistant snapshots, including one-tap `Mark KP sent` and `Undo KP sent` actions.
+
+- [x] Add Telegram `callback_query` support for lead action buttons.
+- [x] Render `mark_kp_sent` and `undo_kp_sent` normalized actions as Telegram inline callback buttons.
+- [x] Resolve callback actions back to the originating lead card, update the lead, answer Telegram callback queries, and save channel events.
+- [x] Keep replied lead support questions in lead context so short questions like `What is the status?` do not fall back to generic chat.
+
+Verification:
+
+```powershell
+pnpm --filter @app/integrations test -- telegram-worker.test.ts
+pnpm --filter @app/integrations test -- telegram-polling.test.ts
+pnpm --filter @app/assistant test -- channel-engine.test.ts lead-flow-decision.test.ts channel-parity.test.ts
+pnpm --filter @app/integrations typecheck
+pnpm --filter @app/assistant typecheck
+```
+
+---
+
 ## Self-Review
 
 Spec coverage:

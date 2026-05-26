@@ -29,6 +29,17 @@ export type TelegramUpdate = {
       message_id: number;
     };
   };
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: {
+      message_id: number;
+      date?: number;
+      chat: {
+        id: number | string;
+      };
+    };
+  };
 };
 
 export type AllowedTelegramMessage = Omit<TelegramLeadMessage, "attachments"> & {
@@ -128,6 +139,27 @@ export async function sendTelegramMessage(config: {
   const body = (await response.json()) as { ok?: boolean; result?: { message_id?: number } };
 
   return { messageId: body.result?.message_id };
+}
+
+export async function answerTelegramCallbackQuery(config: {
+  botToken: string;
+  callbackQueryId: string;
+  text?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const fetchImpl = config.fetchImpl ?? fetch;
+  const response = await fetchImpl(`https://api.telegram.org/bot${config.botToken}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: config.callbackQueryId,
+      ...(config.text ? { text: config.text } : {})
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram answerCallbackQuery failed: ${response.status} ${response.statusText}`);
+  }
 }
 
 export async function sendTelegramDocument(config: {

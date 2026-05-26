@@ -49,7 +49,7 @@ export function createAssistantChannelResponse(
     return leadChatResponse;
   }
 
-  if (isPrioritySupportRequest(message.content, intent)) {
+  if (isPrioritySupportRequest(message.content, intent, Boolean(getReferencedLeadId(message)))) {
     const leadId = getReferencedLeadId(message);
 
     return {
@@ -113,9 +113,9 @@ function isExplicitLeadIntakeText(content: string): boolean {
   );
 }
 
-function isPrioritySupportRequest(content: string, intent: string): boolean {
+function isPrioritySupportRequest(content: string, intent: string, hasLeadContext = false): boolean {
   return (
-    intent === "support_request" &&
+    (intent === "support_request" || hasLeadContext) &&
     /\b(?:help|support|status|what(?:'s| is)\s+the\s+status|where\s+is|check|update)\b|помоги|статус|что дальше|проверь/i.test(
       content
     )

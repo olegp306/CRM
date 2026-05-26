@@ -698,10 +698,106 @@ describe("telegram worker", () => {
       { text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
       { text: "PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
       { text: "DOC", url: "https://files.example.com/kp.docx" },
-      { text: "Send KP", url: "mailto:katya@example.com?subject=KP%20L-2026-002" }
+      { text: "Send KP", url: "mailto:katya@example.com?subject=KP%20L-2026-002" },
+      { text: "Mark KP sent", callback_data: "lead_action:mark_kp_sent:L-2026-002" }
     ]);
-    expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
+    expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url?: string }) => button.url).filter(Boolean)).toSatisfy((urls: string[]) =>
       urls.every((url) => /^(?:https?:\/\/|mailto:)/.test(url))
+    );
+  });
+
+  it("marks and undoes KP sent from Telegram inline action callbacks", async () => {
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { workspaceId?: string; leadId?: string } }).where;
+          if (where?.workspaceId === "workspace-demo" && where.leadId === "L-2026-002") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "kp_sent" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/answerCallbackQuery") || url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      parser,
+      prisma: client,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 30,
+          callback_query: {
+            id: "callback-mark",
+            message: { message_id: 900, date: 1779297060, chat: { id: 12345 } },
+            data: "lead_action:mark_kp_sent:L-2026-002"
+          }
+        }
+      ],
+      config
+    );
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 31,
+          callback_query: {
+            id: "callback-undo",
+            message: { message_id: 900, date: 1779297120, chat: { id: 12345 } },
+            data: "lead_action:undo_kp_sent:L-2026-002"
+          }
+        }
+      ],
+      config
+    );
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(updates[0]).toEqual({
+      where: { id: "lead-record-2" },
+      data: expect.objectContaining({
+        status: "kp_sent",
+        kpSentDate: new Date("2026-05-20T17:11:00.000Z"),
+        followupStatus: "planned"
+      })
+    });
+    expect(updates[1]).toEqual({
+      where: { id: "lead-record-2" },
+      data: {
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        status: "new"
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/answerCallbackQuery",
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("callback-mark") })
     );
   });
 

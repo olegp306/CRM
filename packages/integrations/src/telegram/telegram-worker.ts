@@ -26,6 +26,7 @@ import {
   type TelegramLeadMessage
 } from "./openai-lead-parser";
 import {
+  answerTelegramCallbackQuery,
   createAllowedTelegramMessages,
   fetchTelegramUpdates,
   parseAllowedChatIds,
@@ -152,6 +153,16 @@ type AllowedTelegramMessageBatch = AllowedTelegramMessage & {
   updateIds: number[];
 };
 
+type AllowedTelegramLeadActionCallback = {
+  updateId: number;
+  callbackQueryId: string;
+  chatId: string;
+  messageId?: number;
+  receivedAt: string;
+  action: "mark_kp_sent" | "undo_kp_sent";
+  leadId: string;
+};
+
 const defaultTelegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
 
 export function createTelegramTestUpdateFromEnv(env: TelegramTestEnv): TelegramUpdate | undefined {
@@ -180,10 +191,91 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   const client = (config.prisma ?? defaultPrisma) as TelegramWorkerPrismaLike;
   const fetchImpl = config.fetchImpl ?? fetch;
   const telegramDraftStore = config.telegramDraftStore ?? defaultTelegramDraftStore;
+  const allowedCallbacks = createAllowedTelegramLeadActionCallbacks(updates, config.allowedChatIds);
   const allowedMessages = createAllowedTelegramMessages(updates, config.allowedChatIds);
   const messageBatches = createAllowedTelegramMessageBatches(allowedMessages, config.batchWindowMs);
   let processed = 0;
   let skipped = 0;
+
+  for (const callback of allowedCallbacks) {
+    const lead = await findLeadForTelegramActionCallback(client, config.workspaceId, callback);
+    if (!lead || !lead.id || !client.lead.update) {
+      await answerTelegramCallbackQuery({
+        botToken: config.botToken,
+        callbackQueryId: callback.callbackQueryId,
+        text: "I could not update this lead.",
+        fetchImpl
+      });
+      skipped += 1;
+      continue;
+    }
+
+    if (callback.action === "mark_kp_sent") {
+      await client.lead.update({
+        where: { id: lead.id },
+        data: createKpSentLeadUpdate(new Date(callback.receivedAt))
+      });
+      await answerTelegramCallbackQuery({
+        botToken: config.botToken,
+        callbackQueryId: callback.callbackQueryId,
+        text: "KP marked as sent.",
+        fetchImpl
+      });
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: callback.chatId,
+        text: `Lead <b>${escapeHtml(lead.leadId)}</b>: KP marked as sent. Follow-up planned in 7 days.`,
+        parseMode: "HTML",
+        fetchImpl
+      });
+      await saveTelegramChannelEvent(
+        config,
+        callback,
+        createKpSentMarkedEvent({
+          type: "kp_sent_marked",
+          channel: "telegram",
+          threadId: createTelegramThreadId(callback.chatId),
+          leadId: lead.leadId
+        })
+      );
+      processed += 1;
+      continue;
+    }
+
+    await client.lead.update({
+      where: { id: lead.id },
+      data: {
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        status: "new"
+      }
+    });
+    await answerTelegramCallbackQuery({
+      botToken: config.botToken,
+      callbackQueryId: callback.callbackQueryId,
+      text: "KP sent mark undone.",
+      fetchImpl
+    });
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: callback.chatId,
+      text: `Lead <b>${escapeHtml(lead.leadId)}</b>: KP sent mark was undone. We are back before sending KP.`,
+      parseMode: "HTML",
+      fetchImpl
+    });
+    await saveTelegramChannelEvent(
+      config,
+      callback,
+      createKpSentUndoneEvent({
+        type: "kp_sent_undone",
+        channel: "telegram",
+        threadId: createTelegramThreadId(callback.chatId),
+        leadId: lead.leadId
+      })
+    );
+    processed += 1;
+  }
 
   for (const message of messageBatches) {
     const leadFlowDecision = decideLeadFlow(createTelegramAssistantChannelMessage(config.workspaceId, message));
@@ -769,6 +861,33 @@ function defaultSleep(intervalMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, intervalMs));
 }
 
+function createAllowedTelegramLeadActionCallbacks(
+  updates: TelegramUpdate[],
+  allowedChatIds: Set<string>
+): AllowedTelegramLeadActionCallback[] {
+  return updates.flatMap((update) => {
+    const callback = update.callback_query;
+    const chatId = callback?.message ? String(callback.message.chat.id) : "";
+    const parsed = parseTelegramLeadActionCallbackData(callback?.data);
+
+    if (!callback || !parsed || !allowedChatIds.has(chatId)) {
+      return [];
+    }
+
+    return [
+      {
+        updateId: update.update_id,
+        callbackQueryId: callback.id,
+        chatId,
+        messageId: callback.message?.message_id,
+        receivedAt: new Date((callback.message?.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+        action: parsed.action,
+        leadId: parsed.leadId
+      }
+    ];
+  });
+}
+
 function createAllowedTelegramMessageBatches(messages: AllowedTelegramMessage[], batchWindowMs = 120_000): AllowedTelegramMessageBatch[] {
   const sorted = [...messages].sort((left, right) => {
     if (left.chatId !== right.chatId) {
@@ -1123,6 +1242,36 @@ async function findLeadByTelegramBotMessage(
   return leads.find((lead) => lead.rawInput?.includes(marker)) ?? null;
 }
 
+async function findLeadForTelegramActionCallback(
+  client: TelegramWorkerPrismaLike,
+  workspaceId: string,
+  callback: AllowedTelegramLeadActionCallback
+): Promise<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null> {
+  if (callback.messageId !== undefined) {
+    const byBotMessage = await findLeadByTelegramBotMessage(client, workspaceId, callback.chatId, callback.messageId);
+    if (byBotMessage?.leadId === callback.leadId) {
+      return byBotMessage;
+    }
+  }
+
+  const leads = await client.lead.findMany({
+    where: {
+      workspaceId,
+      leadId: callback.leadId
+    },
+    select: {
+      id: true,
+      leadId: true,
+      status: true,
+      rawInput: true,
+      missingData: true,
+      kpSentDate: true
+    }
+  });
+
+  return leads.find((lead) => lead.leadId === callback.leadId) ?? null;
+}
+
 function createTelegramLeadSessionFromExistingLead(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
   message: AllowedTelegramMessageBatch
@@ -1398,7 +1547,7 @@ function createTelegramCrmReplyMarkup(
     },
     { crmBaseUrl }
   );
-  const row = actions.flatMap((action): Array<{ text: string; url: string }> => {
+  const row = actions.flatMap((action): Array<{ text: string; url: string } | { text: string; callback_data: string }> => {
     switch (action.type) {
       case "open_crm":
         return [{ text: "CRM", url: action.url }];
@@ -1409,13 +1558,31 @@ function createTelegramCrmReplyMarkup(
       case "send_kp":
         return [{ text: "Send KP", url: action.mailtoUrl }];
       case "mark_kp_sent":
+        return [{ text: "Mark KP sent", callback_data: createTelegramLeadActionCallbackData("mark_kp_sent", action.leadId) }];
       case "undo_kp_sent":
-        return [];
+        return [{ text: "Undo KP sent", callback_data: createTelegramLeadActionCallbackData("undo_kp_sent", action.leadId) }];
     }
   });
 
   return {
     inline_keyboard: [row]
+  };
+}
+
+function createTelegramLeadActionCallbackData(action: "mark_kp_sent" | "undo_kp_sent", leadId: string): string {
+  return `lead_action:${action}:${leadId}`;
+}
+
+function parseTelegramLeadActionCallbackData(data: string | undefined): { action: "mark_kp_sent" | "undo_kp_sent"; leadId: string } | null {
+  const match = /^lead_action:(mark_kp_sent|undo_kp_sent):(L-\d{4}-\d+)$/i.exec(data?.trim() ?? "");
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    action: match[1].toLowerCase() as "mark_kp_sent" | "undo_kp_sent",
+    leadId: match[2].toUpperCase()
   };
 }
 
