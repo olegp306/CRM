@@ -165,21 +165,23 @@ export async function executeAssistantAction({
 
   if (action.actionType === "create_lead") {
     const rawInput = getPreviewChangeValue(action, "lead.sourceText");
+    const previewMissingData = getOptionalPreviewLeadMissingFields(action, "lead.missingData");
     const draft = createLeadIntakeDraft({
       source: "web",
-      clientName: extractClientName(rawInput),
-      email: extractEmail(rawInput),
-      phone: extractPhone(rawInput),
-      requestType: inferRequestType(rawInput),
-      projectAddress: extractProjectAddress(rawInput),
-      bgfM2: extractBgfM2(rawInput),
+      clientName: getOptionalPreviewString(action, "lead.clientName") ?? extractClientName(rawInput),
+      email: getOptionalPreviewString(action, "lead.email") ?? extractEmail(rawInput),
+      phone: getOptionalPreviewString(action, "lead.phone") ?? extractPhone(rawInput),
+      requestType: getOptionalPreviewString(action, "lead.requestType") ?? inferRequestType(rawInput),
+      projectAddress: getOptionalPreviewString(action, "lead.projectAddress") ?? extractProjectAddress(rawInput),
+      bgfM2: getOptionalPreviewNumber(action, "lead.bgfM2") ?? extractBgfM2(rawInput),
       rawInput
     });
+    const missingData = previewMissingData ?? draft.missingData;
     const leadId = getNextBusinessId({ kind: "lead", now, existingIds: existingLeadIds });
     const lead = await createLead({
       workspaceId: action.workspaceId,
       leadId,
-      status: draft.missingData.length > 0 ? "needs_data" : "new",
+      status: missingData.length > 0 ? "needs_data" : "new",
       rawInput,
       clientName: draft.clientName,
       requestType: draft.requestType,
@@ -187,9 +189,9 @@ export async function executeAssistantAction({
       bgfM2: draft.bgfM2,
       email: draft.email,
       phone: draft.phone,
-      missingData: draft.missingData,
-      isStandard: draft.isStandard,
-      temperature: "warm"
+      missingData,
+      isStandard: getOptionalPreviewBoolean(action, "lead.isStandard") ?? draft.isStandard,
+      temperature: getOptionalPreviewTemperature(action, "lead.temperature") ?? "warm"
     });
     const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
 
@@ -211,7 +213,7 @@ export async function executeAssistantAction({
             bgfM2: draft.bgfM2,
             email: draft.email,
             phone: draft.phone,
-            missingData: draft.missingData
+            missingData
           },
           requestedByUserId: action.requestedByUserId
         })
@@ -383,6 +385,57 @@ function getPreviewChangeValue(action: AssistantActionWriteDraft, field: string)
   }
 
   return change.to.trim();
+}
+
+function getOptionalPreviewString(action: AssistantActionWriteDraft, field: string): string | null {
+  const change = action.preview.changes.find((item) => item.field === field);
+
+  if (typeof change?.to !== "string") {
+    return null;
+  }
+
+  const trimmed = change.to.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getOptionalPreviewNumber(action: AssistantActionWriteDraft, field: string): number | null {
+  const change = action.preview.changes.find((item) => item.field === field);
+  return typeof change?.to === "number" && Number.isFinite(change.to) ? change.to : null;
+}
+
+function getOptionalPreviewBoolean(action: AssistantActionWriteDraft, field: string): boolean | null {
+  const change = action.preview.changes.find((item) => item.field === field);
+  return typeof change?.to === "boolean" ? change.to : null;
+}
+
+function getOptionalPreviewStringArray(action: AssistantActionWriteDraft, field: string): string[] | null {
+  const change = action.preview.changes.find((item) => item.field === field);
+
+  if (!Array.isArray(change?.to) || change.to.some((item) => typeof item !== "string")) {
+    return null;
+  }
+
+  return change.to;
+}
+
+function getOptionalPreviewLeadMissingFields(action: AssistantActionWriteDraft, field: string): LeadMissingField[] | null {
+  const values = getOptionalPreviewStringArray(action, field);
+
+  if (!values) {
+    return null;
+  }
+
+  return values.filter(isLeadMissingField);
+}
+
+function isLeadMissingField(value: string): value is LeadMissingField {
+  return value === "clientName" || value === "requestType" || value === "projectAddress" || value === "bgfM2";
+}
+
+function getOptionalPreviewTemperature(action: AssistantActionWriteDraft, field: string): "cold" | "warm" | "hot" | "unknown" | null {
+  const value = getOptionalPreviewString(action, field);
+
+  return value === "cold" || value === "warm" || value === "hot" || value === "unknown" ? value : null;
 }
 
 function extractEmail(text: string): string | null {

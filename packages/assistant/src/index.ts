@@ -19,6 +19,7 @@ export * from "./lead-draft-flow";
 export * from "./lead-flow-decision";
 export * from "./memory-repository";
 export * from "./openai-provider";
+export * from "./openai-lead-parser";
 export * from "./onboarding";
 export * from "./persistence";
 export * from "./platform-inbox";

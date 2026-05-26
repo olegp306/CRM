@@ -482,6 +482,26 @@ pnpm --filter @app/assistant typecheck
 
 ---
 
+## Approach 8: Web Assistant Source Material Parsing
+
+**Resulting product state:** Web Assistant source-material uploads use the same parser-backed lead field extraction pattern as Telegram before the operator confirms lead creation.
+
+- [x] Add an OpenAI lead parser adapter in `packages/assistant` for normalized channel attachments.
+- [x] Enrich Web lead-intake action previews with parsed client, request, address, BGF, contact, missing-field, standard-pricing, and temperature fields.
+- [x] Teach action execution to prefer parsed preview fields over raw text heuristics while preserving the raw source material.
+- [x] Wire the Web Assistant server action to enrich source-material previews when `OPENAI_API_KEY` is available.
+
+Verification:
+
+```powershell
+pnpm --filter @app/assistant test -- submission.test.ts action-execution.test.ts openai-lead-parser.test.ts lead-channel-intake.test.ts openai-provider.test.ts
+pnpm --filter @app/web test -- upload-source-material.test.ts assistant-route-context.test.ts assistant-action-preview.test.ts
+pnpm --filter @app/assistant typecheck
+pnpm --filter @app/web typecheck
+```
+
+---
+
 ## Self-Review
 
 Spec coverage:

@@ -199,6 +199,55 @@ describe("executeAssistantAction", () => {
     ]);
   });
 
+  it("prefers parsed lead preview fields over raw text heuristics during execution", async () => {
+    const createdLeads: unknown[] = [];
+    const parsedPreviewAction: AssistantActionWriteDraft = {
+      ...action,
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          { field: "lead.sourceText", from: null, to: "Uploaded client material with all KP fields in the attachment." },
+          { field: "lead.clientName", from: null, to: "Irina Schneider" },
+          { field: "lead.requestType", from: null, to: "new_build" },
+          { field: "lead.projectAddress", from: null, to: "Bad Aibling, Gartenweg 9" },
+          { field: "lead.bgfM2", from: null, to: 195 },
+          { field: "lead.email", from: null, to: "irina.schneider@example.com" },
+          { field: "lead.phone", from: null, to: "+49 160 4442211" },
+          { field: "lead.missingData", from: null, to: [] },
+          { field: "lead.isStandard", from: null, to: true },
+          { field: "lead.temperature", from: null, to: "hot" }
+        ]
+      }
+    };
+
+    await executeAssistantAction({
+      action: parsedPreviewAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      createLead: async (lead) => {
+        createdLeads.push(lead);
+        return { id: "lead-record-2", ...lead };
+      }
+    });
+
+    expect(createdLeads).toEqual([
+      expect.objectContaining({
+        status: "new",
+        rawInput: "Uploaded client material with all KP fields in the attachment.",
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        projectAddress: "Bad Aibling, Gartenweg 9",
+        bgfM2: 195,
+        email: "irina.schneider@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        isStandard: true,
+        temperature: "hot"
+      })
+    ]);
+  });
+
   it("generates a KP document after web assistant lead creation when the document port is available", async () => {
     const generatedDocuments: unknown[] = [];
     const sourceMaterialAction: AssistantActionWriteDraft = {

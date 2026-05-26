@@ -9,6 +9,7 @@ import type {
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
+import { createLeadDraftFromAssistantChannelMessage, type AssistantLeadParserClient } from "./lead-channel-intake";
 import type { LeadChatSnapshot } from "./lead-chat-orchestrator";
 import { getPermissionBlockedResponse, type PermissionBlockedResponse } from "./permission-blocked";
 import {
@@ -135,6 +136,49 @@ export function createAssistantSubmissionResult({
     messageId,
     attachments: attachments ?? []
   });
+}
+
+export async function enrichLeadIntakeSubmissionResult(
+  result: AssistantSubmissionResult,
+  input: AssistantSubmissionInput,
+  parser: AssistantLeadParserClient
+): Promise<AssistantSubmissionResult> {
+  if (result.actionPreview?.actionType !== "create_lead" || result.actionPreview.summary !== "Create lead from assistant source material") {
+    return result;
+  }
+
+  const trimmedContent = input.content.trim();
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId: input.threadId,
+    messageId: input.messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context: input.context,
+    attachments: input.attachments ?? []
+  };
+  const draft = await createLeadDraftFromAssistantChannelMessage(channelMessage, parser);
+
+  return {
+    ...result,
+    actionPreview: createActionPreview({
+      actionType: "create_lead",
+      summary: result.actionPreview.summary,
+      changes: [
+        { field: "lead.sourceText", from: null, to: draft.rawInput },
+        { field: "lead.clientName", from: null, to: draft.clientName },
+        { field: "lead.requestType", from: null, to: draft.requestType },
+        { field: "lead.projectAddress", from: null, to: draft.projectAddress },
+        { field: "lead.bgfM2", from: null, to: draft.bgfM2 },
+        { field: "lead.email", from: null, to: draft.email },
+        { field: "lead.phone", from: null, to: draft.phone },
+        { field: "lead.missingData", from: null, to: draft.missingData },
+        { field: "lead.isStandard", from: null, to: draft.isStandard },
+        { field: "lead.temperature", from: null, to: draft.temperature }
+      ],
+      warnings: result.actionPreview.warnings
+    })
+  };
 }
 
 export function createAssistantSubmissionResultFromChannelResponse({
