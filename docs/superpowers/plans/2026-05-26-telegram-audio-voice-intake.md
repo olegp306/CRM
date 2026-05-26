@@ -331,6 +331,7 @@ Spec coverage:
 - Clarifying questions below confidence threshold: Task 5.
 - Final robustness addendum: Telegram raw input now retains original audio `file_id` source metadata, transcription failures produce a user-facing resend/text-summary prompt instead of failing the worker, and shared Telegram help explicitly advertises voice messages.
 - Final source-storage addendum: downloaded Telegram photos/PDF/audio can now be saved as `Attachment` rows with object storage keys via the worker's `saveSourceAttachment` port; env wiring uses the existing `Attachment` model and configured object storage, and raw input records the saved attachment id.
+- Real audio-file addendum: Telegram audio files sent as `document` uploads are now accepted and transcribed when the MIME type starts with `audio/` or the filename ends with a supported audio extension (`mp3`, `m4a`, `ogg`, `wav`, `webm`, `mp4`, `mpeg`, `mpga`).
 
 Placeholder scan:
 

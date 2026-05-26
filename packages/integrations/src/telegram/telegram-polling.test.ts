@@ -110,4 +110,38 @@ describe("telegram polling", () => {
       })
     ]);
   });
+
+  it("accepts Telegram audio files sent as documents", () => {
+    expect(
+      createAllowedTelegramMessages(
+        [
+          {
+            update_id: 60,
+            message: {
+              message_id: 601,
+              date: 1779299300,
+              chat: { id: 12345 },
+              document: { file_id: "audio-document", file_name: "client-brief.mp3", mime_type: "audio/mpeg" }
+            }
+          }
+        ],
+        new Set(["12345"])
+      )
+    ).toEqual([
+      expect.objectContaining({
+        updateId: 60,
+        messageId: 601,
+        text: "[Telegram audio attachment: audio-document]",
+        attachments: [
+          expect.objectContaining({
+            kind: "audio",
+            sourceMessageId: 601,
+            fileId: "audio-document",
+            fileName: "client-brief.mp3",
+            mimeType: "audio/mpeg"
+          })
+        ]
+      })
+    ]);
+  });
 });

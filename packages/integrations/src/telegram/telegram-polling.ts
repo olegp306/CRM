@@ -233,6 +233,16 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
     });
   }
 
+  if (document && isTelegramAudioDocument(fileName, mimeType)) {
+    attachments.push({
+      kind: "audio",
+      sourceMessageId: message.message_id,
+      fileId: document.file_id,
+      fileName,
+      mimeType: mimeType || inferTelegramAudioMimeType(fileName)
+    });
+  }
+
   if (message.voice) {
     attachments.push({
       kind: "audio",
@@ -254,6 +264,37 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
   }
 
   return attachments;
+}
+
+function isTelegramAudioDocument(fileName: string, mimeType: string): boolean {
+  const lowerFileName = fileName.toLowerCase();
+
+  return (
+    mimeType.toLowerCase().startsWith("audio/") ||
+    [".mp3", ".m4a", ".ogg", ".oga", ".wav", ".webm", ".mp4", ".mpeg", ".mpga"].some((extension) => lowerFileName.endsWith(extension))
+  );
+}
+
+function inferTelegramAudioMimeType(fileName: string): string {
+  const lowerFileName = fileName.toLowerCase();
+
+  if (lowerFileName.endsWith(".mp3") || lowerFileName.endsWith(".mpeg") || lowerFileName.endsWith(".mpga")) {
+    return "audio/mpeg";
+  }
+
+  if (lowerFileName.endsWith(".m4a") || lowerFileName.endsWith(".mp4")) {
+    return "audio/mp4";
+  }
+
+  if (lowerFileName.endsWith(".wav")) {
+    return "audio/wav";
+  }
+
+  if (lowerFileName.endsWith(".webm")) {
+    return "audio/webm";
+  }
+
+  return "audio/ogg";
 }
 
 function createTelegramAuthor(message: NonNullable<TelegramUpdate["message"]>): Pick<AllowedTelegramMessage, "authorName" | "authorUsername"> {
