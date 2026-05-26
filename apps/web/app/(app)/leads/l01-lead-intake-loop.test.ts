@@ -47,7 +47,23 @@ describe("L01 lead intake loop", () => {
     });
 
     expect(createdLead).toEqual({ status: "executed", leadId: "L-2026-001", recordId: "lead-record-1" });
-    expect(createdLeads).toEqual([{ workspaceId: "workspace-1", leadId: "L-2026-001", status: "new", rawInput }]);
+    expect(createdLeads).toEqual([
+      {
+        workspaceId: "workspace-1",
+        leadId: "L-2026-001",
+        status: "new",
+        rawInput,
+        clientName: "Anna Beispiel",
+        requestType: "new_build",
+        projectAddress: "Beispielstrasse 1 Berlin",
+        bgfM2: 150,
+        email: "anna@example.com",
+        phone: "+49 30 123",
+        missingData: [],
+        isStandard: true,
+        temperature: "warm"
+      }
+    ]);
 
     const documentStore = createMemoryGeneratedDocumentStore([]);
     const generateKpAction = createAction("generate_kp", "message-2", [

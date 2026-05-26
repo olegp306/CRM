@@ -1,12 +1,21 @@
-import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
+import { createKpSentLeadUpdate, createLeadIntakeDraft, getNextBusinessId, type LeadMissingField } from "@app/core";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantActionWriteDraft } from "./persistence";
 
 export type CreateLeadFromAssistantInput = {
   workspaceId: string;
   leadId: string;
-  status: "new";
+  status: "new" | "needs_data";
   rawInput: string;
+  clientName?: string | null;
+  requestType?: string | null;
+  projectAddress?: string | null;
+  bgfM2?: number | null;
+  email?: string | null;
+  phone?: string | null;
+  missingData?: LeadMissingField[];
+  isStandard?: boolean;
+  temperature?: "cold" | "warm" | "hot" | "unknown";
 };
 
 export type CreatedLeadRecord = Omit<CreateLeadFromAssistantInput, "status"> & {
@@ -91,6 +100,10 @@ export type ExecuteAssistantActionResult =
       status: Extract<ActionConfirmationStatus, "executed">;
       leadId: string;
       recordId: string;
+      documentId?: string;
+      pdfAttachmentId?: string;
+      docxAttachmentId?: string;
+      documentError?: string;
     }
   | {
       status: Extract<ActionConfirmationStatus, "executed">;
@@ -131,12 +144,31 @@ export async function executeAssistantAction({
 
   if (action.actionType === "create_lead") {
     const rawInput = getPreviewChangeValue(action, "lead.sourceText");
+    const draft = createLeadIntakeDraft({
+      source: "web",
+      clientName: extractClientName(rawInput),
+      email: extractEmail(rawInput),
+      phone: extractPhone(rawInput),
+      requestType: inferRequestType(rawInput),
+      projectAddress: extractProjectAddress(rawInput),
+      bgfM2: extractBgfM2(rawInput),
+      rawInput
+    });
     const leadId = getNextBusinessId({ kind: "lead", now, existingIds: existingLeadIds });
     const lead = await createLead({
       workspaceId: action.workspaceId,
       leadId,
-      status: "new",
-      rawInput
+      status: draft.missingData.length > 0 ? "needs_data" : "new",
+      rawInput,
+      clientName: draft.clientName,
+      requestType: draft.requestType,
+      projectAddress: draft.projectAddress,
+      bgfM2: draft.bgfM2,
+      email: draft.email,
+      phone: draft.phone,
+      missingData: draft.missingData,
+      isStandard: draft.isStandard,
+      temperature: "warm"
     });
     const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
 
@@ -144,10 +176,42 @@ export async function executeAssistantAction({
       throw new Error(`Assistant action ${action.messageId} did not execute`);
     }
 
+    const generatedDocumentResult = generateKpDocument
+      ? await generateKpDocument({
+          workspaceId: action.workspaceId,
+          documentId: createDocumentId(now, action.messageId),
+          documentType: "kp",
+          sourceRecordIds: [lead.leadId],
+          rawInput,
+          fieldSnapshot: {
+            clientName: draft.clientName,
+            requestType: draft.requestType,
+            projectAddress: draft.projectAddress,
+            bgfM2: draft.bgfM2,
+            email: draft.email,
+            phone: draft.phone,
+            missingData: draft.missingData
+          },
+          requestedByUserId: action.requestedByUserId
+        })
+          .then((document) => ({ document, error: null }))
+          .catch((error: unknown) => ({ document: null, error: error instanceof Error ? error.message : String(error) }))
+      : null;
+    const generatedDocument = generatedDocumentResult?.document ?? null;
+    const documentError = generatedDocumentResult?.error ?? null;
+
     return {
       status: executedStatus,
       leadId: lead.leadId,
-      recordId: lead.id
+      recordId: lead.id,
+      ...(generatedDocument
+        ? {
+            documentId: generatedDocument.documentId,
+            pdfAttachmentId: generatedDocument.pdfAttachmentId,
+            docxAttachmentId: generatedDocument.docxAttachmentId
+          }
+        : {}),
+      ...(documentError ? { documentError } : {})
     };
   }
 
@@ -270,6 +334,56 @@ function getPreviewChangeValue(action: AssistantActionWriteDraft, field: string)
   }
 
   return change.to.trim();
+}
+
+function extractEmail(text: string): string | null {
+  return text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null;
+}
+
+function extractClientName(text: string): string | null {
+  const nameBeforeEmail = text.match(/(?:зовут|name is)?\s*([A-ZА-ЯЁ][A-Za-zА-Яа-яЁёÀ-ž-]+(?:\s+[A-ZА-ЯЁ][A-Za-zА-Яа-яЁёÀ-ž-]+){1,3})\s*,\s*(?:contact\s+)?[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return nameBeforeEmail?.[1]
+    ?.replace(/^(?:меня\s+зовут|name\s+is)\s+/i, "")
+    .replace(/^(?:Neubau|new build)\s+/i, "")
+    .replace(/^(?:EFH|for)\s+/i, "")
+    .replace(/^for\s+/i, "")
+    .trim() ?? null;
+}
+
+function extractPhone(text: string): string | null {
+  return text.match(/\+?\d[\d\s().-]{6,}\d/)?.[0]?.trim() ?? null;
+}
+
+function inferRequestType(text: string): string | null {
+  if (/\b(new build|new_build|neubau|efh)\b/i.test(text) || /новый\s+дом|ефх/i.test(text)) {
+    return "new_build";
+  }
+
+  if (/\b(renovation|sanierung|umbau|altbau)\b/i.test(text) || /ремонт|реконструкц/i.test(text)) {
+    return "renovation";
+  }
+
+  return null;
+}
+
+function extractBgfM2(text: string): number | null {
+  const match = text.match(/\bBGF\b[^\d]{0,12}(\d{2,5}(?:[,.]\d+)?)/i) ?? text.match(/(\d{2,5}(?:[,.]\d+)?)\s*(?:m2|m²|qm)\b/i);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const value = Number(match[1].replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractProjectAddress(text: string): string | null {
+  const inPlaceWithStreet = text.match(/\bin\s+([A-Z][A-Za-zÀ-ž -]+),\s*([A-Z][A-Za-zÀ-ž]+(?:weg|strasse|straße|allee|platz|ring|gasse)\s+\d+[A-Za-z]?)/);
+  if (inPlaceWithStreet?.[1] && inPlaceWithStreet[2]) {
+    return `${inPlaceWithStreet[1].trim()}, ${inPlaceWithStreet[2].trim()}`;
+  }
+
+  const street = text.match(/\b([A-Z][A-Za-zÀ-ž]+(?:weg|strasse|straße|allee|platz|ring|gasse)\s+\d+[A-Za-z]?(?:\s+[A-Z][A-Za-zÀ-ž -]+)?)/);
+  return street?.[1]?.trim() ?? null;
 }
 
 function getPreviewChangeStringArray(action: AssistantActionWriteDraft, field: string): string[] {

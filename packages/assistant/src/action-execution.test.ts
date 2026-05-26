@@ -115,10 +115,151 @@ describe("executeAssistantAction", () => {
       {
         workspaceId: "workspace-1",
         leadId: "L-2026-002",
-        status: "new",
-        rawInput: "Create lead Anna Beispiel"
+        status: "needs_data",
+        rawInput: "Create lead Anna Beispiel",
+        clientName: null,
+        requestType: null,
+        projectAddress: null,
+        bgfM2: null,
+        email: null,
+        phone: null,
+        missingData: ["clientName", "requestType", "projectAddress"],
+        isStandard: false,
+        temperature: "warm"
       }
     ]);
+  });
+
+  it("creates web assistant leads with parsed intake fields like the Telegram loop", async () => {
+    const createdLeads: unknown[] = [];
+    const sourceMaterialAction: AssistantActionWriteDraft = {
+      ...action,
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          {
+            field: "lead.sourceText",
+            from: null,
+            to: "Здравствуйте, меня зовут Ирина Шнайдер, contact irina.schneider@example.com, +49 160 4442211. Neubau EFH in Bad Aibling, Gartenweg 9, BGF 195 m2."
+          }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: sourceMaterialAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      createLead: async (lead) => {
+        createdLeads.push(lead);
+        return { id: "lead-record-2", ...lead };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      leadId: "L-2026-002",
+      recordId: "lead-record-2"
+    });
+    expect(createdLeads).toEqual([
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        leadId: "L-2026-002",
+        status: "new",
+        clientName: "Ирина Шнайдер",
+        requestType: "new_build",
+        projectAddress: "Bad Aibling, Gartenweg 9",
+        bgfM2: 195,
+        email: "irina.schneider@example.com",
+        phone: "+49 160 4442211",
+        missingData: expect.not.arrayContaining(["requestType", "projectAddress", "bgfM2"]),
+        isStandard: true,
+        temperature: "warm"
+      })
+    ]);
+  });
+
+  it("generates a KP document after web assistant lead creation when the document port is available", async () => {
+    const generatedDocuments: unknown[] = [];
+    const sourceMaterialAction: AssistantActionWriteDraft = {
+      ...action,
+      messageId: "message-source",
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          {
+            field: "lead.sourceText",
+            from: null,
+            to: "Neubau EFH for Irina Schneider, irina.schneider@example.com, +49 160 4442211, BGF 195 m2."
+          }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: sourceMaterialAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      createLead: async (lead) => ({ id: "lead-record-2", ...lead }),
+      generateKpDocument: async (document) => {
+        generatedDocuments.push(document);
+        return {
+          id: "generated-document-record-1",
+          ...document,
+          pdfAttachmentId: "attachment-pdf",
+          docxAttachmentId: "attachment-docx"
+        };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      leadId: "L-2026-002",
+      recordId: "lead-record-2",
+      documentId: "D-20260521-message-source",
+      pdfAttachmentId: "attachment-pdf",
+      docxAttachmentId: "attachment-docx"
+    });
+    expect(generatedDocuments).toEqual([
+      {
+        workspaceId: "workspace-1",
+        documentId: "D-20260521-message-source",
+        documentType: "kp",
+        sourceRecordIds: ["L-2026-002"],
+        rawInput: "Neubau EFH for Irina Schneider, irina.schneider@example.com, +49 160 4442211, BGF 195 m2.",
+        fieldSnapshot: {
+          clientName: "Irina Schneider",
+          requestType: "new_build",
+          projectAddress: null,
+          bgfM2: 195,
+          email: "irina.schneider@example.com",
+          phone: "+49 160 4442211",
+          missingData: ["projectAddress"]
+        },
+        requestedByUserId: "user-1"
+      }
+    ]);
+  });
+
+  it("still returns the created lead when KP document generation fails", async () => {
+    const result = await executeAssistantAction({
+      action,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      createLead: async (lead) => ({ id: "lead-record-2", ...lead }),
+      generateKpDocument: async () => {
+        throw new Error("template missing");
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      leadId: "L-2026-002",
+      recordId: "lead-record-2",
+      documentError: "template missing"
+    });
   });
 
   it("rejects execution when the action has not been awaiting confirmation", async () => {

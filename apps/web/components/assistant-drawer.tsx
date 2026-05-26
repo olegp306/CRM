@@ -7,7 +7,7 @@ import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantCon
 import { MessageSquareText, Mic, Paperclip, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { getAssistantExecutionLabel } from "./assistant-execution-label";
+import { getAssistantExecutionButtons, getAssistantExecutionLabel, type AssistantExecutionButton } from "./assistant-execution-label";
 import { useWorkspaceSession } from "./workspace-session-provider";
 
 export function AssistantDrawer() {
@@ -21,6 +21,7 @@ export function AssistantDrawer() {
   const [confirmation, setConfirmation] = useState<"idle" | "confirmed" | "cancelled">("idle");
   const [latestMessageId, setLatestMessageId] = useState<string | null>(null);
   const [executionSummary, setExecutionSummary] = useState<string | null>(null);
+  const [executionButtons, setExecutionButtons] = useState<AssistantExecutionButton[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savedSummary, setSavedSummary] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AssistantChannelAttachment[]>([]);
@@ -92,6 +93,7 @@ export function AssistantDrawer() {
       setLatestMessageId(messageId);
       setConfirmation("idle");
       setExecutionSummary(null);
+      setExecutionButtons([]);
       setText("");
       setAttachments([]);
     } finally {
@@ -105,6 +107,7 @@ export function AssistantDrawer() {
     setConfirmation("idle");
     setLatestMessageId(null);
     setExecutionSummary(null);
+    setExecutionButtons([]);
     setSavedSummary(null);
   }
 
@@ -120,6 +123,7 @@ export function AssistantDrawer() {
 
     setConfirmation("confirmed");
     setExecutionSummary(`Executed: ${getAssistantExecutionLabel(execution)}`);
+    setExecutionButtons(getAssistantExecutionButtons(execution));
   }
 
   return (
@@ -210,6 +214,19 @@ export function AssistantDrawer() {
                         </button>
                       )
                     )}
+                  </div>
+                ) : null}
+                {executionButtons.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {executionButtons.map((button) => (
+                      <a
+                        key={`${button.label}-${button.url}`}
+                        href={button.url}
+                        className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                      >
+                        {button.label}
+                      </a>
+                    ))}
                   </div>
                 ) : null}
                 {latestResult?.actionPreview ? (
