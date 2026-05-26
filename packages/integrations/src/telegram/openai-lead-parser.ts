@@ -58,6 +58,8 @@ export function createTelegramSourceExternalIds(message: Pick<TelegramLeadMessag
   return (message.sourceMessageIds ?? [message.messageId]).map((messageId) => createTelegramSourceExternalId(message.chatId, messageId));
 }
 
+// Telegram keeps this adapter while web lead intake migrates to the shared channel intake.
+// The output shape must remain compatible with existing Telegram worker tests.
 export async function createLeadDraftFromTelegramMessage(
   message: TelegramLeadMessage,
   parser: OpenAiLeadParserClient
