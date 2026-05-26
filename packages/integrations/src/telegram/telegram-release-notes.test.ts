@@ -4,7 +4,7 @@ import { createTelegramReleaseNotesMessage, sendTelegramReleaseNotes } from "./t
 describe("telegram release notes", () => {
   it("formats a short quiet release message instead of a long changelog", () => {
     const message = createTelegramReleaseNotesMessage({
-      version: "0.2.3",
+      version: "0.2.4",
       notes: [
         "Lead cards now open fullscreen from table rows and Telegram CRM links.",
         "Telegram replies can save short human notes into lead history.",
@@ -13,7 +13,7 @@ describe("telegram release notes", () => {
       ]
     });
 
-    expect(message).toContain("CRM updated to v0.2.3");
+    expect(message).toContain("CRM updated to v0.2.4");
     expect(message).toContain("Lead cards now open fullscreen");
     expect(message).toContain("Telegram replies can save");
     expect(message).toContain("CRM buttons are returned");
@@ -28,7 +28,7 @@ describe("telegram release notes", () => {
       botToken: "telegram-token",
       chatIds: ["12345"],
       crmBaseUrl: "https://crm.example.com",
-      version: "0.2.3",
+      version: "0.2.4",
       notes: ["Quiet release note"],
       confirm: false,
       fetchImpl: fetchMock as unknown as typeof fetch
@@ -38,7 +38,7 @@ describe("telegram release notes", () => {
       mode: "preview",
       chatIds: ["12345"],
       sent: 0,
-      message: expect.stringContaining("CRM updated to v0.2.3")
+      message: expect.stringContaining("CRM updated to v0.2.4")
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe("telegram release notes", () => {
       botToken: "telegram-token",
       chatIds: ["12345", "777"],
       crmBaseUrl: "https://crm.example.com",
-      version: "0.2.3",
+      version: "0.2.4",
       notes: ["Quiet release note"],
       confirm: true,
       fetchImpl: fetchMock as unknown as typeof fetch
@@ -66,7 +66,7 @@ describe("telegram release notes", () => {
       mode: "sent",
       chatIds: ["12345", "777"],
       sent: 2,
-      message: expect.stringContaining("CRM updated to v0.2.3")
+      message: expect.stringContaining("CRM updated to v0.2.4")
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 

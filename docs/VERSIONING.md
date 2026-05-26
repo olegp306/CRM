@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.2.3`
+Current stable version: `0.2.4`
 
 Stable tag format:
 
@@ -14,6 +14,7 @@ v0.2.0
 v0.2.1
 v0.2.2
 v0.2.3
+v0.2.4
 ```
 
 ## Branch Workflow
@@ -140,6 +141,15 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.2.4
+
+Telegram notes and lead card reliability release:
+
+- Lead card accordion sections render as usable collapsed blocks on mobile/fullscreen cards instead of thin strips.
+- Telegram reminder-style messages are routed to follow-up/history instead of creating lead drafts.
+- Telegram replies and selected-lead messages can save natural client context notes into lead history.
+- Client-context phrases such as "дополнительная информация" and "запомни об этом клиенте" are prioritized before generic note handling.
 
 ## 0.2.3
 
