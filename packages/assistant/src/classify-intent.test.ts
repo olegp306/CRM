@@ -30,6 +30,7 @@ describe("classifyIntent", () => {
   it("classifies English why and how questions as support requests", () => {
     expect(classifyIntent("Why does lead L-2026-004 have no KP?")).toBe("support_request");
     expect(classifyIntent("How can I update this lead?")).toBe("support_request");
+    expect(classifyIntent("What is the status of lead L-2026-004?")).toBe("support_request");
   });
 
   it("classifies product UI add requests as feature requests before support or CRM actions", () => {
@@ -39,6 +40,7 @@ describe("classifyIntent", () => {
 
   it("keeps operational lead add commands as CRM actions", () => {
     expect(classifyIntent("Add this address to lead L-2026-004")).toBe("crm_action");
+    expect(classifyIntent("Help me add this address to lead L-2026-004")).toBe("crm_action");
   });
 
   it("captures explicit product requests as feature requests", () => {

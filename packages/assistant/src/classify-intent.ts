@@ -24,6 +24,22 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   if (
+    /^(help me\s+)?(add|create|generate|schedule|update|mark|set|record)\b.*\b(lead|address|kp|follow-up|project|task)\b/.test(
+      text,
+    )
+  ) {
+    return "crm_action";
+  }
+
+  if (
+    /(\b(what|where|when|status)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
+      text,
+    )
+  ) {
+    return "support_request";
+  }
+
+  if (
     /(who are you|what can you do|help|\bhow\b|\bwhy\b|translate|kak sdelat|pomogi|переведи|кто ты|что умеешь|помоги|как сделать|почему|зачем)/.test(
       text,
     )
