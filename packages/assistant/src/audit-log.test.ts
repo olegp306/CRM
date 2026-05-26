@@ -75,6 +75,48 @@ describe("assistant audit events", () => {
     });
   });
 
+  it("records normalized channel events as audit entries", () => {
+    const result = createAssistantSubmissionResult({
+      context,
+      content: "Create lead Anna Beispiel",
+      threadId: "thread-channel-1",
+      messageId: "message-channel-1"
+    });
+    const draft = createAssistantPersistenceDraft(
+      result,
+      { threadId: "thread-channel-1", messageId: "message-channel-1" },
+      {
+        channelEvents: [
+          {
+            type: "lead_created",
+            channel: "web",
+            threadId: "thread-channel-1",
+            leadId: "L-2026-020",
+            fieldsCreated: ["clientName", "projectAddress"],
+            missingData: []
+          }
+        ]
+      }
+    );
+
+    expect(createAssistantAuditEvents(draft).at(-1)).toEqual({
+      workspaceId: "workspace-1",
+      actorUserId: "user-1",
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      targetId: "web:lead_created:thread-channel-1:L-2026-020",
+      metadata: {
+        type: "lead_created",
+        channel: "web",
+        threadId: "thread-channel-1",
+        leadId: "L-2026-020",
+        fieldsCreated: ["clientName", "projectAddress"],
+        missingData: []
+      }
+    });
+  });
+
+
   it("records release planning audit event with version metadata", () => {
     expect(
       createPlatformReleasePlanningAuditEvent({

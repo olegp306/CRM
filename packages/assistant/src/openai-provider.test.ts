@@ -12,6 +12,82 @@ const baseContext: AssistantContext = {
 };
 
 describe("createOpenAIAssistantSubmissionResult", () => {
+  it("answers help commands with the shared channel engine without calling OpenAI", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "/help",
+        threadId: "thread-help-command",
+        messageId: "message-help-command"
+      },
+      {
+        apiKey: "",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("I can create and update leads");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("routes source-material uploads through the shared channel engine without calling OpenAI", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Please review this client request",
+        threadId: "thread-source-upload",
+        messageId: "message-source-upload",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "pdf",
+            fileName: "brief.pdf",
+            mimeType: "application/pdf",
+            base64: "JVBERi0x"
+          }
+        ]
+      },
+      {
+        apiKey: "",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material"
+    });
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("requires an OpenAI API key only when a model call is needed", async () => {
+    await expect(
+      createOpenAIAssistantSubmissionResult(
+        {
+          context: baseContext,
+          content: "Create lead Anna Beispiel, BGF 150",
+          threadId: "thread-needs-openai",
+          messageId: "message-needs-openai"
+        },
+        {
+          apiKey: "",
+          model: "gpt-test",
+          fetch: vi.fn<OpenAIAssistantFetch>()
+        }
+      )
+    ).rejects.toThrow("OPENAI_API_KEY is required for the assistant runtime.");
+  });
+
   it("uses OpenAI to produce a create lead preview", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(
@@ -66,6 +142,10 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel, BGF 150" }]
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
@@ -114,11 +194,22 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       }
     );
 
-    expect(fetchMock).toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Create lead Anna Beispiel from this source material\nWeb attachment 1: PDF (brief.pdf)"
+        }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
   it("blocks OpenAI-requested actions when the user role lacks permission", async () => {
@@ -245,21 +336,13 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       }
     );
 
-    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
-    const requestBody = JSON.parse(String(requestInit?.body)) as { messages: Array<{ role: string; content: string }> };
-    const userPayload = JSON.parse(requestBody.messages.find((message) => message.role === "user")?.content ?? "{}") as {
-      attachments?: Array<{ fileName?: string; kind?: string; mimeType?: string }>;
-    };
-
-    expect(userPayload.attachments).toEqual([
-      expect.objectContaining({
-        fileName: "site.jpg",
-        kind: "photo",
-        mimeType: "image/jpeg"
-      })
-    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(result.feedback).toBeNull();
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material"
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 });

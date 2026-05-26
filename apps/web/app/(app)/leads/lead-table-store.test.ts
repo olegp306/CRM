@@ -186,6 +186,55 @@ describe("lead table model", () => {
     });
   });
 
+  it("attaches persisted channel events to serialized lead rows", () => {
+    const [row] = createLeadTableRows(
+      [
+        {
+          id: "lead-record-channel",
+          leadId: "L-2026-020",
+          clientRecordId: null,
+          createdDate: "2026-05-21",
+          temperature: "warm",
+          requestType: "new_build",
+          urgency: null,
+          budgetEur: null,
+          desiredStart: null,
+          desiredMoveIn: null,
+          bgfM2: 180,
+          wohnflaecheM2: null,
+          projectAddress: "Chiemseeufer 7",
+          isStandard: true,
+          status: "new",
+          rawInput: "Telegram sources: telegram:12345:42",
+          missingData: [],
+          kpGeneratedDocumentId: null,
+          kpSentDate: null,
+          followup1Date: null,
+          followupStatus: null,
+          outcome: null,
+          outcomeReason: null,
+          projectRecordId: null
+        }
+      ],
+      [],
+      {
+        "L-2026-020": [
+          {
+            createdAt: "2026-05-21T10:00:00.000Z",
+            metadata: { type: "lead_created", channel: "telegram", threadId: "telegram:12345", leadId: "L-2026-020" }
+          }
+        ]
+      }
+    );
+
+    expect(row.channelEvents).toEqual([
+      {
+        createdAt: "2026-05-21T10:00:00.000Z",
+        metadata: { type: "lead_created", channel: "telegram", threadId: "telegram:12345", leadId: "L-2026-020" }
+      }
+    ]);
+  });
+
   it("marks Telegram leads from their raw source marker", () => {
     const [row] = createLeadTableRows([
       {
@@ -311,6 +360,65 @@ describe("lead table model", () => {
       actor: "Operator",
       at: "2026-05-23"
     });
+  });
+
+  it("prepends channel audit events to lead history in chronological order", () => {
+    const history = createLeadHistory({
+      leadId: "L-2026-004",
+      createdDate: "2026-05-21",
+      source: "telegram",
+      temperature: "hot",
+      requestType: "information_request",
+      projectAddress: "Chiemseeufer 7",
+      bgfM2: "180",
+      budgetEur: "25000",
+      isStandard: "yes",
+      missingData: "",
+      kpGeneratedDocumentId: "D-local-l-2026-004",
+      kpSentDate: "",
+      followup1Date: "",
+      followupStatus: "",
+      outcome: "",
+      projectRecordId: "",
+      channelEvents: [
+        {
+          createdAt: "2026-05-21T11:00:00.000Z",
+          metadata: {
+            type: "kp_generated",
+            channel: "telegram",
+            threadId: "telegram:12345",
+            leadId: "L-2026-004",
+            documentId: "D-local-l-2026-004"
+          }
+        },
+        {
+          createdAt: "2026-05-21T10:00:00.000Z",
+          metadata: {
+            type: "lead_created",
+            channel: "telegram",
+            threadId: "telegram:12345",
+            leadId: "L-2026-004",
+            fieldsCreated: ["clientName", "projectAddress", "bgfM2"],
+            missingData: []
+          }
+        }
+      ]
+    });
+
+    expect(history.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        title: "Lead created",
+        at: "2026-05-21 10:00",
+        actor: "Telegram",
+        description: "Telegram created lead L-2026-004 with clientName, projectAddress, bgfM2."
+      }),
+      expect.objectContaining({
+        title: "KP generated",
+        at: "2026-05-21 11:00",
+        actor: "Telegram",
+        description: "Telegram generated commercial proposal D-local-l-2026-004."
+      })
+    ]);
   });
 
   it("shows an undo history entry when a generated KP is back before sent state", () => {

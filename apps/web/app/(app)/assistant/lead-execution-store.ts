@@ -1,4 +1,11 @@
-import type { CreateLeadFromAssistantInput, CreatedLeadRecord, MarkKpSentFromAssistantInput, MarkedKpSentLeadRecord } from "@app/assistant";
+import type {
+  CreateLeadFromAssistantInput,
+  CreatedLeadRecord,
+  MarkKpSentFromAssistantInput,
+  MarkedKpSentLeadRecord,
+  UndoKpSentFromAssistantInput,
+  UndoneKpSentLeadRecord
+} from "@app/assistant";
 import { createAssistantLeadPrismaStore, prisma, type AssistantLeadStore } from "@app/db";
 import { selectDatabaseBackedRuntime } from "../../../lib/database-runtime";
 
@@ -69,6 +76,25 @@ function getAssistantLeadStore(): AssistantLeadStore {
       };
 
       return result;
+    },
+    async undoKpSent(input) {
+      const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId);
+
+      if (!lead) {
+        throw new Error(`Lead ${input.leadId} was not found`);
+      }
+
+      const result: UndoneKpSentLeadRecord = {
+        id: lead.id,
+        workspaceId: input.workspaceId,
+        leadId: input.leadId,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        requestedByUserId: input.requestedByUserId
+      };
+
+      return result;
     }
   };
 
@@ -94,4 +120,8 @@ export async function createAssistantLead(input: CreateLeadFromAssistantInput): 
 
 export async function markAssistantLeadKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord> {
   return getAssistantLeadStore().markKpSent(input);
+}
+
+export async function undoAssistantLeadKpSent(input: UndoKpSentFromAssistantInput): Promise<UndoneKpSentLeadRecord> {
+  return getAssistantLeadStore().undoKpSent(input);
 }

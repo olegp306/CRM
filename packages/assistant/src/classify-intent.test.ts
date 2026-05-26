@@ -21,11 +21,22 @@ describe("classifyIntent", () => {
 
   it("detects Russian CRM actions", () => {
     expect(classifyIntent("Отметь КП отправленным")).toBe("crm_action");
+    expect(classifyIntent("КП отправлено")).toBe("crm_action");
+    expect(classifyIntent("Отмени отправку КП")).toBe("crm_action");
+    expect(classifyIntent("Сгенерируй КП для этого лида")).toBe("crm_action");
+    expect(classifyIntent("Напомни по этому лиду завтра")).toBe("crm_action");
+    expect(classifyIntent("Запланируй follow-up по этому лиду")).toBe("crm_action");
   });
 
   it("classifies identity and capability questions as support requests, not feature requests", () => {
     expect(classifyIntent("Кто ты и что умеешь делать?")).toBe("support_request");
     expect(classifyIntent("who are you and what can you do?")).toBe("support_request");
+  });
+
+  it("classifies theme availability questions as capability requests", () => {
+    expect(classifyIntent("а есть цветовая схема или тема темная для вечера ?")).toBe("capability_request");
+    expect(classifyIntent("Do you have dark mode or a night theme?")).toBe("capability_request");
+    expect(classifyIntent("Switch CRM to graphite theme")).toBe("capability_request");
   });
 
   it("does not convert translation or ordinary lead questions into feature requests", () => {
@@ -39,6 +50,11 @@ describe("classifyIntent", () => {
     expect(classifyIntent("What is the status of lead L-2026-004?")).toBe("support_request");
     expect(classifyIntent("Does lead L-2026-004 have a KP?")).toBe("support_request");
     expect(classifyIntent("Is lead L-2026-004 ready?")).toBe("support_request");
+  });
+
+  it("classifies Russian selected lead questions as support requests", () => {
+    expect(classifyIntent("Что дальше по этому лиду?")).toBe("support_request");
+    expect(classifyIntent("Какой статус КП по этому лиду?")).toBe("support_request");
   });
 
   it("classifies product UI add requests as feature requests before support or CRM actions", () => {

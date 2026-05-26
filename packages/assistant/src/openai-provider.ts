@@ -1,12 +1,16 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
 import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
-import type { AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
+import type { AssistantChannelMessage } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
-import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
+import { createFeedbackItemFromMessage } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
-import type { AssistantSubmissionInput, AssistantSubmissionResult } from "./submission";
-import { createAssistantMessageDraft, createAssistantThreadDraft, type AssistantMessageDraft, type AssistantThreadDraft } from "./thread-message";
+import {
+  createAssistantSubmissionResultFromChannelResponse,
+  type AssistantSubmissionInput,
+  type AssistantSubmissionResult
+} from "./submission";
+import { createAssistantMessageDraft, createAssistantThreadDraft } from "./thread-message";
 
 export type OpenAIAssistantFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -37,7 +41,14 @@ type OpenAIAttachmentSummary = {
 };
 
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
-const allowedActionTypes = new Set<AssistantActionType>(["create_lead", "generate_kp", "schedule_followup", "update_project_task", "mark_kp_sent"]);
+const allowedActionTypes = new Set<AssistantActionType>([
+  "create_lead",
+  "generate_kp",
+  "schedule_followup",
+  "update_project_task",
+  "mark_kp_sent",
+  "undo_kp_sent"
+]);
 const maxAttachmentTextPreviewLength = 500;
 
 export async function createOpenAIAssistantSubmissionResult(
@@ -65,19 +76,32 @@ export async function createOpenAIAssistantSubmissionResult(
     context: input.context,
     attachments: input.attachments ?? []
   };
+  const deterministicChannelResponse = createAssistantChannelResponse(channelMessage);
+
+  if (shouldUseChannelResponseBeforeOpenAI(deterministicChannelResponse)) {
+    return createAssistantSubmissionResultFromChannelResponse({
+      thread,
+      message,
+      channelResponse: deterministicChannelResponse,
+      context: input.context,
+      threadId: input.threadId,
+      messageId: input.messageId,
+      attachments: input.attachments ?? []
+    });
+  }
+
   const plan = await requestOpenAIPlan(input, config);
 
   if (plan.action) {
     if (plan.action.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
-      const channelResponse = createAssistantChannelResponse(channelMessage);
-
-      return createResultFromChannelResponse({
+      return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
-        channelResponse,
+        channelResponse: deterministicChannelResponse,
         context: input.context,
         threadId: input.threadId,
-        messageId: input.messageId
+        messageId: input.messageId,
+        attachments: input.attachments ?? []
       });
     }
 
@@ -104,6 +128,7 @@ export async function createOpenAIAssistantSubmissionResult(
         response: permissionBlocked.message,
         feedback,
         actionPreview: null,
+        responseButtons: [],
         confirmationStatus: "cancelled",
         permissionBlocked
       };
@@ -115,74 +140,52 @@ export async function createOpenAIAssistantSubmissionResult(
       response: plan.response,
       feedback: null,
       actionPreview,
+      responseButtons: createConfirmationResponseButtons(),
       confirmationStatus: advanceActionConfirmation("draft", "preview"),
       permissionBlocked: null
     };
   }
 
-  const channelResponse = createAssistantChannelResponse(channelMessage);
-
-  return createResultFromChannelResponse({
+  return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
-    channelResponse,
+    channelResponse: deterministicChannelResponse,
     context: input.context,
     threadId: input.threadId,
-    messageId: input.messageId
+    messageId: input.messageId,
+    attachments: input.attachments ?? []
   });
 }
 
-function createResultFromChannelResponse({
-  thread,
-  message,
-  channelResponse,
-  context,
-  threadId,
-  messageId
-}: {
-  thread: AssistantThreadDraft;
-  message: AssistantMessageDraft;
-  channelResponse: AssistantChannelResponse;
-  context: AssistantContext;
-  threadId: string;
-  messageId: string;
-}): AssistantSubmissionResult {
-  let feedback: FeedbackItemDraft | null = null;
+function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof createAssistantChannelResponse>): boolean {
+  return (
+    channelResponse.intent === "help" ||
+    channelResponse.intent === "capability_request" ||
+    channelResponse.intent === "lead_intake" ||
+    channelResponse.intent === "support_request" ||
+    channelResponse.shouldPersistFeedback
+  );
+}
 
-  if (channelResponse.shouldPersistFeedback) {
-    const feedbackType = channelResponse.feedbackType;
-
-    if (!feedbackType) {
-      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
-    }
-
-    feedback = createFeedbackItemFromMessage({
-      workspaceId: context.workspaceId,
-      sourceThreadId: threadId,
-      sourceMessageId: messageId,
-      intent: feedbackType,
-      moduleContext: context.module,
-      role: context.role
-    });
-  }
-
-  return {
-    thread,
-    message,
-    response: channelResponse.text,
-    feedback,
-    actionPreview: null,
-    confirmationStatus: null,
-    permissionBlocked: null
-  };
+function createConfirmationResponseButtons() {
+  return [
+    { label: "Confirm" as const, action: "confirm" as const },
+    { label: "Cancel" as const, action: "cancel" as const }
+  ];
 }
 
 async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAIAssistantConfig): Promise<OpenAIPlan> {
+  const apiKey = config.apiKey.trim();
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for the assistant runtime.");
+  }
+
   const fetcher = config.fetch ?? fetch;
   const response = await fetcher(config.endpoint ?? defaultEndpoint, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${config.apiKey}`,
+      authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
     body: JSON.stringify({
@@ -317,9 +320,9 @@ function createPreviewFromPlan(plan: OpenAIPlan, fallbackSourceText: string, con
     });
   }
 
-  if (plan.action.actionType === "mark_kp_sent") {
+  if (plan.action.actionType === "mark_kp_sent" || plan.action.actionType === "undo_kp_sent") {
     return createActionPreview({
-      actionType: "mark_kp_sent",
+      actionType: plan.action.actionType,
       summary: plan.action.summary,
       changes: [
         { field: "lead.selectedRecordIds", from: null, to: context.selectedRecordIds ?? [] },
@@ -361,12 +364,13 @@ function canUseAssistantActionMode(role: string): boolean {
 function createSystemPrompt(): string {
   return [
     "You are the CRM assistant runtime for an architecture studio SaaS.",
-    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
+    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
     "Use create_lead when the user asks to add, create, capture, or register a lead/client opportunity.",
     "Use schedule_followup for reminders or follow-up scheduling.",
     "Use update_project_task for project/task status changes.",
     "Use generate_kp for KP, offer, proposal, or document generation.",
     "Use mark_kp_sent when the user says an existing KP, offer, or proposal was sent.",
+    "Use undo_kp_sent when the user asks to undo, revert, clear, or remove a KP sent status.",
     "If no operational action is needed, set action to null."
   ].join("\n");
 }

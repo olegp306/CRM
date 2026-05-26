@@ -1,26 +1,52 @@
 export type WorkspaceBrandingInput = {
   primaryColor?: string | null;
-  themePreference?: "light" | "dark" | "warm" | null;
+  themePreference?: "light" | "dark" | "nocturne" | "graphite" | "warm" | null;
 };
 
 const themeTokens: Record<NonNullable<WorkspaceBrandingInput["themePreference"]>, Record<string, string>> = {
-  light: {},
+  light: {
+    "--background": "248 250 250",
+    "--surface": "255 255 255",
+    "--foreground": "24 29 29",
+    "--muted": "236 241 240",
+    "--muted-foreground": "79 91 89",
+    "--border": "215 225 223",
+    "--primary-foreground": "255 255 255"
+  },
   dark: {
-    "--background": "18 18 18",
-    "--surface": "31 31 31",
-    "--foreground": "245 245 244",
-    "--muted": "43 43 43",
-    "--muted-foreground": "168 162 158",
-    "--border": "68 64 60",
+    "--background": "18 20 19",
+    "--surface": "29 32 31",
+    "--foreground": "236 241 238",
+    "--muted": "39 44 42",
+    "--muted-foreground": "167 177 173",
+    "--border": "64 72 69",
+    "--primary-foreground": "255 255 255"
+  },
+  nocturne: {
+    "--background": "18 20 19",
+    "--surface": "29 32 31",
+    "--foreground": "236 241 238",
+    "--muted": "39 44 42",
+    "--muted-foreground": "167 177 173",
+    "--border": "64 72 69",
+    "--primary-foreground": "255 255 255"
+  },
+  graphite: {
+    "--background": "12 14 17",
+    "--surface": "24 27 31",
+    "--foreground": "238 242 246",
+    "--muted": "35 39 45",
+    "--muted-foreground": "164 174 186",
+    "--border": "58 65 74",
     "--primary-foreground": "255 255 255"
   },
   warm: {
-    "--background": "252 247 240",
-    "--surface": "255 251 245",
-    "--foreground": "41 33 27",
-    "--muted": "244 234 222",
-    "--muted-foreground": "105 83 67",
-    "--border": "225 211 196",
+    "--background": "246 248 243",
+    "--surface": "255 255 252",
+    "--foreground": "31 37 32",
+    "--muted": "232 238 226",
+    "--muted-foreground": "91 104 88",
+    "--border": "210 222 205",
     "--primary-foreground": "255 255 255"
   }
 };

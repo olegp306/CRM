@@ -1,6 +1,11 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
 import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
-import type { AssistantChannelAttachment, AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
+import type {
+  AssistantChannelAttachment,
+  AssistantChannelMessage,
+  AssistantChannelResponse,
+  AssistantChannelResponseButton
+} from "./channel-message";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -26,6 +31,7 @@ export type AssistantSubmissionResult = {
   response: string;
   feedback: FeedbackItemDraft | null;
   actionPreview: ActionPreview | null;
+  responseButtons: AssistantChannelResponseButton[];
   confirmationStatus: ActionConfirmationStatus | null;
   permissionBlocked: PermissionBlockedResponse | null;
 };
@@ -65,13 +71,14 @@ export function createAssistantSubmissionResult({
     if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
       const channelResponse = createAssistantChannelResponse(channelMessage);
 
-      return createResultFromChannelResponse({
+      return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
         channelResponse,
         context,
         threadId,
-        messageId
+        messageId,
+        attachments: attachments ?? []
       });
     }
 
@@ -96,6 +103,7 @@ export function createAssistantSubmissionResult({
         response: permissionBlocked.message,
         feedback,
         actionPreview: null,
+        responseButtons: [],
         confirmationStatus: "cancelled",
         permissionBlocked
       };
@@ -104,33 +112,36 @@ export function createAssistantSubmissionResult({
     return {
       thread,
       message,
-      response: `I prepared ${getActionPreviewLabel(actionPreview.actionType)} preview. Confirm before I execute it.`,
-      feedback: null,
-      actionPreview,
-      confirmationStatus: advanceActionConfirmation("draft", "preview"),
-      permissionBlocked: null
-    };
+        response: `I prepared ${getActionPreviewLabel(actionPreview.actionType)} preview. Confirm before I execute it.`,
+        feedback: null,
+        actionPreview,
+        responseButtons: createConfirmationResponseButtons(),
+        confirmationStatus: advanceActionConfirmation("draft", "preview"),
+        permissionBlocked: null
+      };
   }
 
   const channelResponse = createAssistantChannelResponse(channelMessage);
 
-  return createResultFromChannelResponse({
+  return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
     channelResponse,
     context,
     threadId,
-    messageId
+    messageId,
+    attachments: attachments ?? []
   });
 }
 
-function createResultFromChannelResponse({
+export function createAssistantSubmissionResultFromChannelResponse({
   thread,
   message,
   channelResponse,
   context,
   threadId,
-  messageId
+  messageId,
+  attachments = []
 }: {
   thread: AssistantThreadDraft;
   message: AssistantMessageDraft;
@@ -138,8 +149,12 @@ function createResultFromChannelResponse({
   context: AssistantContext;
   threadId: string;
   messageId: string;
+  attachments?: AssistantChannelAttachment[];
 }): AssistantSubmissionResult {
   let feedback: FeedbackItemDraft | null = null;
+  const actionPreview = canUseAssistantActionMode(context.role)
+    ? createChannelActionPreview(channelResponse, message.content, attachments)
+    : null;
 
   if (channelResponse.shouldPersistFeedback) {
     const feedbackType = channelResponse.feedbackType;
@@ -163,14 +178,54 @@ function createResultFromChannelResponse({
     message,
     response: channelResponse.text,
     feedback,
-    actionPreview: null,
-    confirmationStatus: null,
+    actionPreview,
+    responseButtons: channelResponse.buttons,
+    confirmationStatus: actionPreview ? advanceActionConfirmation("draft", "preview") : null,
     permissionBlocked: null
   };
 }
 
+function createChannelActionPreview(
+  channelResponse: AssistantChannelResponse,
+  sourceText: string,
+  attachments: AssistantChannelAttachment[]
+): ActionPreview | null {
+  const hasConfirmButton = channelResponse.buttons.some((button) => button.action === "confirm");
+
+  if (channelResponse.intent !== "lead_intake" || !hasConfirmButton) {
+    return null;
+  }
+
+  return createActionPreview({
+    actionType: "create_lead",
+    summary: "Create lead from assistant source material",
+    changes: [{ field: "lead.sourceText", from: null, to: appendAttachmentSummary(sourceText, attachments) }]
+  });
+}
+
+function appendAttachmentSummary(sourceText: string, attachments: AssistantChannelAttachment[]): string {
+  if (attachments.length === 0) {
+    return sourceText;
+  }
+
+  return [
+    sourceText,
+    ...attachments.map((attachment, index) => {
+      const kind = attachment.kind.toUpperCase();
+      return `Web attachment ${index + 1}: ${kind} (${attachment.fileName || attachment.id})`;
+    })
+  ].join("\n");
+}
+
 function canUseAssistantActionMode(role: string): boolean {
   return role === "owner" || role === "admin";
+}
+
+function createConfirmationResponseButtons(): AssistantChannelResponseButton[] {
+  return [
+    { label: "Confirm", action: "confirm" },
+    { label: "Cancel", action: "cancel" }
+  ];
 }
 
 function createCrmActionPreview(content: string, context?: AssistantContext): ActionPreview {
@@ -187,9 +242,11 @@ function createCrmActionPreview(content: string, context?: AssistantContext): Ac
   }
 
   if (isMarkKpSentRequest(content)) {
+    const actionType = isUndoKpSentRequest(content) ? "undo_kp_sent" : "mark_kp_sent";
+
     return createActionPreview({
-      actionType: "mark_kp_sent",
-      summary: "Mark KP as sent from assistant request",
+      actionType,
+      summary: actionType === "undo_kp_sent" ? "Undo KP sent from assistant request" : "Mark KP as sent from assistant request",
       changes: [
         { field: "lead.selectedRecordIds", from: null, to: context?.selectedRecordIds ?? [] },
         { field: "lead.sourceText", from: null, to: content }
@@ -228,15 +285,34 @@ function isProjectTaskUpdateRequest(content: string): boolean {
 }
 
 function isKpGenerationRequest(content: string): boolean {
-  return /\b(generate|create|prepare|draft)\b/i.test(content) && /\b(kp|offer|proposal|document)\b/i.test(content);
+  return (
+    (/\b(generate|create|prepare|draft)\b/i.test(content) && /\b(kp|offer|proposal|document)\b/i.test(content)) ||
+    /(сгенер|созда|подготов|сделай).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(content)
+  );
 }
 
 function isMarkKpSentRequest(content: string): boolean {
-  return /\b(mark|set|record)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content) && /\b(sent|sended|отправ)/i.test(content);
+  return (
+    ((/\b(mark|set|record)\b/i.test(content) || isUndoKpSentRequest(content)) &&
+      /\b(kp|offer|proposal)\b/i.test(content) &&
+      /\b(sent|sended|отправ)/i.test(content)) ||
+    /(кп|коммерческ\w*\s+предложен\w*).{0,32}(отправ|выслал|выслали)/i.test(content) ||
+    /(отправ|выслал|выслали).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(content)
+  );
+}
+
+function isUndoKpSentRequest(content: string): boolean {
+  return (
+    (/\b(undo|revert|cancel|clear|remove)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content)) ||
+    /(отмени|откат|верни|убери).{0,32}(кп|коммерческ\w*\s+предложен\w*|отправ)/i.test(content)
+  );
 }
 
 function isScheduleFollowupRequest(content: string): boolean {
-  return /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content);
+  return (
+    /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content) ||
+    /(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(content)
+  );
 }
 
 function getActionPreviewLabel(actionType: string): string {
@@ -249,15 +325,19 @@ function getActionPreviewLabel(actionType: string): string {
   }
 
   if (actionType === "update_project_task") {
-    return "an update project task";
+    return "a project task update";
   }
 
   if (actionType === "generate_kp") {
-    return "a generate KP";
+    return "a KP generation";
   }
 
   if (actionType === "mark_kp_sent") {
-    return "a mark KP sent";
+    return "a KP sent update";
+  }
+
+  if (actionType === "undo_kp_sent") {
+    return "a KP sent undo";
   }
 
   return actionType.replace(/_/g, " ");

@@ -57,7 +57,7 @@ describe("assistant persistence draft", () => {
       priority: "normal",
       moduleContext: "leads",
       role: "admin",
-      appVersion: "0.1.7"
+      appVersion: "0.2.0"
     });
   });
 
@@ -77,5 +77,40 @@ describe("assistant persistence draft", () => {
       status: "awaiting_confirmation",
       requestedByUserId: "user-1"
     });
+  });
+
+  it("can attach normalized channel events to the persistence draft", () => {
+    const result = createAssistantSubmissionResult({
+      context,
+      content: "Create lead Anna Beispiel",
+      threadId: "thread-4",
+      messageId: "message-4"
+    });
+
+    expect(
+      createAssistantPersistenceDraft(
+        result,
+        { threadId: "thread-4", messageId: "message-4" },
+        {
+          channelEvents: [
+            {
+              type: "message_received",
+              channel: "web",
+              threadId: "thread-4",
+              messageId: "message-4",
+              summary: "Create lead Anna Beispiel"
+            }
+          ]
+        }
+      ).channelEvents
+    ).toEqual([
+      {
+        type: "message_received",
+        channel: "web",
+        threadId: "thread-4",
+        messageId: "message-4",
+        summary: "Create lead Anna Beispiel"
+      }
+    ]);
   });
 });

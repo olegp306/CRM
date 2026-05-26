@@ -1,12 +1,19 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 import {
   createAuditEventsCsv,
   createAuditReviewSummary,
   createPlatformInboxSummary,
   createAssistantPersistenceDraft,
+  createKpGeneratedEvent,
+  createKpSentMarkedEvent,
+  createKpSentUndoneEvent,
+  createLeadCreatedEvent,
   createAssistantSubmissionResult,
   createAssistantMessageDraft,
+  createMessageReceivedEvent,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
   createOnboardingConversationFeedbackContent,
@@ -34,7 +41,7 @@ import {
 } from "@app/assistant";
 import { generateAssistantKpDocument } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
-import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent } from "./lead-execution-store";
+import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent, undoAssistantLeadKpSent } from "./lead-execution-store";
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 
@@ -48,6 +55,8 @@ export type SubmitAssistantMessageInput = {
 
 export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
 
+const assistantThemePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
+
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
   const result = await createOpenAIAssistantSubmissionResult(
     {
@@ -55,14 +64,29 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
       attachments: input.attachments ?? []
     },
     {
-      apiKey: getRequiredOpenAiApiKey(),
+      apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
     }
   );
-  const persistenceDraft = createAssistantPersistenceDraft(result, {
-    threadId: input.threadId,
-    messageId: input.messageId
-  });
+  const persistenceDraft = createAssistantPersistenceDraft(
+    result,
+    {
+      threadId: input.threadId,
+      messageId: input.messageId
+    },
+    {
+      channelEvents: [
+        createMessageReceivedEvent({
+          type: "message_received",
+          channel: "web",
+          threadId: input.threadId,
+          messageId: input.messageId,
+          leadId: input.context.selectedRecordIds?.[0],
+          summary: input.content.trim()
+        })
+      ]
+    }
+  );
   const repository = getAssistantRepository();
 
   await repository.save(persistenceDraft);
@@ -133,6 +157,24 @@ export async function submitOnboardingAssistantMessageAction(input: SubmitOnboar
   };
 }
 
+export async function setAssistantThemePreferenceAction(themePreference: string) {
+  const normalized = themePreference.trim();
+
+  if (!assistantThemePreferences.has(normalized)) {
+    throw new Error("Unsupported CRM theme preference.");
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set("crm_theme_preference", normalized, { path: "/", sameSite: "lax" });
+  revalidatePath("/");
+  revalidatePath("/settings/branding");
+
+  return {
+    themePreference: normalized,
+    summary: `Theme switched to ${normalized}.`
+  };
+}
+
 function createOnboardingTranslationResult({
   context,
   content,
@@ -159,19 +201,10 @@ function createOnboardingTranslationResult({
     response: createRussianOnboardingAssistantMessage(),
     feedback: null,
     actionPreview: null,
+    responseButtons: [],
     confirmationStatus: null,
     permissionBlocked: null
   };
-}
-
-function getRequiredOpenAiApiKey(): string {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for the assistant runtime.");
-  }
-
-  return apiKey;
 }
 
 export async function listAssistantWorkspaceMemoryAction(workspaceId: string) {
@@ -346,17 +379,71 @@ export async function confirmAssistantActionAction({
     scheduleFollowup: createAssistantFollowup,
     updateProjectTask: updateAssistantProjectTask,
     generateKpDocument: generateAssistantKpDocument,
-    markKpSent: markAssistantLeadKpSent
+    markKpSent: markAssistantLeadKpSent,
+    undoKpSent: undoAssistantLeadKpSent
   });
 
   const updatedAction = await repository.updateActionExecutionResult(workspaceId, messageId, {
     status: execution.status,
     result: execution
   });
+  const executionChannelEvents = createWebExecutionChannelEvents(action.threadId, execution);
+  await Promise.all(
+    executionChannelEvents.map((event) =>
+      repository.saveAuditEvent({
+        workspaceId,
+        actorUserId: action.requestedByUserId,
+        action: "assistant.channel.event",
+        targetType: "AssistantChannelEvent",
+        targetId: `${event.channel}:${event.type}:${event.threadId}:${"leadId" in event ? event.leadId : "documentId" in event ? event.documentId : messageId}`,
+        metadata: event
+      })
+    )
+  );
 
   return {
     execution,
     action: updatedAction,
     leads: await listAssistantCreatedLeads(workspaceId)
   };
+}
+
+function createWebExecutionChannelEvents(threadId: string, execution: Awaited<ReturnType<typeof executeAssistantAction>>) {
+  if ("actionType" in execution) {
+    if (execution.actionType === "mark_kp_sent") {
+      return [createKpSentMarkedEvent({ type: "kp_sent_marked", channel: "web", threadId, leadId: execution.leadId })];
+    }
+
+    if (execution.actionType === "undo_kp_sent") {
+      return [createKpSentUndoneEvent({ type: "kp_sent_undone", channel: "web", threadId, leadId: execution.leadId })];
+    }
+
+    if (execution.actionType === "generate_kp") {
+      return [];
+    }
+
+    return [];
+  }
+
+  return [
+    createLeadCreatedEvent({
+      type: "lead_created",
+      channel: "web",
+      threadId,
+      leadId: execution.leadId,
+      fieldsCreated: ["rawInput"],
+      missingData: []
+    }),
+    ...(execution.documentId
+      ? [
+          createKpGeneratedEvent({
+            type: "kp_generated",
+            channel: "web",
+            threadId,
+            leadId: execution.leadId,
+            documentId: execution.documentId
+          })
+        ]
+      : [])
+  ];
 }

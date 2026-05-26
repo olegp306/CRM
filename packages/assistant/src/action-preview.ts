@@ -1,4 +1,10 @@
-export type AssistantActionType = "create_lead" | "generate_kp" | "schedule_followup" | "update_project_task" | "mark_kp_sent";
+export type AssistantActionType =
+  | "create_lead"
+  | "generate_kp"
+  | "schedule_followup"
+  | "update_project_task"
+  | "mark_kp_sent"
+  | "undo_kp_sent";
 
 export type ActionPreviewChange = {
   field: string;

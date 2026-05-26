@@ -1,6 +1,7 @@
+import { getLeadDraftKpStatus, mergeLeadDraftFlowState, type LeadDraftFlowState, type LeadDraftRequiredField } from "@app/assistant";
 import type { TelegramLeadIntakeDraft } from "./openai-lead-parser";
 
-export type KpRequiredField = "clientName" | "requestType" | "projectAddress" | "bgfM2";
+export type KpRequiredField = LeadDraftRequiredField;
 
 export type KpRequiredFieldStatus = {
   ready: boolean;
@@ -26,23 +27,7 @@ export type TelegramLeadDraftSessionStore = {
 };
 
 export function getKpRequiredFieldStatus(draft: TelegramLeadIntakeDraft, requiredFields = getKpRequiredFields(draft)): KpRequiredFieldStatus {
-  const present: KpRequiredField[] = [];
-  const missing: KpRequiredField[] = [];
-
-  for (const field of requiredFields) {
-    const value = draft[field];
-    if (typeof value === "number" ? Number.isFinite(value) : Boolean(value?.trim())) {
-      present.push(field);
-    } else {
-      missing.push(field);
-    }
-  }
-
-  return {
-    ready: missing.length === 0,
-    present,
-    missing
-  };
+  return getLeadDraftKpStatus(draft, requiredFields);
 }
 
 export function mergeTelegramLeadDraftSession(
@@ -50,20 +35,8 @@ export function mergeTelegramLeadDraftSession(
   update: TelegramLeadIntakeDraft,
   metadata: { receivedAt: string; sourceMessageIds: number[] }
 ): TelegramLeadDraftSession {
-  const draft: TelegramLeadIntakeDraft = {
-    ...session.draft,
-    clientName: mergeText(session.draft.clientName, update.clientName),
-    email: mergeText(session.draft.email, update.email),
-    phone: mergeText(session.draft.phone, update.phone),
-    requestType: mergeText(session.draft.requestType, update.requestType),
-    projectAddress: mergeText(session.draft.projectAddress, update.projectAddress),
-    bgfM2: session.draft.bgfM2 ?? update.bgfM2,
-    rawInput: mergeRawInput(session.draft.rawInput, update.rawInput),
-    missingData: mergeMissingData(session.draft, update),
-    isStandard: update.isStandard || session.draft.isStandard,
-    telegramSourceExternalId: session.draft.telegramSourceExternalId,
-    temperature: session.draft.temperature === "unknown" ? update.temperature : session.draft.temperature
-  };
+  const mergeResult = mergeLeadDraftFlowState(toLeadDraftFlowState(session.draft, session.sourceMessageIds), toLeadDraftFlowState(update, metadata.sourceMessageIds));
+  const draft = toTelegramLeadIntakeDraft(mergeResult.draft, session.draft.telegramSourceExternalId);
 
   return {
     ...session,
@@ -124,28 +97,6 @@ function getKpRequiredFields(draft: TelegramLeadIntakeDraft): KpRequiredField[] 
     : ["clientName", "requestType", "projectAddress"];
 }
 
-function mergeText(current: string | null | undefined, next: string | null | undefined): string | null {
-  return current?.trim() ? current : next?.trim() ? next : null;
-}
-
-function mergeRawInput(current: string, next: string): string {
-  return [current.trim(), next.trim()].filter(Boolean).join("\n\n--- draft update ---\n\n");
-}
-
-function mergeMissingData(current: TelegramLeadIntakeDraft, update: TelegramLeadIntakeDraft): string[] {
-  const merged = {
-    ...current,
-    clientName: mergeText(current.clientName, update.clientName),
-    requestType: mergeText(current.requestType, update.requestType),
-    projectAddress: mergeText(current.projectAddress, update.projectAddress),
-    bgfM2: current.bgfM2 ?? update.bgfM2
-  };
-  const requiredMissing = getKpRequiredFieldStatus(merged).missing;
-  const parserMissing = [...current.missingData, ...update.missingData].filter((field) => requiredMissing.includes(field as KpRequiredField));
-
-  return Array.from(new Set([...requiredMissing, ...parserMissing]));
-}
-
 function hasDifferentText(current: string | null | undefined, next: string | null | undefined): boolean {
   const currentText = normalizeComparableText(current);
   const nextText = normalizeComparableText(next);
@@ -159,4 +110,37 @@ function normalizeComparableText(value: string | null | undefined): string {
 
 function createSessionKey(workspaceId: string, chatId: string): string {
   return `${workspaceId}:${chatId}`;
+}
+
+function toLeadDraftFlowState(draft: TelegramLeadIntakeDraft, sourceMessageIds: number[]): LeadDraftFlowState {
+  return {
+    clientName: draft.clientName,
+    email: draft.email,
+    phone: draft.phone,
+    requestType: draft.requestType,
+    projectAddress: draft.projectAddress,
+    bgfM2: draft.bgfM2,
+    rawInput: draft.rawInput,
+    missingData: draft.missingData,
+    sourceExternalIds: sourceMessageIds.map(String),
+    temperature: draft.temperature,
+    isStandard: draft.isStandard
+  };
+}
+
+function toTelegramLeadIntakeDraft(draft: LeadDraftFlowState, telegramSourceExternalId: string): TelegramLeadIntakeDraft {
+  return {
+    source: "telegram",
+    clientName: draft.clientName ?? null,
+    email: draft.email ?? null,
+    phone: draft.phone ?? null,
+    requestType: draft.requestType ?? null,
+    projectAddress: draft.projectAddress ?? null,
+    bgfM2: draft.bgfM2 ?? null,
+    rawInput: draft.rawInput,
+    missingData: draft.missingData,
+    isStandard: Boolean(draft.isStandard),
+    telegramSourceExternalId,
+    temperature: draft.temperature ?? "unknown"
+  };
 }

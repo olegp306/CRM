@@ -1,5 +1,6 @@
 export type AssistantIntent =
   | "crm_action"
+  | "capability_request"
   | "support_request"
   | "bug_report"
   | "feature_request"
@@ -10,6 +11,10 @@ export type AssistantIntent =
 
 export function classifyIntent(message: string): AssistantIntent {
   const text = message.toLowerCase();
+
+  if (isThemeCapabilityRequest(text)) {
+    return "capability_request";
+  }
 
   if (/(bug|broken|does not work|error|ne rabotaet|oshibka|не работает|ошибка)/.test(text)) {
     return "bug_report";
@@ -28,10 +33,30 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   if (
-    /^(help me\s+)?(add|create|generate|schedule|update|mark|set|record)\b.*\b(lead|address|kp|follow-up|project|task)\b/.test(
+    /^(help me\s+)?(add|create|generate|schedule|update|mark|set|record|undo|revert|clear|remove)\b.*\b(lead|address|kp|follow-up|project|task)\b/.test(
       text,
     )
   ) {
+    return "crm_action";
+  }
+
+  if (/\b(undo|revert|clear|remove)\b.*\b(kp|offer|proposal|lead)\b/.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(кп|коммерческ\w*\s+предложен\w*).{0,32}(отправ|выслал|выслали|сгенер|созда|подготов|отмени|откат|верни|убери)/i.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(сгенер|созда|подготов|сделай).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(отмени|откат|верни|убери).{0,32}(кп|коммерческ\w*\s+предложен\w*|отправ)/i.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(text)) {
     return "crm_action";
   }
 
@@ -40,6 +65,10 @@ export function classifyIntent(message: string): AssistantIntent {
       text,
     )
   ) {
+    return "support_request";
+  }
+
+  if (/(что|какой|где|когда|статус|дальше|следующ).{0,48}(лид|кп|проект|коммерческ\w*\s+предложен\w*)/i.test(text)) {
     return "support_request";
   }
 
@@ -68,4 +97,19 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   return "other";
+}
+
+function isThemeCapabilityRequest(text: string): boolean {
+  const hasThemeSignal =
+    /\b(theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(text) ||
+    /(тема|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(text);
+
+  if (!hasThemeSignal) {
+    return false;
+  }
+
+  return (
+    /\b(do you have|is there|can i|can we|switch|enable|turn on|set|change|use)\b/i.test(text) ||
+    /(есть|можно|включи|переключи|поставь|смени|изменить|хочу)/i.test(text)
+  );
 }

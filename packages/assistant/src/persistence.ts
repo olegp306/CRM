@@ -4,6 +4,7 @@ import type { AssistantContext } from "./context";
 import type { FeedbackItemDraft } from "./feedback-item";
 import type { AssistantIntent } from "./classify-intent";
 import type { AssistantSubmissionResult } from "./submission";
+import type { AssistantChannelEvent } from "./channel-event";
 
 export type AssistantPersistenceIds = {
   threadId: string;
@@ -43,11 +44,13 @@ export type AssistantPersistenceDraft = {
   message: AssistantMessageWriteDraft;
   feedback: FeedbackItemDraft | null;
   action: AssistantActionWriteDraft | null;
+  channelEvents: AssistantChannelEvent[];
 };
 
 export function createAssistantPersistenceDraft(
   result: AssistantSubmissionResult,
-  ids: AssistantPersistenceIds
+  ids: AssistantPersistenceIds,
+  options: { channelEvents?: AssistantChannelEvent[] } = {}
 ): AssistantPersistenceDraft {
   return {
     thread: {
@@ -76,6 +79,7 @@ export function createAssistantPersistenceDraft(
           status: result.confirmationStatus ?? "draft",
           requestedByUserId: result.message.context.userId
         }
-      : null
+      : null,
+    channelEvents: options.channelEvents ?? []
   };
 }

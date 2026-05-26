@@ -68,6 +68,7 @@ export type LeadTableRow = Record<LeadTableColumnKey, string> & {
   id: string;
   kpDocxAttachmentId?: string;
   kpPdfAttachmentId?: string;
+  channelEvents?: LeadChannelHistoryEvent[];
 };
 
 export type LeadActionPlanItem = {
@@ -83,6 +84,11 @@ export type LeadHistoryItem = {
   actor: "Telegram" | "CRM" | "Operator";
   stageLabel: string;
   description: string;
+};
+
+export type LeadChannelHistoryEvent = {
+  createdAt: Date | string;
+  metadata: unknown;
 };
 
 export type LeadLoopStepMode = "manual" | "automatic" | "branch";
@@ -250,9 +256,12 @@ export type LeadGeneratedDocumentReference = {
   pdfAttachmentId: string | null;
 };
 
+export type LeadChannelEventsByLeadId = Record<string, LeadChannelHistoryEvent[]>;
+
 export function createLeadTableRows(
   records: LeadTableRecord[],
-  generatedDocuments: LeadGeneratedDocumentReference[] = []
+  generatedDocuments: LeadGeneratedDocumentReference[] = [],
+  channelEventsByLeadId: LeadChannelEventsByLeadId = {}
 ): LeadTableRow[] {
   const documentsById = new Map(generatedDocuments.map((document) => [document.documentId, document]));
 
@@ -284,7 +293,8 @@ export function createLeadTableRows(
     outcomeReason: record.outcomeReason ?? "",
     projectRecordId: record.projectRecordId ?? "",
     kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
-    kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined
+    kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined,
+    channelEvents: channelEventsByLeadId[record.leadId] ?? undefined
   }));
 }
 
@@ -368,8 +378,11 @@ export function createLeadHistory(
     | "outcome"
     | "projectRecordId"
   >
+  & { channelEvents?: LeadChannelHistoryEvent[] }
 ): LeadHistoryItem[] {
+  const channelHistory = createLeadChannelHistory(lead.channelEvents ?? [], lead.leadId);
   const history: LeadHistoryItem[] = [
+    ...channelHistory,
     {
       title: "Lead created",
       at: lead.createdDate || "Unknown date",
@@ -461,6 +474,93 @@ export function createLeadHistory(
   }
 
   return history;
+}
+
+function createLeadChannelHistory(events: LeadChannelHistoryEvent[], leadId: string): LeadHistoryItem[] {
+  return events
+    .flatMap((event) => createLeadChannelHistoryItem(event, leadId))
+    .sort((left, right) => left.sortTime - right.sortTime)
+    .map(({ sortTime: _sortTime, ...item }) => item);
+}
+
+function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: string): Array<LeadHistoryItem & { sortTime: number }> {
+  const metadata = event.metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return [];
+  }
+
+  const channelEvent = metadata as Record<string, unknown>;
+  if (channelEvent.leadId !== leadId) {
+    return [];
+  }
+
+  const actor = channelEvent.channel === "telegram" ? "Telegram" : channelEvent.channel === "web" ? "Operator" : "CRM";
+  const at = formatDateTime(event.createdAt);
+  const sortTime = getTime(event.createdAt);
+
+  switch (channelEvent.type) {
+    case "lead_created": {
+      const fields = Array.isArray(channelEvent.fieldsCreated) ? channelEvent.fieldsCreated.join(", ") : "lead fields";
+      return [
+        {
+          title: "Lead created",
+          at,
+          actor,
+          stageLabel: "Step 4",
+          description: `${actor} created lead ${leadId} with ${fields}.`,
+          sortTime
+        }
+      ];
+    }
+    case "lead_draft_updated": {
+      const fields = Array.isArray(channelEvent.fieldsChanged) ? channelEvent.fieldsChanged.join(", ") : "lead fields";
+      return [
+        {
+          title: "Lead updated",
+          at,
+          actor,
+          stageLabel: "Steps 2-4",
+          description: `${actor} updated ${fields}.`,
+          sortTime
+        }
+      ];
+    }
+    case "kp_generated":
+      return [
+        {
+          title: "KP generated",
+          at,
+          actor,
+          stageLabel: "Step 6",
+          description: `${actor} generated commercial proposal ${String(channelEvent.documentId ?? "")}.`,
+          sortTime
+        }
+      ];
+    case "kp_sent_marked":
+      return [
+        {
+          title: "KP sent",
+          at,
+          actor,
+          stageLabel: "Step 7",
+          description: `${actor} marked the commercial proposal as sent.`,
+          sortTime
+        }
+      ];
+    case "kp_sent_undone":
+      return [
+        {
+          title: "Undo to KP review",
+          at,
+          actor,
+          stageLabel: "Step 5",
+          description: `${actor} moved the lead back before KP sent.`,
+          sortTime
+        }
+      ];
+    default:
+      return [];
+  }
 }
 
 export function createLeadKpMailtoHref(
@@ -701,6 +801,17 @@ function formatDate(value: Date | string | null): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString().slice(0, 10);
+}
+
+function formatDateTime(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function getTime(value: Date | string): number {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
 function formatScalar(value: number | string | { toString(): string } | null): string {

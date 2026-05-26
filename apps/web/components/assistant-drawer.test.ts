@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAssistantExecutionLabel } from "./assistant-execution-label";
+import { getAssistantExecutionButtons, getAssistantExecutionLabel } from "./assistant-execution-label";
 
 describe("getAssistantExecutionLabel", () => {
   it("shows lead ids for lead executions", () => {
@@ -39,5 +39,56 @@ describe("getAssistantExecutionLabel", () => {
         recordId: "generated-document-record-1"
       })
     ).toBe("D-20260521-message-4");
+  });
+});
+
+describe("getAssistantExecutionButtons", () => {
+  it("creates a Telegram-style CRM deep link after lead creation", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        leadId: "L-2026-002",
+        recordId: "lead-record-1",
+        pdfAttachmentId: "attachment-pdf",
+        docxAttachmentId: "attachment-docx"
+      })
+    ).toEqual([
+      { label: "CRM", url: "/leads?leadId=L-2026-002" },
+      { label: "PDF", url: "/documents/attachments/attachment-pdf" },
+      { label: "DOC", url: "/documents/attachments/attachment-docx?download=1" }
+    ]);
+  });
+
+  it("does not create CRM buttons for non-lead executions", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        actionType: "generate_kp",
+        documentId: "D-20260521-message-4",
+        recordId: "generated-document-record-1"
+      })
+    ).toEqual([]);
+  });
+
+  it("creates a CRM deep link after KP sent lead actions", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        actionType: "mark_kp_sent",
+        leadId: "L-2026-004",
+        recordId: "lead-record-4"
+      })
+    ).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+  });
+
+  it("creates a CRM deep link after KP sent undo lead actions", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        actionType: "undo_kp_sent",
+        leadId: "L-2026-004",
+        recordId: "lead-record-4"
+      })
+    ).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
   });
 });

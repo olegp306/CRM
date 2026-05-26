@@ -46,7 +46,7 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.1.7"
+      appVersion: "0.2.0"
     });
     expect(result.response).toBe("I saved this as product feedback for review.");
   });
@@ -66,6 +66,10 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a create lead preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("routes source-material uploads to lead intake before create lead previews", () => {
@@ -86,9 +90,20 @@ describe("assistant submission orchestration", () => {
     });
 
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Create lead Anna Beispiel from this source material\nWeb attachment 1: PDF (brief.pdf)"
+        }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
   it("routes clear source-material intake text to lead intake before create lead previews", () => {
@@ -100,9 +115,43 @@ describe("assistant submission orchestration", () => {
     });
 
     expect(result.response).toContain("I can create a lead from this source material");
-    expect(result.actionPreview).toBeNull();
-    expect(result.confirmationStatus).toBeNull();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material",
+      changes: [{ field: "lead.sourceText", from: null, to: "Create a lead from this client request with address and BGF" }]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
+    expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("keeps attachment-only source references in the lead preview", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Please review this source material and create a lead if the data is sufficient.",
+      threadId: "thread-source-only",
+      messageId: "message-source-only",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "photo",
+          fileName: "site.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Please review this source material and create a lead if the data is sufficient.\nWeb attachment 1: PHOTO (site.jpg)"
+        }
+      ]
+    });
   });
 
   it("previews schedule follow-up actions when the request asks for a reminder", () => {
@@ -120,6 +169,27 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
+  });
+
+  it("previews Russian follow-up schedule commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
+      content: "Напомни по этому лиду завтра",
+      threadId: "thread-ru-followup",
+      messageId: "message-ru-followup"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "schedule_followup",
+      summary: "Schedule follow-up from assistant request",
+      changes: [{ field: "followup.sourceText", from: null, to: "Напомни по этому лиду завтра" }],
+      requiresConfirmation: true
+    });
     expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
   });
 
@@ -141,7 +211,11 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared an update project task preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a project task update preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("previews KP generation actions when the request asks for an offer document", () => {
@@ -163,7 +237,32 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a generate KP preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
+  });
+
+  it("previews Russian KP generation commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
+      content: "Сгенерируй КП для этого лида",
+      threadId: "thread-ru-generate-kp",
+      messageId: "message-ru-generate-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "generate_kp",
+      summary: "Generate KP document from assistant request",
+      changes: [
+        { field: "document.type", from: null, to: "kp" },
+        { field: "document.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "document.sourceText", from: null, to: "Сгенерируй КП для этого лида" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
   });
 
   it("previews KP sent actions for selected leads", () => {
@@ -184,7 +283,73 @@ describe("assistant submission orchestration", () => {
       requiresConfirmation: true
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a mark KP sent preview. Confirm before I execute it.");
+    expect(result.response).toBe("I prepared a KP sent update preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
+  });
+
+  it("previews Russian KP sent commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "КП отправлено",
+      threadId: "thread-ru-kp-sent",
+      messageId: "message-ru-kp-sent"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "mark_kp_sent",
+      summary: "Mark KP as sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "КП отправлено" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+  });
+
+  it("previews KP sent undo actions for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "Undo KP sent for this lead",
+      threadId: "thread-undo-kp",
+      messageId: "message-undo-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "undo_kp_sent",
+      summary: "Undo KP sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "Undo KP sent for this lead" }
+      ],
+      requiresConfirmation: true
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
+  });
+
+  it("previews Russian KP sent undo commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "Отмени отправку КП",
+      threadId: "thread-ru-undo-kp",
+      messageId: "message-ru-undo-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "undo_kp_sent",
+      summary: "Undo KP sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "Отмени отправку КП" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
   });
 
   it("blocks action mode for roles without permission and creates permission feedback", () => {

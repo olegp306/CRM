@@ -14,7 +14,16 @@ function createFakeClient() {
       workspaceId: "workspace-1",
       leadId: "L-2026-001",
       status: "new",
-      rawInput: "Existing lead"
+      rawInput: "Existing lead",
+      clientName: "Irina Schneider",
+      requestType: "new_build",
+      projectAddress: "Bad Aibling",
+      bgfM2: 195,
+      email: "irina.schneider@example.com",
+      phone: "+49 160 4442211",
+      missingData: [],
+      isStandard: true,
+      temperature: "warm"
     }
   ];
   const client: AssistantLeadPrismaClientLike = {
@@ -30,7 +39,16 @@ function createFakeClient() {
           workspaceId: "workspace-1",
           leadId: "L-2026-002",
           status: "new",
-          rawInput: "Create lead Anna Beispiel"
+          rawInput: "Create lead Anna Beispiel",
+          clientName: "Irina Schneider",
+          requestType: "new_build",
+          projectAddress: "Bad Aibling",
+          bgfM2: 195,
+          email: "irina.schneider@example.com",
+          phone: "+49 160 4442211",
+          missingData: [],
+          isStandard: true,
+          temperature: "warm"
         });
       },
       update: (args) => {
@@ -62,7 +80,16 @@ describe("assistant lead Prisma store", () => {
         workspaceId: "workspace-1",
         leadId: "L-2026-001",
         status: "new",
-        rawInput: "Existing lead"
+        rawInput: "Existing lead",
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        projectAddress: "Bad Aibling",
+        bgfM2: 195,
+        email: "irina.schneider@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        isStandard: true,
+        temperature: "warm"
       }
     ]);
     expect(calls[0]).toEqual({
@@ -82,7 +109,16 @@ describe("assistant lead Prisma store", () => {
       workspaceId: "workspace-1",
       leadId: "L-2026-002",
       status: "new",
-      rawInput: "Create lead Anna Beispiel"
+      rawInput: "Create lead Anna Beispiel",
+      clientName: "Irina Schneider",
+      requestType: "new_build",
+      projectAddress: "Bad Aibling",
+      bgfM2: 195,
+      email: "irina.schneider@example.com",
+      phone: "+49 160 4442211",
+      missingData: [],
+      isStandard: true,
+      temperature: "warm"
     });
 
     expect(lead).toEqual({
@@ -90,7 +126,16 @@ describe("assistant lead Prisma store", () => {
       workspaceId: "workspace-1",
       leadId: "L-2026-002",
       status: "new",
-      rawInput: "Create lead Anna Beispiel"
+      rawInput: "Create lead Anna Beispiel",
+      clientName: "Irina Schneider",
+      requestType: "new_build",
+      projectAddress: "Bad Aibling",
+      bgfM2: 195,
+      email: "irina.schneider@example.com",
+      phone: "+49 160 4442211",
+      missingData: [],
+      isStandard: true,
+      temperature: "warm"
     });
     expect(calls[0]).toEqual({
       method: "create",
@@ -99,7 +144,16 @@ describe("assistant lead Prisma store", () => {
           workspaceId: "workspace-1",
           leadId: "L-2026-002",
           status: "new",
-          rawInput: "Create lead Anna Beispiel"
+          rawInput: "Create lead Anna Beispiel",
+          clientName: "Irina Schneider",
+          requestType: "new_build",
+          projectAddress: "Bad Aibling",
+          bgfM2: 195,
+          email: "irina.schneider@example.com",
+          phone: "+49 160 4442211",
+          missingData: [],
+          isStandard: true,
+          temperature: "warm"
         }
       }
     });
@@ -143,6 +197,46 @@ describe("assistant lead Prisma store", () => {
           kpSentDate: new Date("2026-05-21T10:30:00.000Z"),
           followup1Date: new Date("2026-05-28T10:30:00.000Z"),
           followupStatus: "planned"
+        }
+      }
+    });
+  });
+
+  it("undoes KP sent through a workspace-scoped lead update", async () => {
+    const { client, calls } = createFakeClient();
+    const store = createAssistantLeadPrismaStore(client);
+
+    const lead = await store.undoKpSent({
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null,
+      requestedByUserId: "user-1"
+    });
+
+    expect(lead).toEqual({
+      id: "lead-record-1",
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null,
+      requestedByUserId: "user-1"
+    });
+    expect(calls[0]).toEqual({
+      method: "update",
+      args: {
+        where: {
+          workspaceId_leadId: {
+            workspaceId: "workspace-1",
+            leadId: "L-2026-001"
+          }
+        },
+        data: {
+          kpSentDate: null,
+          followup1Date: null,
+          followupStatus: null
         }
       }
     });

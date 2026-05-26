@@ -1,0 +1,133 @@
+import { describe, expect, it } from "vitest";
+import {
+  getAssistantResponseButtonUiAction,
+  getAssistantSelectedRecordIds,
+  getAssistantSubmitContent,
+  isAssistantSubmitDisabled,
+  shouldUseOnboardingAssistantAction
+} from "./assistant-route-context";
+
+describe("getAssistantSelectedRecordIds", () => {
+  it("captures the deep-linked lead as the selected assistant record on the leads page", () => {
+    expect(getAssistantSelectedRecordIds("/leads", new URLSearchParams("leadId=L-2026-004"))).toEqual(["L-2026-004"]);
+  });
+
+  it("keeps the assistant context broad when the leads page has no selected lead", () => {
+    expect(getAssistantSelectedRecordIds("/leads", new URLSearchParams())).toEqual([]);
+  });
+
+  it("ignores lead deep links outside the leads module", () => {
+    expect(getAssistantSelectedRecordIds("/projects", new URLSearchParams("leadId=L-2026-004"))).toEqual([]);
+  });
+});
+
+describe("getAssistantResponseButtonUiAction", () => {
+  it("maps upload response buttons to the file picker command", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Attach source", action: "open_upload" })).toBe("open_upload");
+  });
+
+  it("maps confirmation response buttons to confirmation", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Create lead", action: "confirm" })).toBe("confirm");
+  });
+
+  it("keeps plain links as links", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "CRM", url: "/leads?leadId=L-2026-004" })).toBe("link");
+  });
+
+  it("does not assign a command to unsupported button actions", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Later", action: "send_kp" })).toBe("none");
+  });
+
+  it("maps cancel response buttons to cancellation", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Cancel", action: "cancel" })).toBe("cancel");
+  });
+});
+
+describe("assistant submit source content", () => {
+  it("keeps typed text as the submitted content", () => {
+    expect(getAssistantSubmitContent("Create lead from this client request", 1)).toBe("Create lead from this client request");
+  });
+
+  it("uses source-material copy for attachment-only submissions", () => {
+    expect(getAssistantSubmitContent("   ", 1)).toBe("Please review this source material and create a lead if the data is sufficient.");
+  });
+
+  it("disables submit only when there is no text and no attachment", () => {
+    expect(isAssistantSubmitDisabled({ content: "", attachmentCount: 0, submitting: false })).toBe(true);
+    expect(isAssistantSubmitDisabled({ content: "", attachmentCount: 1, submitting: false })).toBe(false);
+    expect(isAssistantSubmitDisabled({ content: "Hi", attachmentCount: 0, submitting: false })).toBe(false);
+    expect(isAssistantSubmitDisabled({ content: "Hi", attachmentCount: 1, submitting: true })).toBe(true);
+  });
+});
+
+describe("shouldUseOnboardingAssistantAction", () => {
+  it("keeps ordinary first replies in the onboarding flow", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "The lead table feels good, but I need columns for budget.",
+        attachmentCount: 0
+      })
+    ).toBe(true);
+  });
+
+  it("routes help commands through the shared assistant even in a new thread", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "/help",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+
+  it("routes first-message theme questions through the shared assistant", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "а есть цветовая схема или тема темная для вечера ?",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+
+  it("routes new lead commands through the shared assistant even in a new thread", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "/newlead",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+
+  it("routes first-message source material through the shared CRM assistant", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "Create a lead from this client request: Irina needs a KP for BGF 195 m2.",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+
+  it("routes first-message uploads through the shared CRM assistant", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "Please review this client request",
+        attachmentCount: 1
+      })
+    ).toBe(false);
+  });
+
+  it("uses the shared assistant after the onboarding thread has history", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 1,
+        content: "Can you check lead L-2026-004?",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+});

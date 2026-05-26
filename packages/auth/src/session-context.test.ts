@@ -32,12 +32,12 @@ describe("workspace session context", () => {
     expect(
       resolveWorkspaceSession({
         workspaceName: "Acme CRM",
-        themePreference: "dark"
+        themePreference: "nocturne"
       })
     ).toMatchObject({
       workspaceId: "workspace-demo",
       workspaceName: "Acme CRM",
-      themePreference: "dark",
+      themePreference: "nocturne",
       role: "admin"
     });
   });
@@ -52,7 +52,7 @@ describe("workspace session context", () => {
         userName: "Ada Lovelace",
         role: "manager",
         primaryColor: "#0f766e",
-        themePreference: "warm"
+        themePreference: "graphite"
       })
     ).toEqual({
       workspaceId: "workspace-2",
@@ -62,7 +62,7 @@ describe("workspace session context", () => {
       userName: "Ada Lovelace",
       role: "manager",
       primaryColor: "#0f766e",
-      themePreference: "warm"
+      themePreference: "graphite"
     });
   });
 
