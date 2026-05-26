@@ -116,6 +116,19 @@ describe("assistant channel engine", () => {
     expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
   });
 
+  it("treats clear English lead creation from client request text as lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Create a lead from this client request with address and BGF"
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
   it("treats clear Russian commercial proposal source material as lead intake", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
@@ -127,5 +140,56 @@ describe("assistant channel engine", () => {
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.feedbackType).toBeUndefined();
     expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("treats clear Russian client request text as lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Вот заявка клиента, создай лид если данных хватает"
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("keeps add lead button complaints as persisted UX feedback", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Add lead button is confusing"
+    });
+
+    expect(result.intent).toBe("ux_feedback");
+    expect(result.shouldPersistFeedback).toBe(true);
+    expect(result.feedbackType).toBe("ux_feedback");
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("keeps lead status questions as support requests", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "What is the status of lead L-2026-004?"
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([]);
+  });
+
+  it.each(["lead", "client", "address", "BGF"])("does not treat the single word %s as lead intake", (content) => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content
+    });
+
+    expect(result.intent).not.toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([]);
   });
 });

@@ -65,9 +65,44 @@ function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {
     return true;
   }
 
-  return /(\bsource material\b|\blead\b|\bclient\b|\bcommercial proposal\b|\bbgf\b|\baddress\b|заявк[аиу]|лид|клиент|коммерческ(?:ое|ого|ому|им)\s+предложени[еяю]|исходн(?:ый|ые|ого|ому)\s+материал|адрес|площадь|бгф)/i.test(
-    message.content
+  const content = message.content.trim();
+  if (content.length === 0) {
+    return false;
+  }
+
+  return (
+    (hasLeadIntakePhrase(content) && hasLeadRequestOrProposalSignal(content)) ||
+    hasMultipleStrongKpSignalsInSourceParagraph(content)
   );
+}
+
+function hasLeadIntakePhrase(content: string): boolean {
+  return /(\bsource material\b|\bclient request\b|\bcreate\s+(?:a\s+)?lead\b|\bcapture\s+(?:a\s+)?lead\b|\bregister\s+(?:a\s+)?lead\b|\bimport\s+(?:a\s+)?lead\b|\bextract\b.*\blead\b|заявк[аиу]\s+клиент[а-я]*|материал\s+для\s+лид[а-я]*|исходн(?:ый|ые|ого|ому)\s+материал|созда[йть]+\s+лид|добавь\s+лид|зарегистрируй\s+лид)/i.test(
+    content
+  );
+}
+
+function hasLeadRequestOrProposalSignal(content: string): boolean {
+  return /(\blead\b|\bclient request\b|\bcommercial proposal\b|\brequest\b|\bproposal\b|заявк[аиу]|лид|клиент|коммерческ(?:ое|ого|ому|им)\s+предложени[еяю])/i.test(
+    content
+  );
+}
+
+function hasMultipleStrongKpSignalsInSourceParagraph(content: string): boolean {
+  if (content.length < 80 && !content.includes("\n")) {
+    return false;
+  }
+
+  const strongSignals = [
+    /\bclient\b|клиент/i,
+    /\bcommercial proposal\b|\bproposal\b|коммерческ(?:ое|ого|ому|им)\s+предложени[еяю]/i,
+    /\bbgf\b|бгф|площадь/i,
+    /\baddress\b|адрес/i,
+    /\b(?:phone|tel|email|e-mail|contact)\b|телефон|почта|контакт/i,
+    /\b(?:budget|price|cost)\b|бюджет|стоимост|цена/i
+  ];
+
+  return strongSignals.filter((signal) => signal.test(content)).length >= 3;
 }
 
 function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
