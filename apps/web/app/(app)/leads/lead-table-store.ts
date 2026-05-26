@@ -326,18 +326,22 @@ function parseTelegramAttachmentSummaryLine(line: string): {
 }
 
 function createAttachmentDescription(
-  attachment: { kind: "photo" | "pdf" | "audio" },
+  attachment: { kind: "photo" | "pdf" | "audio"; fileName: string },
   transcript: string | undefined
 ): string {
   if (attachment.kind === "audio") {
-    return transcript?.trim() || "Saved Telegram audio source material.";
+    return truncateLeadSummaryDescription(transcript?.trim() || `Audio message from Telegram: ${attachment.fileName}.`);
   }
 
   if (attachment.kind === "pdf") {
-    return "Saved Telegram PDF source material.";
+    return `PDF file from Telegram: ${attachment.fileName}.`;
   }
 
-  return "Saved Telegram photo source material.";
+  return `Photo file from Telegram: ${attachment.fileName}.`;
+}
+
+function truncateLeadSummaryDescription(description: string): string {
+  return description.length > 120 ? `${description.slice(0, 117).trimEnd()}...` : description;
 }
 
 function createLeadSourceReferenceEntries(line: string): string[] {

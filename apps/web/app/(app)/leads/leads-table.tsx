@@ -50,6 +50,9 @@ type LeadsTableProps = {
   undoLeadKpSentAction: (formData: FormData) => Promise<void>;
 };
 
+const leadAccordionClassName = "min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30";
+const leadAccordionSummaryClassName = "flex min-h-12 cursor-pointer items-center px-3 py-3 text-sm font-semibold";
+
 export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoLeadKpSentAction }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
@@ -802,36 +805,36 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
 
   return (
     <details
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
+      className={leadAccordionClassName}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer text-sm font-semibold">Lead summary info</summary>
-      <div className="mt-3 grid min-w-0 gap-2">
+      <summary className={leadAccordionSummaryClassName}>Lead summary info</summary>
+      <div className="grid min-w-0 gap-2 px-3 pb-3">
         {items.length > 0 ? (
           items.map((item, index) => (
             <article key={`${item.title}-${item.kind}-${index}`} className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
-              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] sm:items-start">
                 <div className="min-w-0">
                   <p className="break-words font-semibold text-foreground">{item.title}</p>
                   <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.kind}</p>
                 </div>
+                <p className="min-w-0 break-words text-sm text-muted-foreground">{item.description}</p>
                 {item.url ? (
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary"
+                    className="w-fit rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary"
                   >
                     Download
                   </a>
                 ) : null}
               </div>
-              <p className="mt-2 break-words text-sm text-muted-foreground">{item.description}</p>
             </article>
           ))
         ) : (
-          <p className="text-sm text-muted-foreground">No summarized source materials saved yet.</p>
+          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No summarized source materials saved yet.</p>
         )}
       </div>
     </details>
@@ -843,12 +846,12 @@ function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
 
   return (
     <details
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
+      className={leadAccordionClassName}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer text-sm font-semibold">History</summary>
-      <div className="mt-3 grid gap-2">
+      <summary className={leadAccordionSummaryClassName}>History</summary>
+      <div className="grid gap-2 px-3 pb-3">
         {history.map((item, index) => (
           <article key={`${item.title}-${item.at}-${index}`} className="rounded-lg bg-white p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -873,12 +876,12 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
 
   return (
     <details
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
+      className={leadAccordionClassName}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer text-sm font-semibold">Action plan</summary>
-      <div className="mt-3 grid gap-2">
+      <summary className={leadAccordionSummaryClassName}>Action plan</summary>
+      <div className="grid gap-2 px-3 pb-3">
         {actionPlan.length > 0 ? (
           actionPlan.map((item) => (
             <div key={`${item.title}-${item.dueDate}`} className="rounded-lg bg-white p-3 text-sm">
@@ -891,7 +894,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
             </div>
           ))
         ) : (
-          <p className="text-sm text-muted-foreground">No action is waiting right now.</p>
+          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No action is waiting right now.</p>
         )}
       </div>
     </details>
@@ -964,13 +967,13 @@ function SourceMaterialsPanel({
 
   return (
     <details
-      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
+      className={leadAccordionClassName}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
+      <summary className={leadAccordionSummaryClassName}>Source materials</summary>
       {sourceText ? (
-        <div className="mt-3 grid min-w-0 gap-2">
+        <div className="grid min-w-0 gap-2 px-3 pb-3">
           {references.length > 0 ? (
             <div className="flex min-w-0 flex-wrap gap-2">
               {references.map((reference) =>
@@ -997,7 +1000,7 @@ function SourceMaterialsPanel({
           </pre>
         </div>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">No source text or document references saved yet.</p>
+        <p className="mx-3 mb-3 rounded-lg bg-white p-3 text-sm text-muted-foreground">No source text or document references saved yet.</p>
       )}
     </details>
   );

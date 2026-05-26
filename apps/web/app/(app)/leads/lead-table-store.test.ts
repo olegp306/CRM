@@ -163,7 +163,7 @@ describe("lead table model", () => {
       {
         title: "grundriss.pdf",
         kind: "pdf",
-        description: "Saved Telegram PDF source material.",
+        description: "PDF file from Telegram: grundriss.pdf.",
         url: "/documents/attachments/attachment-pdf-1?download=1"
       },
       {
@@ -173,6 +173,25 @@ describe("lead table model", () => {
         url: null
       }
     ]);
+  });
+
+  it("keeps file descriptions concise in lead summary info", () => {
+    const [photo, audio] = createLeadSummaryInfo(
+      [
+        "Telegram attachment 1: photo (image/jpeg, saved attachment-photo-1)",
+        "Telegram attachment 2: audio (very-long-audio-file-name.mp3, saved attachment-audio-2)",
+        "Audio transcript 2 (very-long-audio-file-name.mp3):",
+        "This voice message describes a hillside renovation request with address, scope, timeline, preferred start date, budget expectations, and follow-up context for the KP workflow."
+      ].join("\n")
+    );
+
+    expect(photo).toMatchObject({
+      title: "image/jpeg",
+      kind: "photo",
+      description: "Photo file from Telegram: image/jpeg."
+    });
+    expect(audio?.description.length).toBeLessThanOrEqual(120);
+    expect(audio?.description).toContain("This voice message describes a hillside renovation request");
   });
 
   it("serializes lead records for a client-side table and edit drawer", () => {

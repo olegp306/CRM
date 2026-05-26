@@ -31,5 +31,7 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Lead summary info");
     expect(tableSource).toContain("break-all");
     expect(tableSource).toContain("min-w-0 overflow-hidden");
+    expect(tableSource).toContain("min-h-12");
+    expect(tableSource).toContain("px-3 py-3");
   });
 });
