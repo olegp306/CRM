@@ -1,4 +1,5 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
+import { createAssistantChannelResponse } from "./channel-engine";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -85,19 +86,39 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  const feedback = createFeedbackItemFromMessage({
-    workspaceId: input.context.workspaceId,
-    sourceThreadId: input.threadId,
-    sourceMessageId: input.messageId,
-    intent: message.intent,
-    moduleContext: input.context.module,
-    role: input.context.role
+  const channelResponse = createAssistantChannelResponse({
+    channel: "web",
+    threadId: input.threadId,
+    messageId: input.messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context: input.context,
+    attachments: []
   });
+
+  let feedback: FeedbackItemDraft | null = null;
+
+  if (channelResponse.shouldPersistFeedback) {
+    const feedbackType = channelResponse.feedbackType;
+
+    if (!feedbackType) {
+      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
+    }
+
+    feedback = createFeedbackItemFromMessage({
+      workspaceId: input.context.workspaceId,
+      sourceThreadId: input.threadId,
+      sourceMessageId: input.messageId,
+      intent: feedbackType,
+      moduleContext: input.context.module,
+      role: input.context.role
+    });
+  }
 
   return {
     thread,
     message,
-    response: plan.response,
+    response: channelResponse.text,
     feedback,
     actionPreview: null,
     confirmationStatus: null,

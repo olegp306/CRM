@@ -110,4 +110,43 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.feedback?.type).toBe("permission_blocked");
     expect(result.confirmationStatus).toBe("cancelled");
   });
+
+  it("answers assistant identity questions without persisting feedback", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can answer CRM questions.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Кто ты и что умеешь?",
+        threadId: "thread-help",
+        messageId: "message-help"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(result.response).toContain("I can create and update leads");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+  });
 });

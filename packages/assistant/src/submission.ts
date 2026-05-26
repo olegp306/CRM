@@ -97,16 +97,24 @@ export function createAssistantSubmissionResult({
     attachments: []
   });
 
-  const feedback = channelResponse.shouldPersistFeedback
-    ? createFeedbackItemFromMessage({
-        workspaceId: context.workspaceId,
-        sourceThreadId: threadId,
-        sourceMessageId: messageId,
-        intent: channelResponse.feedbackType ?? message.intent,
-        moduleContext: context.module,
-        role: context.role
-      })
-    : null;
+  let feedback: FeedbackItemDraft | null = null;
+
+  if (channelResponse.shouldPersistFeedback) {
+    const feedbackType = channelResponse.feedbackType;
+
+    if (!feedbackType) {
+      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
+    }
+
+    feedback = createFeedbackItemFromMessage({
+      workspaceId: context.workspaceId,
+      sourceThreadId: threadId,
+      sourceMessageId: messageId,
+      intent: feedbackType,
+      moduleContext: context.module,
+      role: context.role
+    });
+  }
 
   return {
     thread,
