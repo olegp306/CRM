@@ -72,4 +72,16 @@ describe("assistant channel engine", () => {
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
   });
+
+  it("answers Telegram start command with shared help", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "/start"
+    });
+
+    expect(result.intent).toBe("help");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.text).toContain("I can create and update leads");
+  });
 });

@@ -39,7 +39,11 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
 }
 
 function isHelpMessage(content: string, intent: string): boolean {
-  return intent === "support_request" && /(\/start|\/help|who are you|what can you do|кто ты|что умеешь)/i.test(content);
+  if (/^\/(?:start|help)\b/i.test(content.trim())) {
+    return true;
+  }
+
+  return intent === "support_request" && /(who are you|what can you do|кто ты|что умеешь)/i.test(content);
 }
 
 function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
