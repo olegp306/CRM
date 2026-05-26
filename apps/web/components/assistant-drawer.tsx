@@ -6,9 +6,13 @@ import { captureAssistantContext, createOnboardingAssistantMessage, type Assista
 import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantConversationEntry } from "@app/assistant";
 import { MessageSquareText, Mic, Paperclip, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getAssistantExecutionButtons, getAssistantExecutionLabel, type AssistantExecutionButton } from "./assistant-execution-label";
-import { getAssistantSelectedRecordIds, shouldUseOnboardingAssistantAction } from "./assistant-route-context";
+import {
+  getAssistantResponseButtonUiAction,
+  getAssistantSelectedRecordIds,
+  shouldUseOnboardingAssistantAction
+} from "./assistant-route-context";
 import { useWorkspaceSession } from "./workspace-session-provider";
 
 export function AssistantDrawer() {
@@ -26,6 +30,7 @@ export function AssistantDrawer() {
   const [submitting, setSubmitting] = useState(false);
   const [savedSummary, setSavedSummary] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<AssistantChannelAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const latestResult = history.length > 0 ? result : null;
   const onboardingMessage = createOnboardingAssistantMessage();
   const hasUnreadOnboarding = !open && history.length === 0;
@@ -201,8 +206,10 @@ export function AssistantDrawer() {
                 ) : null}
                 {latestResult?.responseButtons.length ? (
                   <div className="flex flex-wrap gap-2">
-                    {latestResult.responseButtons.map((button) =>
-                      button.url ? (
+                    {latestResult.responseButtons.map((button) => {
+                      const uiAction = getAssistantResponseButtonUiAction(button);
+
+                      return uiAction === "link" && button.url ? (
                         <a
                           key={`${button.label}-${button.url}`}
                           href={button.url}
@@ -214,14 +221,22 @@ export function AssistantDrawer() {
                         <button
                           key={`${button.label}-${button.action ?? "button"}`}
                           type="button"
-                          onClick={button.action === "confirm" && latestResult.actionPreview ? confirmLatestAction : undefined}
-                          disabled={button.action === "confirm" && !latestResult.actionPreview}
+                          onClick={
+                            uiAction === "confirm" && latestResult.actionPreview
+                              ? confirmLatestAction
+                              : uiAction === "open_upload"
+                                ? () => fileInputRef.current?.click()
+                                : uiAction === "cancel"
+                                  ? () => setConfirmation("cancelled")
+                                  : undefined
+                          }
+                          disabled={(uiAction === "confirm" && !latestResult.actionPreview) || uiAction === "none"}
                           className="h-9 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {button.label}
                         </button>
-                      )
-                    )}
+                      );
+                    })}
                   </div>
                 ) : null}
                 {executionButtons.length > 0 ? (
@@ -300,7 +315,14 @@ export function AssistantDrawer() {
               <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold">
                 <Paperclip aria-hidden="true" className="h-4 w-4" />
                 Attach
-                <input type="file" multiple accept="image/*,.pdf,.docx,.txt" onChange={handleFilesSelected} className="sr-only" />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.docx,.txt"
+                  onChange={handleFilesSelected}
+                  className="sr-only"
+                />
               </label>
               <span className="inline-flex min-w-0 flex-1 items-center justify-end gap-1 text-right text-xs text-muted-foreground max-[360px]:basis-full max-[360px]:justify-start max-[360px]:text-left">
                 <Mic aria-hidden="true" className="h-4 w-4" />

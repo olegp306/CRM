@@ -111,13 +111,13 @@ export function createAssistantSubmissionResult({
     return {
       thread,
       message,
-      response: `I prepared ${getActionPreviewLabel(actionPreview.actionType)} preview. Confirm before I execute it.`,
-      feedback: null,
-      actionPreview,
-      responseButtons: [],
-      confirmationStatus: advanceActionConfirmation("draft", "preview"),
-      permissionBlocked: null
-    };
+        response: `I prepared ${getActionPreviewLabel(actionPreview.actionType)} preview. Confirm before I execute it.`,
+        feedback: null,
+        actionPreview,
+        responseButtons: createConfirmationResponseButtons(),
+        confirmationStatus: advanceActionConfirmation("draft", "preview"),
+        permissionBlocked: null
+      };
   }
 
   const channelResponse = createAssistantChannelResponse(channelMessage);
@@ -199,6 +199,13 @@ function canUseAssistantActionMode(role: string): boolean {
   return role === "owner" || role === "admin";
 }
 
+function createConfirmationResponseButtons(): AssistantChannelResponseButton[] {
+  return [
+    { label: "Confirm", action: "confirm" },
+    { label: "Cancel", action: "cancel" }
+  ];
+}
+
 function createCrmActionPreview(content: string, context?: AssistantContext): ActionPreview {
   if (isKpGenerationRequest(content)) {
     return createActionPreview({
@@ -213,9 +220,11 @@ function createCrmActionPreview(content: string, context?: AssistantContext): Ac
   }
 
   if (isMarkKpSentRequest(content)) {
+    const actionType = isUndoKpSentRequest(content) ? "undo_kp_sent" : "mark_kp_sent";
+
     return createActionPreview({
-      actionType: "mark_kp_sent",
-      summary: "Mark KP as sent from assistant request",
+      actionType,
+      summary: actionType === "undo_kp_sent" ? "Undo KP sent from assistant request" : "Mark KP as sent from assistant request",
       changes: [
         { field: "lead.selectedRecordIds", from: null, to: context?.selectedRecordIds ?? [] },
         { field: "lead.sourceText", from: null, to: content }
@@ -258,7 +267,15 @@ function isKpGenerationRequest(content: string): boolean {
 }
 
 function isMarkKpSentRequest(content: string): boolean {
-  return /\b(mark|set|record)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content) && /\b(sent|sended|отправ)/i.test(content);
+  return (
+    (/\b(mark|set|record)\b/i.test(content) || isUndoKpSentRequest(content)) &&
+    /\b(kp|offer|proposal)\b/i.test(content) &&
+    /\b(sent|sended|отправ)/i.test(content)
+  );
+}
+
+function isUndoKpSentRequest(content: string): boolean {
+  return /\b(undo|revert|cancel|clear|remove)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content);
 }
 
 function isScheduleFollowupRequest(content: string): boolean {
@@ -284,6 +301,10 @@ function getActionPreviewLabel(actionType: string): string {
 
   if (actionType === "mark_kp_sent") {
     return "a mark KP sent";
+  }
+
+  if (actionType === "undo_kp_sent") {
+    return "an undo KP sent";
   }
 
   return actionType.replace(/_/g, " ");

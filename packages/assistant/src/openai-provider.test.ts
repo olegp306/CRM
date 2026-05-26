@@ -142,6 +142,10 @@ describe("createOpenAIAssistantSubmissionResult", () => {
       changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel, BGF 150" }]
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {

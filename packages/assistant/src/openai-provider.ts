@@ -41,7 +41,14 @@ type OpenAIAttachmentSummary = {
 };
 
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
-const allowedActionTypes = new Set<AssistantActionType>(["create_lead", "generate_kp", "schedule_followup", "update_project_task", "mark_kp_sent"]);
+const allowedActionTypes = new Set<AssistantActionType>([
+  "create_lead",
+  "generate_kp",
+  "schedule_followup",
+  "update_project_task",
+  "mark_kp_sent",
+  "undo_kp_sent"
+]);
 const maxAttachmentTextPreviewLength = 500;
 
 export async function createOpenAIAssistantSubmissionResult(
@@ -131,7 +138,7 @@ export async function createOpenAIAssistantSubmissionResult(
       response: plan.response,
       feedback: null,
       actionPreview,
-      responseButtons: [],
+      responseButtons: createConfirmationResponseButtons(),
       confirmationStatus: advanceActionConfirmation("draft", "preview"),
       permissionBlocked: null
     };
@@ -154,6 +161,13 @@ function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof
     channelResponse.intent === "support_request" ||
     channelResponse.shouldPersistFeedback
   );
+}
+
+function createConfirmationResponseButtons() {
+  return [
+    { label: "Confirm" as const, action: "confirm" as const },
+    { label: "Cancel" as const, action: "cancel" as const }
+  ];
 }
 
 async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAIAssistantConfig): Promise<OpenAIPlan> {
@@ -302,9 +316,9 @@ function createPreviewFromPlan(plan: OpenAIPlan, fallbackSourceText: string, con
     });
   }
 
-  if (plan.action.actionType === "mark_kp_sent") {
+  if (plan.action.actionType === "mark_kp_sent" || plan.action.actionType === "undo_kp_sent") {
     return createActionPreview({
-      actionType: "mark_kp_sent",
+      actionType: plan.action.actionType,
       summary: plan.action.summary,
       changes: [
         { field: "lead.selectedRecordIds", from: null, to: context.selectedRecordIds ?? [] },
@@ -346,12 +360,13 @@ function canUseAssistantActionMode(role: string): boolean {
 function createSystemPrompt(): string {
   return [
     "You are the CRM assistant runtime for an architecture studio SaaS.",
-    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
+    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
     "Use create_lead when the user asks to add, create, capture, or register a lead/client opportunity.",
     "Use schedule_followup for reminders or follow-up scheduling.",
     "Use update_project_task for project/task status changes.",
     "Use generate_kp for KP, offer, proposal, or document generation.",
     "Use mark_kp_sent when the user says an existing KP, offer, or proposal was sent.",
+    "Use undo_kp_sent when the user asks to undo, revert, clear, or remove a KP sent status.",
     "If no operational action is needed, set action to null."
   ].join("\n");
 }

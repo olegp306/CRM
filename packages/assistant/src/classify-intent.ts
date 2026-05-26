@@ -28,10 +28,14 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   if (
-    /^(help me\s+)?(add|create|generate|schedule|update|mark|set|record)\b.*\b(lead|address|kp|follow-up|project|task)\b/.test(
+    /^(help me\s+)?(add|create|generate|schedule|update|mark|set|record|undo|revert|clear|remove)\b.*\b(lead|address|kp|follow-up|project|task)\b/.test(
       text,
     )
   ) {
+    return "crm_action";
+  }
+
+  if (/\b(undo|revert|clear|remove)\b.*\b(kp|offer|proposal|lead)\b/.test(text)) {
     return "crm_action";
   }
 

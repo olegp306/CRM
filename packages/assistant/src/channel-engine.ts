@@ -1,5 +1,5 @@
 import { classifyIntent } from "./classify-intent";
-import type { AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
+import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
 
 export function createAssistantChannelResponse(message: AssistantChannelMessage): AssistantChannelResponse {
   const intent = classifyIntent(message.content);
@@ -19,7 +19,7 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
       intent: "lead_intake",
       shouldPersistFeedback: false,
       feedbackType: undefined,
-      buttons: [],
+      buttons: [{ label: "Attach source", action: "open_upload" }],
       text: "Send the client request, photos, PDFs, or raw source text. I will extract the lead fields and ask for confirmation before saving it in CRM."
     };
   }
@@ -35,12 +35,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
   }
 
   if (isPrioritySupportRequest(message.content, intent)) {
+    const leadId = getReferencedLeadId(message);
+
     return {
       intent: "support_request",
       shouldPersistFeedback: false,
       feedbackType: undefined,
-      buttons: [],
-      text: "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      buttons: createLeadCrmButtons(leadId),
+      text: leadId
+        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
+        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
     };
   }
 
@@ -55,12 +59,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
   }
 
   if (intent === "support_request") {
+    const leadId = getReferencedLeadId(message);
+
     return {
       intent,
       shouldPersistFeedback: false,
       feedbackType: undefined,
-      buttons: [],
-      text: "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      buttons: createLeadCrmButtons(leadId),
+      text: leadId
+        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
+        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
     };
   }
 
@@ -93,6 +101,20 @@ function isPersistedFeedbackIntent(intent: string): intent is "feature_request" 
 
 function isPrioritySupportRequest(content: string, intent: string): boolean {
   return intent === "support_request" && /\b(?:help|support|status|what(?:'s| is)\s+the\s+status|where\s+is|check|update)\b/i.test(content);
+}
+
+function getReferencedLeadId(message: AssistantChannelMessage): string | null {
+  const fromText = /\bL-\d{4}-\d+\b/i.exec(message.content)?.[0]?.toUpperCase();
+
+  if (fromText) {
+    return fromText;
+  }
+
+  return message.context.selectedRecordIds?.find((id) => /^L-\d{4}-\d+$/i.test(id)) ?? null;
+}
+
+function createLeadCrmButtons(leadId: string | null): AssistantChannelResponseButton[] {
+  return leadId ? [{ label: "CRM", url: `/leads?leadId=${encodeURIComponent(leadId)}` }] : [];
 }
 
 export function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {

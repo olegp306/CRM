@@ -1,3 +1,11 @@
+type AssistantResponseButtonLike = {
+  label: string;
+  url?: string;
+  action?: string;
+};
+
+export type AssistantResponseButtonUiAction = "confirm" | "cancel" | "open_upload" | "link" | "none";
+
 export function getAssistantSelectedRecordIds(pathname: string, searchParams: URLSearchParams): string[] {
   if (pathname !== "/leads") {
     return [];
@@ -5,6 +13,18 @@ export function getAssistantSelectedRecordIds(pathname: string, searchParams: UR
 
   const leadId = searchParams.get("leadId")?.trim();
   return leadId ? [leadId] : [];
+}
+
+export function getAssistantResponseButtonUiAction(button: AssistantResponseButtonLike): AssistantResponseButtonUiAction {
+  if (button.url) {
+    return "link";
+  }
+
+  if (button.action === "confirm" || button.action === "cancel" || button.action === "open_upload") {
+    return button.action;
+  }
+
+  return "none";
 }
 
 export function shouldUseOnboardingAssistantAction({

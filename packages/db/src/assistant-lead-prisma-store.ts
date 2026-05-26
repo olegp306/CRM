@@ -1,4 +1,11 @@
-import type { CreateLeadFromAssistantInput, CreatedLeadRecord, MarkKpSentFromAssistantInput, MarkedKpSentLeadRecord } from "@app/assistant";
+import type {
+  CreateLeadFromAssistantInput,
+  CreatedLeadRecord,
+  MarkKpSentFromAssistantInput,
+  MarkedKpSentLeadRecord,
+  UndoKpSentFromAssistantInput,
+  UndoneKpSentLeadRecord
+} from "@app/assistant";
 import type { LeadMissingField } from "@app/core";
 
 type LeadRow = {
@@ -30,6 +37,7 @@ export type AssistantLeadStore = {
   list(workspaceId: string): Promise<CreatedLeadRecord[]>;
   create(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord>;
   markKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord>;
+  undoKpSent(input: UndoKpSentFromAssistantInput): Promise<UndoneKpSentLeadRecord>;
 };
 
 export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClientLike): AssistantLeadStore {
@@ -75,6 +83,32 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
         kpSentDate: input.kpSentDate,
         followup1Date: input.followup1Date,
         followupStatus: input.followupStatus,
+        requestedByUserId: input.requestedByUserId
+      };
+    },
+
+    async undoKpSent(input) {
+      const row = await client.lead.update({
+        where: {
+          workspaceId_leadId: {
+            workspaceId: input.workspaceId,
+            leadId: input.leadId
+          }
+        },
+        data: {
+          kpSentDate: null,
+          followup1Date: null,
+          followupStatus: null
+        }
+      });
+
+      return {
+        id: row.id,
+        workspaceId: row.workspaceId,
+        leadId: row.leadId,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
         requestedByUserId: input.requestedByUserId
       };
     }

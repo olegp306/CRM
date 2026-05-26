@@ -66,6 +66,10 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a create lead preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("routes source-material uploads to lead intake before create lead previews", () => {
@@ -131,6 +135,10 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("previews project task update actions when the request targets project tasks", () => {
@@ -152,6 +160,10 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared an update project task preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("previews KP generation actions when the request asks for an offer document", () => {
@@ -174,6 +186,10 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a generate KP preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("previews KP sent actions for selected leads", () => {
@@ -195,6 +211,34 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a mark KP sent preview. Confirm before I execute it.");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
+  });
+
+  it("previews KP sent undo actions for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "Undo KP sent for this lead",
+      threadId: "thread-undo-kp",
+      messageId: "message-undo-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "undo_kp_sent",
+      summary: "Undo KP sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "Undo KP sent for this lead" }
+      ],
+      requiresConfirmation: true
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "Confirm", action: "confirm" },
+      { label: "Cancel", action: "cancel" }
+    ]);
   });
 
   it("blocks action mode for roles without permission and creates permission feedback", () => {

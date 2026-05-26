@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAssistantSelectedRecordIds, shouldUseOnboardingAssistantAction } from "./assistant-route-context";
+import { getAssistantResponseButtonUiAction, getAssistantSelectedRecordIds, shouldUseOnboardingAssistantAction } from "./assistant-route-context";
 
 describe("getAssistantSelectedRecordIds", () => {
   it("captures the deep-linked lead as the selected assistant record on the leads page", () => {
@@ -12,6 +12,28 @@ describe("getAssistantSelectedRecordIds", () => {
 
   it("ignores lead deep links outside the leads module", () => {
     expect(getAssistantSelectedRecordIds("/projects", new URLSearchParams("leadId=L-2026-004"))).toEqual([]);
+  });
+});
+
+describe("getAssistantResponseButtonUiAction", () => {
+  it("maps upload response buttons to the file picker command", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Attach source", action: "open_upload" })).toBe("open_upload");
+  });
+
+  it("maps confirmation response buttons to confirmation", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Create lead", action: "confirm" })).toBe("confirm");
+  });
+
+  it("keeps plain links as links", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "CRM", url: "/leads?leadId=L-2026-004" })).toBe("link");
+  });
+
+  it("does not assign a command to unsupported button actions", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Later", action: "send_kp" })).toBe("none");
+  });
+
+  it("maps cancel response buttons to cancellation", () => {
+    expect(getAssistantResponseButtonUiAction({ label: "Cancel", action: "cancel" })).toBe("cancel");
   });
 });
 

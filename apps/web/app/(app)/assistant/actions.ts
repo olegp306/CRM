@@ -34,7 +34,7 @@ import {
 } from "@app/assistant";
 import { generateAssistantKpDocument } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
-import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent } from "./lead-execution-store";
+import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent, undoAssistantLeadKpSent } from "./lead-execution-store";
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 
@@ -337,7 +337,8 @@ export async function confirmAssistantActionAction({
     scheduleFollowup: createAssistantFollowup,
     updateProjectTask: updateAssistantProjectTask,
     generateKpDocument: generateAssistantKpDocument,
-    markKpSent: markAssistantLeadKpSent
+    markKpSent: markAssistantLeadKpSent,
+    undoKpSent: undoAssistantLeadKpSent
   });
 
   const updatedAction = await repository.updateActionExecutionResult(workspaceId, messageId, {

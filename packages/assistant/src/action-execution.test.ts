@@ -92,6 +92,25 @@ const markKpSentAction: AssistantActionWriteDraft = {
   requestedByUserId: "user-1"
 };
 
+const undoKpSentAction: AssistantActionWriteDraft = {
+  workspaceId: "workspace-1",
+  threadId: "thread-1",
+  messageId: "message-6",
+  actionType: "undo_kp_sent",
+  preview: {
+    actionType: "undo_kp_sent",
+    summary: "Undo KP sent from assistant request",
+    changes: [
+      { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+      { field: "lead.sourceText", from: null, to: "Undo KP sent for lead L-2026-001" }
+    ],
+    warnings: [],
+    requiresConfirmation: true
+  },
+  status: "awaiting_confirmation",
+  requestedByUserId: "user-1"
+};
+
 describe("executeAssistantAction", () => {
   it("confirms awaiting create lead actions and creates a lead from the preview", async () => {
     const createdLeads: unknown[] = [];
@@ -394,6 +413,38 @@ describe("executeAssistantAction", () => {
         kpSentDate: new Date("2026-05-21T10:30:00.000Z"),
         followup1Date: new Date("2026-05-28T10:30:00.000Z"),
         followupStatus: "planned",
+        requestedByUserId: "user-1"
+      }
+    ]);
+  });
+
+  it("confirms awaiting KP sent undo actions through the lead status port", async () => {
+    const undoneLeads: unknown[] = [];
+
+    const result = await executeAssistantAction({
+      action: undoKpSentAction,
+      now: new Date("2026-05-21T10:30:00.000Z"),
+      existingLeadIds: [],
+      createLead: async (lead) => ({ id: "lead-record-1", ...lead }),
+      undoKpSent: async (update) => {
+        undoneLeads.push(update);
+        return { id: "lead-record-1", ...update };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "undo_kp_sent",
+      leadId: "L-2026-001",
+      recordId: "lead-record-1"
+    });
+    expect(undoneLeads).toEqual([
+      {
+        workspaceId: "workspace-1",
+        leadId: "L-2026-001",
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
         requestedByUserId: "user-1"
       }
     ]);

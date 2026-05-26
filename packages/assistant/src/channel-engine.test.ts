@@ -94,7 +94,7 @@ describe("assistant channel engine", () => {
 
     expect(result.intent).toBe("lead_intake");
     expect(result.shouldPersistFeedback).toBe(false);
-    expect(result.buttons).toEqual([]);
+    expect(result.buttons).toEqual([{ label: "Attach source", action: "open_upload" }]);
     expect(result.text).toContain("Send the client request");
   });
 
@@ -232,7 +232,23 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("support_request");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.feedbackType).toBeUndefined();
-    expect(result.buttons).toEqual([]);
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+  });
+
+  it("adds a CRM deep link for status questions about the selected lead", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "What is waiting next for this lead?",
+      context: {
+        ...baseMessage.context,
+        selectedRecordIds: ["L-2026-004"]
+      }
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("L-2026-004");
   });
 
   it("keeps lead status questions with screenshots as support requests", () => {
@@ -247,7 +263,7 @@ describe("assistant channel engine", () => {
     expect(result.intent).not.toBe("lead_intake");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.feedbackType).toBeUndefined();
-    expect(result.buttons).toEqual([]);
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
     expect(result.buttons).not.toContainEqual({ label: "Create lead", action: "confirm" });
   });
 

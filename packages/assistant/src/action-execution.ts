@@ -84,6 +84,19 @@ export type MarkedKpSentLeadRecord = MarkKpSentFromAssistantInput & {
   id: string;
 };
 
+export type UndoKpSentFromAssistantInput = {
+  workspaceId: string;
+  leadId: string;
+  kpSentDate: null;
+  followup1Date: null;
+  followupStatus: null;
+  requestedByUserId: string;
+};
+
+export type UndoneKpSentLeadRecord = UndoKpSentFromAssistantInput & {
+  id: string;
+};
+
 export type ExecuteAssistantActionInput = {
   action: AssistantActionWriteDraft;
   now: Date;
@@ -93,6 +106,7 @@ export type ExecuteAssistantActionInput = {
   updateProjectTask?(input: UpdateProjectTaskFromAssistantInput): Promise<UpdatedProjectTaskRecord>;
   generateKpDocument?(input: GenerateKpDocumentFromAssistantInput): Promise<GeneratedKpDocumentRecord>;
   markKpSent?(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord>;
+  undoKpSent?(input: UndoKpSentFromAssistantInput): Promise<UndoneKpSentLeadRecord>;
 };
 
 export type ExecuteAssistantActionResult =
@@ -128,6 +142,12 @@ export type ExecuteAssistantActionResult =
       actionType: "mark_kp_sent";
       leadId: string;
       recordId: string;
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "undo_kp_sent";
+      leadId: string;
+      recordId: string;
     };
 
 export async function executeAssistantAction({
@@ -138,7 +158,8 @@ export async function executeAssistantAction({
   scheduleFollowup,
   updateProjectTask,
   generateKpDocument,
-  markKpSent
+  markKpSent,
+  undoKpSent
 }: ExecuteAssistantActionInput): Promise<ExecuteAssistantActionResult> {
   const confirmedStatus = advanceActionConfirmation(action.status, "confirm");
 
@@ -318,6 +339,34 @@ export async function executeAssistantAction({
     return {
       status: executedStatus,
       actionType: "mark_kp_sent",
+      leadId: lead.leadId,
+      recordId: lead.id
+    };
+  }
+
+  if (action.actionType === "undo_kp_sent") {
+    if (!undoKpSent) {
+      throw new Error("Assistant action undo_kp_sent is missing an execution port");
+    }
+
+    const leadId = getSinglePreviewRecordId(action, "lead.selectedRecordIds");
+    const lead = await undoKpSent({
+      workspaceId: action.workspaceId,
+      leadId,
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null,
+      requestedByUserId: action.requestedByUserId
+    });
+    const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+    if (executedStatus !== "executed") {
+      throw new Error(`Assistant action ${action.messageId} did not execute`);
+    }
+
+    return {
+      status: executedStatus,
+      actionType: "undo_kp_sent",
       leadId: lead.leadId,
       recordId: lead.id
     };

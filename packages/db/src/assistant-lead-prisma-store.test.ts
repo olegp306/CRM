@@ -201,4 +201,44 @@ describe("assistant lead Prisma store", () => {
       }
     });
   });
+
+  it("undoes KP sent through a workspace-scoped lead update", async () => {
+    const { client, calls } = createFakeClient();
+    const store = createAssistantLeadPrismaStore(client);
+
+    const lead = await store.undoKpSent({
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null,
+      requestedByUserId: "user-1"
+    });
+
+    expect(lead).toEqual({
+      id: "lead-record-1",
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      kpSentDate: null,
+      followup1Date: null,
+      followupStatus: null,
+      requestedByUserId: "user-1"
+    });
+    expect(calls[0]).toEqual({
+      method: "update",
+      args: {
+        where: {
+          workspaceId_leadId: {
+            workspaceId: "workspace-1",
+            leadId: "L-2026-001"
+          }
+        },
+        data: {
+          kpSentDate: null,
+          followup1Date: null,
+          followupStatus: null
+        }
+      }
+    });
+  });
 });
