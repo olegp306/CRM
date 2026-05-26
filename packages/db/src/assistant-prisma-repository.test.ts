@@ -123,7 +123,7 @@ describe("assistant Prisma repository", () => {
         sourceMessageId: "message-1",
         type: "feature_request",
         status: "new",
-        appVersion: "0.2.2"
+        appVersion: "0.2.3"
       }
     });
   });

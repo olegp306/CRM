@@ -44,10 +44,17 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Lead summary info");
     expect(tableSource).toContain("break-all");
     expect(tableSource).toContain("min-w-0 overflow-hidden");
-    expect(tableSource).toContain("min-h-12");
+    expect(tableSource).toContain("min-h-[44px]");
     expect(tableSource).toContain("px-3 py-3");
     expect(tableSource).toContain("function LeadCardAccordion");
     expect(tableSource).toContain("aria-expanded={isOpen}");
     expect(tableSource).toContain('type="button"');
+  });
+
+  it("renders collapsed lead card sections as visible mobile rows", () => {
+    expect(tableSource).toContain('className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"');
+    expect(tableSource).toContain('className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"');
+    expect(tableSource).not.toContain("className={leadAccordionClassName}");
+    expect(tableSource).not.toContain("className={leadAccordionSummaryClassName}");
   });
 });

@@ -5,7 +5,7 @@ describe("app metadata", () => {
   it("exposes the current SemVer app version from package metadata", () => {
     expect(currentAppMetadata).toEqual({
       name: "crm-saas-v1",
-      version: "0.2.2"
+      version: "0.2.3"
     });
   });
 });

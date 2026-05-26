@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.2.2`
+Current stable version: `0.2.3`
 
 Stable tag format:
 
@@ -13,6 +13,7 @@ v0.1.0
 v0.2.0
 v0.2.1
 v0.2.2
+v0.2.3
 ```
 
 ## Branch Workflow
@@ -139,6 +140,16 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.2.3
+
+Lead card and Telegram interaction release:
+
+- Lead cards now open fullscreen from table rows, mobile cards, and Telegram CRM links.
+- The lead card close action stays visible while scrolling.
+- Telegram replies can save human notes into lead history without creating a new lead.
+- Telegram returns a CRM button after lead updates, notes, KP sent, and undo actions.
+- Telegram release notes can be sent quietly after an explicit preview/confirm step.
 
 ## 0.2.2
 

@@ -50,9 +50,6 @@ type LeadsTableProps = {
   undoLeadKpSentAction: (formData: FormData) => Promise<void>;
 };
 
-const leadAccordionClassName = "min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30";
-const leadAccordionSummaryClassName = "flex min-h-12 w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold";
-
 export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoLeadKpSentAction }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
@@ -810,8 +807,13 @@ function LeadCardAccordion({
   children: ReactNode;
 }) {
   return (
-    <section className={leadAccordionClassName}>
-      <button type="button" className={leadAccordionSummaryClassName} aria-expanded={isOpen} onClick={onToggle}>
+    <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30">
+      <button
+        type="button"
+        className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
         <span>{title}</span>
         <span aria-hidden="true" className="text-xs text-muted-foreground">
           {isOpen ? "Hide" : "Show"}
