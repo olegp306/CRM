@@ -9,9 +9,11 @@ import {
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createMessageReceivedEvent,
+  createReminderHistorySummary,
   decideIncomingLeadMatch,
   decideLeadFlow,
   isLeadInteractionNoteCommand,
+  isReminderRequest,
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
   type AssistantChannelMessage
@@ -379,7 +381,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         )
       : null;
 
-    if (repliedLead && isLeadInteractionNoteCommand(message.text)) {
+    if (repliedLead && (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text))) {
+      const isExplicitNote = isLeadInteractionNoteCommand(message.text);
+      const summary = isExplicitNote
+        ? createLeadInteractionNoteSummary(message.text)
+        : createReminderHistorySummary(message.text);
       await saveTelegramChannelEvent(
         config,
         message,
@@ -389,13 +395,15 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           threadId: createTelegramThreadId(message.chatId),
           leadId: repliedLead.leadId,
           messageId: String(message.messageId),
-          summary: createLeadInteractionNoteSummary(message.text)
+          summary
         })
       );
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: `Saved this note to lead <b>${escapeHtml(repliedLead.leadId)}</b> history.`,
+        text: isExplicitNote
+          ? `Saved this note to lead <b>${escapeHtml(repliedLead.leadId)}</b> history.`
+          : `Saved this reminder to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`,
         parseMode: "HTML",
         replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
@@ -404,7 +412,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    const generalAssistantResponse = createTelegramGeneralAssistantResponse(config.workspaceId, message);
+    const generalAssistantResponse = createTelegramGeneralAssistantResponse(
+      config.workspaceId,
+      message,
+      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId) } : undefined
+    );
     if (generalAssistantResponse) {
       await sendTelegramMessage({
         botToken: config.botToken,
@@ -1422,10 +1434,14 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
   ).text;
 }
 
-function createTelegramGeneralAssistantResponse(workspaceId: string, message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">) {
-  const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message));
+function createTelegramGeneralAssistantResponse(
+  workspaceId: string,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">,
+  replyTo?: { leadId: string; sourceMessageId: string }
+) {
+  const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message, replyTo));
 
-  if (response.intent === "capability_request" || response.shouldPersistFeedback) {
+  if (response.intent === "capability_request" || response.shouldPersistFeedback || (response.intent === "crm_action" && isReminderRequest(message.text))) {
     return response;
   }
 

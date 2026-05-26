@@ -11,6 +11,7 @@ import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
 import { createLeadDraftFromAssistantChannelMessage, type AssistantLeadParserClient } from "./lead-channel-intake";
 import type { LeadChatSnapshot } from "./lead-chat-orchestrator";
+import { isReminderRequest } from "./lead-reminder";
 import { getPermissionBlockedResponse, type PermissionBlockedResponse } from "./permission-blocked";
 import {
   createAssistantMessageDraft,
@@ -384,6 +385,7 @@ function isUndoKpSentRequest(content: string): boolean {
 
 function isScheduleFollowupRequest(content: string): boolean {
   return (
+    isReminderRequest(content) ||
     /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content) ||
     /(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(content)
   );

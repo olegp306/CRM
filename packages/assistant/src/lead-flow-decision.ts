@@ -2,6 +2,7 @@ import { classifyIntent } from "./classify-intent";
 import { createCapabilityResponse } from "./capability-registry";
 import type { AssistantChannelMessage } from "./channel-message";
 import { isLeadChatSourceMaterial, isNewLeadCommand } from "./lead-chat-orchestrator";
+import { isReminderRequest } from "./lead-reminder";
 
 export type LeadFlowDecision =
   | {
@@ -29,6 +30,10 @@ export function decideLeadFlow(message: AssistantChannelMessage): LeadFlowDecisi
 
   if (isNewLeadCommand(message.content)) {
     return { kind: "start_draft", source: "new_lead_command" };
+  }
+
+  if (isReminderRequest(message.content)) {
+    return { kind: "not_lead_flow" };
   }
 
   const intent = classifyIntent(message.content);

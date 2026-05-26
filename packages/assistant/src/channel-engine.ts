@@ -7,6 +7,7 @@ import {
   isLeadChatSourceMaterial
 } from "./lead-chat-orchestrator";
 import { createLeadInteractionNoteSummary, isLeadInteractionNoteCommand } from "./lead-interaction-note";
+import { createReminderHistorySummary, isReminderRequest } from "./lead-reminder";
 
 export function createAssistantChannelResponse(
   message: AssistantChannelMessage,
@@ -27,6 +28,11 @@ export function createAssistantChannelResponse(
   const noteResponse = createLeadInteractionNoteResponse(message);
   if (noteResponse) {
     return noteResponse;
+  }
+
+  const reminderResponse = createLeadReminderResponse(message);
+  if (reminderResponse) {
+    return reminderResponse;
   }
 
   if (isHelpMessage(message.content, intent)) {
@@ -121,6 +127,33 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
+  };
+}
+
+function createLeadReminderResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  if (!isReminderRequest(message.content)) {
+    return null;
+  }
+
+  const leadId = getReferencedLeadId(message);
+  if (!leadId) {
+    return {
+      intent: "crm_action",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: "I can create a follow-up reminder, but I need a lead context first. Reply to a lead card or open a lead in CRM, then send the reminder again."
+    };
+  }
+
+  return {
+    intent: "business_process_note",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: createLeadCrmButtons(leadId),
+    normalizedActions: ["open_crm"],
+    text: `Saved this reminder to lead ${leadId} history: ${createReminderHistorySummary(message.content)}`
   };
 }
 

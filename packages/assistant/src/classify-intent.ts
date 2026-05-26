@@ -1,3 +1,5 @@
+import { isReminderRequest } from "./lead-reminder";
+
 export type AssistantIntent =
   | "crm_action"
   | "capability_request"
@@ -14,6 +16,10 @@ export function classifyIntent(message: string): AssistantIntent {
 
   if (isThemeCapabilityRequest(text)) {
     return "capability_request";
+  }
+
+  if (isReminderRequest(message)) {
+    return "crm_action";
   }
 
   if (/(bug|broken|does not work|error|ne rabotaet|oshibka|не работает|ошибка)/.test(text)) {

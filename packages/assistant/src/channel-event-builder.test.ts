@@ -51,4 +51,23 @@ describe("inbound message channel events", () => {
       }
     ]);
   });
+
+  it("stores selected lead reminder requests as readable history notes", () => {
+    const events = createInboundMessageChannelEvents({
+      channel: "telegram",
+      threadId: "telegram-1",
+      messageId: "message-3",
+      leadId: "L-2026-044",
+      content: "Напомни завтра посмотреть LinkedIn у него"
+    });
+
+    expect(events).toContainEqual({
+      type: "lead_interaction_note",
+      channel: "telegram",
+      threadId: "telegram-1",
+      messageId: "message-3",
+      leadId: "L-2026-044",
+      summary: "Reminder requested: Напомни завтра посмотреть LinkedIn у него"
+    });
+  });
 });

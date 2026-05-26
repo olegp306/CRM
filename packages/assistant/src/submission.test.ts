@@ -260,6 +260,24 @@ describe("assistant submission orchestration", () => {
     expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
   });
 
+  it("previews natural Russian reminders without creating lead drafts", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
+      content: "Напомни завтра посмотреть LinkedIn у него",
+      threadId: "thread-ru-natural-followup",
+      messageId: "message-ru-natural-followup"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "schedule_followup",
+      summary: "Schedule follow-up from assistant request",
+      changes: [{ field: "followup.sourceText", from: null, to: "Напомни завтра посмотреть LinkedIn у него" }],
+      requiresConfirmation: true
+    });
+    expect(result.actionPreview?.actionType).not.toBe("create_lead");
+    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+  });
+
   it("previews project task update actions when the request targets project tasks", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/projects", module: "projects", selectedRecordIds: ["P-2026-001"] },

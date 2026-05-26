@@ -96,6 +96,16 @@ describe("lead flow decision", () => {
     ).toEqual({ kind: "not_lead_flow" });
   });
 
+  it("does not start a lead draft for natural Russian reminder requests", () => {
+    expect(
+      decideLeadFlow({
+        ...baseMessage,
+        channel: "telegram",
+        content: "Напомни завтра послать приглашение"
+      })
+    ).toEqual({ kind: "not_lead_flow" });
+  });
+
   it("starts a draft when first-message source material has no target lead", () => {
     expect(
       decideLeadFlow({

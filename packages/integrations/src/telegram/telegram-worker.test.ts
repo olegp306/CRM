@@ -2340,6 +2340,92 @@ describe("telegram worker", () => {
     });
   });
 
+  it("records a replied reminder as lead history without creating a gift reminder lead", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 44,
+            message: {
+              message_id: 904,
+              date: 1779297400,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "Напомни завтра посмотреть LinkedIn у него"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 44 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "904",
+          summary: "Reminder requested: Напомни завтра посмотреть LinkedIn у него"
+        })
+      })
+    );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("Saved this reminder to lead <b>L-2026-002</b> history");
+    expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "CRM",
+      url: "https://crm.example.com/leads?leadId=L-2026-002"
+    });
+  });
+
   it("answers support questions on a replied lead card without parsing them as lead updates", async () => {
     const client = {
       lead: {
