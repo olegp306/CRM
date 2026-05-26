@@ -519,7 +519,7 @@ describe("lead table model", () => {
       title: "Telegram note",
       actor: "Telegram",
       stageLabel: "Interaction",
-      description: "Sent the client a birthday gift"
+      description: "Request: add note. Action: note saved. Sent the client a birthday gift"
     });
   });
 

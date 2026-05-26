@@ -67,9 +67,6 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
   const searchParams = useSearchParams();
   const deepLinkedLeadId = searchParams.get("leadId");
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
-  const isDeepLinkedLeadSelected = Boolean(deepLinkedLeadId && selectedLead?.leadId === deepLinkedLeadId);
-  const shouldShowLeadDialog = Boolean(selectedLead && (viewMode === "full" || isDeepLinkedLeadSelected));
-  const shouldShowMobileLeadDialog = Boolean(selectedLead && !shouldShowLeadDialog && (mobileViewMode === "cards" || viewMode === "split"));
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
     [columnSizing]
@@ -386,66 +383,20 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
         </div>
       </section>
 
-      {viewMode === "split" && selectedLead ? (
-        <div className="fixed inset-0 z-50 hidden place-items-center bg-black/30 p-4 md:grid">
-          <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
-            <LeadEditor
-              lead={selectedLead}
-              actionPlan={createLeadActionPlan(selectedLead)}
-              isSaving={isSaving}
-              isMarkingKpSent={isMarkingKpSent}
-              isUndoingKpSent={isUndoingKpSent}
-              onClose={handleCloseSelectedLead}
-              onSubmit={handleSubmit}
-              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
-              variant="modal"
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {shouldShowLeadDialog && selectedLead ? (
-        <div className={`fixed inset-0 z-50 bg-black/30 ${isDeepLinkedLeadSelected ? "p-0" : "grid place-items-center p-4"}`}>
-          <div
-            className={
-              isDeepLinkedLeadSelected
-                ? "h-full w-full overflow-hidden bg-white"
-                : "w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl"
-            }
-          >
-            <LeadEditor
-              lead={selectedLead}
-              actionPlan={createLeadActionPlan(selectedLead)}
-              isSaving={isSaving}
-              isMarkingKpSent={isMarkingKpSent}
-              isUndoingKpSent={isUndoingKpSent}
-              onClose={handleCloseSelectedLead}
-              onSubmit={handleSubmit}
-              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
-              variant={isDeepLinkedLeadSelected ? "fullscreen" : "modal"}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {shouldShowMobileLeadDialog && selectedLead ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-3 md:hidden">
-          <div className="w-full max-w-3xl rounded-lg border border-border bg-white shadow-xl">
-            <LeadEditor
-              lead={selectedLead}
-              actionPlan={createLeadActionPlan(selectedLead)}
-              isSaving={isSaving}
-              isMarkingKpSent={isMarkingKpSent}
-              isUndoingKpSent={isUndoingKpSent}
-              onClose={handleCloseSelectedLead}
-              onSubmit={handleSubmit}
-              onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-              onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
-              variant="modal"
-            />
-          </div>
+      {selectedLead ? (
+        <div className="fixed inset-0 z-50 bg-white">
+          <LeadEditor
+            lead={selectedLead}
+            actionPlan={createLeadActionPlan(selectedLead)}
+            isSaving={isSaving}
+            isMarkingKpSent={isMarkingKpSent}
+            isUndoingKpSent={isUndoingKpSent}
+            onClose={handleCloseSelectedLead}
+            onSubmit={handleSubmit}
+            onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+            onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
+            variant="fullscreen"
+          />
         </div>
       ) : null}
 
@@ -590,7 +541,7 @@ function LeadEditor({
   onSubmit,
   onMarkKpSent,
   onUndoKpSent,
-  variant = "panel"
+  variant
 }: {
   lead: LeadTableRow;
   actionPlan: LeadActionPlanItem[];
@@ -601,7 +552,7 @@ function LeadEditor({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
   onUndoKpSent: () => void;
-  variant?: "panel" | "modal" | "fullscreen";
+  variant: "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
   const leadSummaryInfo = createLeadSummaryInfo(lead.rawInput);
@@ -614,21 +565,29 @@ function LeadEditor({
     <form
       key={lead.id}
       onSubmit={onSubmit}
-      className={`grid gap-4 overflow-auto p-4 pb-32 scroll-pb-32 ${variant === "fullscreen" ? "h-screen max-h-screen" : "max-h-[calc(100vh-8rem)]"}`}
+      data-variant={variant}
+      className="grid h-screen max-h-screen gap-4 overflow-auto p-4 pb-32 scroll-pb-32"
     >
       <input type="hidden" name="id" value={lead.id} />
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 flex justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Full screen lead close"
+          className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white"
+        >
+          Close
+        </button>
+      </div>
       <section className="grid gap-1 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="sticky top-0 z-20 -mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
-          <div className="grid min-w-0 gap-1 pr-28">
+        <div className="-mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
+          <div className="grid min-w-0 gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
             <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadId}</h2>
             <p className="text-xs text-muted-foreground">
               Created <span className="font-semibold text-foreground">{lead.createdDate || "No data"}</span>
             </p>
           </div>
-          <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white">
-            Close
-          </button>
           <div className="grid">
             <span
               title={currentStep.description}

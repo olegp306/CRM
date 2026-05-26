@@ -656,7 +656,7 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           at,
           actor,
           stageLabel: "Interaction",
-          description: String(channelEvent.summary ?? ""),
+          description: `Request: add note. Action: note saved. ${String(channelEvent.summary ?? "")}`.trim(),
           sortTime
         }
       ];

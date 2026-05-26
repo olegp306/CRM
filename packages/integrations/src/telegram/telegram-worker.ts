@@ -439,6 +439,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP marked as sent. Follow-up planned in 7 days.`,
         parseMode: "HTML",
+        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
       });
       await saveTelegramChannelEvent(
@@ -482,6 +483,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP sent mark was undone. We are back before sending KP.`,
         parseMode: "HTML",
+        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
       });
       await saveTelegramChannelEvent(
@@ -650,6 +652,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft),
         parseMode: "HTML",
+        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
       });
       processed += 1;

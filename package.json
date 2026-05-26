@@ -17,6 +17,7 @@
     "test:core": "pnpm --filter @app/core test",
     "worker:telegram": "pnpm --filter @app/integrations worker:telegram",
     "worker:telegram:loop": "pnpm --filter @app/integrations worker:telegram:loop",
+    "telegram:release-notes": "pnpm --filter @app/integrations telegram:release-notes",
     "db:up": "docker compose up -d postgres",
     "db:generate": "pnpm --filter @app/db prisma:generate",
     "db:migrate": "pnpm --filter @app/db prisma:migrate",

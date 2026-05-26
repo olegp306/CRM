@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "worker:telegram": "tsx src/telegram/telegram-worker.ts",
-    "worker:telegram:loop": "tsx src/telegram/telegram-worker-loop.ts"
+    "worker:telegram:loop": "tsx src/telegram/telegram-worker-loop.ts",
+    "telegram:release-notes": "tsx src/telegram/telegram-release-notes.ts"
   },
   "dependencies": {
     "@app/assistant": "workspace:*",

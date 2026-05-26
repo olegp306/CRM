@@ -17,12 +17,20 @@ describe("leads page layout", () => {
 
   it("keeps the Telegram lead card focused on download and close actions", () => {
     expect(tableSource).not.toContain("Open KP record");
-    expect(tableSource).toContain("absolute right-3 top-3");
-    expect(tableSource).toContain("pr-28");
+    expect(tableSource).toContain("sticky top-0 z-30");
+    expect(tableSource).toContain("Full screen lead close");
     expect(tableSource).toContain("bg-black");
     expect(tableSource).toContain("text-white");
     expect(tableSource).toContain("Close");
     expect(tableSource).toContain("Send KP");
+  });
+
+  it("opens every lead editor as a fullscreen card with a persistent close action", () => {
+    expect(tableSource).toContain('variant="fullscreen"');
+    expect(tableSource).not.toContain('variant="modal"');
+    expect(tableSource).not.toContain('variant?: "panel" | "modal" | "fullscreen"');
+    expect(tableSource).toContain("sticky top-0 z-30");
+    expect(tableSource).toContain("Full screen lead close");
   });
 
   it("offers a CSV export from the lead table", () => {

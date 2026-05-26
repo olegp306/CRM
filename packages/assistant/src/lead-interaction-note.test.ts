@@ -19,6 +19,16 @@ describe("lead interaction note commands", () => {
     );
   });
 
+  it("detects Russian make-a-note commands and keeps the useful note text", () => {
+    const message =
+      "Сделай пометку, что сегодня встречался с этим человеком за кофе. Оказался очень приятный дядька, который любит джаз.";
+
+    expect(isLeadInteractionNoteCommand(message)).toBe(true);
+    expect(createLeadInteractionNoteSummary(message)).toBe(
+      "сегодня встречался с этим человеком за кофе. Оказался очень приятный дядька, который любит джаз."
+    );
+  });
+
   it("does not treat general questions as lead notes", () => {
     expect(
       isLeadInteractionNoteCommand(
