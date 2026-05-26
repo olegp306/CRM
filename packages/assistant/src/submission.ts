@@ -285,19 +285,27 @@ function isProjectTaskUpdateRequest(content: string): boolean {
 }
 
 function isKpGenerationRequest(content: string): boolean {
-  return /\b(generate|create|prepare|draft)\b/i.test(content) && /\b(kp|offer|proposal|document)\b/i.test(content);
+  return (
+    (/\b(generate|create|prepare|draft)\b/i.test(content) && /\b(kp|offer|proposal|document)\b/i.test(content)) ||
+    /(сгенер|созда|подготов|сделай).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(content)
+  );
 }
 
 function isMarkKpSentRequest(content: string): boolean {
   return (
-    (/\b(mark|set|record)\b/i.test(content) || isUndoKpSentRequest(content)) &&
-    /\b(kp|offer|proposal)\b/i.test(content) &&
-    /\b(sent|sended|отправ)/i.test(content)
+    ((/\b(mark|set|record)\b/i.test(content) || isUndoKpSentRequest(content)) &&
+      /\b(kp|offer|proposal)\b/i.test(content) &&
+      /\b(sent|sended|отправ)/i.test(content)) ||
+    /(кп|коммерческ\w*\s+предложен\w*).{0,32}(отправ|выслал|выслали)/i.test(content) ||
+    /(отправ|выслал|выслали).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(content)
   );
 }
 
 function isUndoKpSentRequest(content: string): boolean {
-  return /\b(undo|revert|cancel|clear|remove)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content);
+  return (
+    (/\b(undo|revert|cancel|clear|remove)\b/i.test(content) && /\b(kp|offer|proposal)\b/i.test(content)) ||
+    /(отмени|откат|верни|убери).{0,32}(кп|коммерческ\w*\s+предложен\w*|отправ)/i.test(content)
+  );
 }
 
 function isScheduleFollowupRequest(content: string): boolean {

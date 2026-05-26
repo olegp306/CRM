@@ -7,6 +7,7 @@ import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantCon
 import { MessageSquareText, Mic, Paperclip, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
+import { getAssistantActionPreviewRows } from "./assistant-action-preview";
 import { getAssistantExecutionButtons, getAssistantExecutionLabel, type AssistantExecutionButton } from "./assistant-execution-label";
 import {
   getAssistantResponseButtonUiAction,
@@ -262,6 +263,14 @@ export function AssistantDrawer() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {latestResult.actionPreview.changes.length} proposed change, status {latestResult.confirmationStatus}
                     </p>
+                    <dl className="mt-3 grid gap-2 text-xs">
+                      {getAssistantActionPreviewRows(latestResult.actionPreview).map((row) => (
+                        <div key={`${row.label}-${row.value}`} className="rounded-md bg-muted p-2">
+                          <dt className="font-semibold text-muted-foreground">{row.label}</dt>
+                          <dd className="mt-1 whitespace-pre-wrap break-words text-foreground">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
                     {confirmation === "idle" ? (
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button

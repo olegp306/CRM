@@ -21,6 +21,9 @@ describe("classifyIntent", () => {
 
   it("detects Russian CRM actions", () => {
     expect(classifyIntent("Отметь КП отправленным")).toBe("crm_action");
+    expect(classifyIntent("КП отправлено")).toBe("crm_action");
+    expect(classifyIntent("Отмени отправку КП")).toBe("crm_action");
+    expect(classifyIntent("Сгенерируй КП для этого лида")).toBe("crm_action");
   });
 
   it("classifies identity and capability questions as support requests, not feature requests", () => {
@@ -39,6 +42,11 @@ describe("classifyIntent", () => {
     expect(classifyIntent("What is the status of lead L-2026-004?")).toBe("support_request");
     expect(classifyIntent("Does lead L-2026-004 have a KP?")).toBe("support_request");
     expect(classifyIntent("Is lead L-2026-004 ready?")).toBe("support_request");
+  });
+
+  it("classifies Russian selected lead questions as support requests", () => {
+    expect(classifyIntent("Что дальше по этому лиду?")).toBe("support_request");
+    expect(classifyIntent("Какой статус КП по этому лиду?")).toBe("support_request");
   });
 
   it("classifies product UI add requests as feature requests before support or CRM actions", () => {

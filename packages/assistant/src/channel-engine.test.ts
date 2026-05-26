@@ -251,6 +251,22 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("L-2026-004");
   });
 
+  it("answers Russian selected-lead status questions with a CRM deep link", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Что дальше по этому лиду?",
+      context: {
+        ...baseMessage.context,
+        selectedRecordIds: ["L-2026-004"]
+      }
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("L-2026-004");
+  });
+
   it("keeps lead status questions with screenshots as support requests", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

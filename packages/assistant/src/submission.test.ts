@@ -227,6 +227,27 @@ describe("assistant submission orchestration", () => {
     ]);
   });
 
+  it("previews Russian KP generation commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
+      content: "Сгенерируй КП для этого лида",
+      threadId: "thread-ru-generate-kp",
+      messageId: "message-ru-generate-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "generate_kp",
+      summary: "Generate KP document from assistant request",
+      changes: [
+        { field: "document.type", from: null, to: "kp" },
+        { field: "document.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "document.sourceText", from: null, to: "Сгенерируй КП для этого лида" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.response).toBe("I prepared a generate KP preview. Confirm before I execute it.");
+  });
+
   it("previews KP sent actions for selected leads", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
@@ -252,6 +273,25 @@ describe("assistant submission orchestration", () => {
     ]);
   });
 
+  it("previews Russian KP sent commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "КП отправлено",
+      threadId: "thread-ru-kp-sent",
+      messageId: "message-ru-kp-sent"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "mark_kp_sent",
+      summary: "Mark KP as sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "КП отправлено" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+  });
+
   it("previews KP sent undo actions for selected leads", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
@@ -274,6 +314,25 @@ describe("assistant submission orchestration", () => {
       { label: "Confirm", action: "confirm" },
       { label: "Cancel", action: "cancel" }
     ]);
+  });
+
+  it("previews Russian KP sent undo commands for selected leads", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
+      content: "Отмени отправку КП",
+      threadId: "thread-ru-undo-kp",
+      messageId: "message-ru-undo-kp"
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "undo_kp_sent",
+      summary: "Undo KP sent from assistant request",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
+        { field: "lead.sourceText", from: null, to: "Отмени отправку КП" }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
   });
 
   it("blocks action mode for roles without permission and creates permission feedback", () => {

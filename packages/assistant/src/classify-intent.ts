@@ -39,11 +39,27 @@ export function classifyIntent(message: string): AssistantIntent {
     return "crm_action";
   }
 
+  if (/(кп|коммерческ\w*\s+предложен\w*).{0,32}(отправ|выслал|выслали|сгенер|созда|подготов|отмени|откат|верни|убери)/i.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(сгенер|созда|подготов|сделай).{0,32}(кп|коммерческ\w*\s+предложен\w*)/i.test(text)) {
+    return "crm_action";
+  }
+
+  if (/(отмени|откат|верни|убери).{0,32}(кп|коммерческ\w*\s+предложен\w*|отправ)/i.test(text)) {
+    return "crm_action";
+  }
+
   if (
     /(\b(what|where|when|status|does|is)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
       text,
     )
   ) {
+    return "support_request";
+  }
+
+  if (/(что|какой|где|когда|статус|дальше|следующ).{0,48}(лид|кп|проект|коммерческ\w*\s+предложен\w*)/i.test(text)) {
     return "support_request";
   }
 
