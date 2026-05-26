@@ -47,15 +47,18 @@ export type AssistantChannelResponseButton = {
     | "open_crm"
     | "open_pdf"
     | "download_doc"
+    | "set_theme"
     | "send_kp"
     | "mark_kp_sent"
     | "undo_kp_sent";
+  value?: string;
 };
 
 export type AssistantChannelResponse = {
   text: string;
   intent:
     | "help"
+    | "capability_request"
     | "lead_intake"
     | "lead_update"
     | "crm_action"

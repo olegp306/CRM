@@ -104,6 +104,59 @@ describe("telegram worker", () => {
     );
   });
 
+  it("answers theme capability questions without parsing them as leads", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 12,
+            message: {
+              message_id: 7,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "а есть цветовая схема или тема темная для вечера ?"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 12 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Nocturne")
+      })
+    );
+  });
+
   it("groups nearby Telegram messages from one chat into one CRM lead and adds a CRM button", async () => {
     const created: unknown[] = [];
     const client = {

@@ -1,9 +1,9 @@
 import type { WorkspaceRole } from "./permissions";
 
 const workspaceRoles = new Set<WorkspaceRole>(["owner", "admin", "manager", "member", "viewer"]);
-const themePreferences = new Set<WorkspaceThemePreference>(["light", "dark", "warm"]);
+const themePreferences = new Set<WorkspaceThemePreference>(["light", "dark", "nocturne", "graphite", "warm"]);
 
-export type WorkspaceThemePreference = "light" | "dark" | "warm";
+export type WorkspaceThemePreference = "light" | "dark" | "nocturne" | "graphite" | "warm";
 
 export type WorkspaceSessionContext = {
   workspaceId: string;

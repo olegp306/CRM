@@ -2,6 +2,7 @@ export * from "./action-preview";
 export * from "./action-execution";
 export * from "./audit-log";
 export * from "./audit-review";
+export * from "./capability-registry";
 export * from "./channel-message";
 export * from "./channel-engine";
 export * from "./classify-intent";

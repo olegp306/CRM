@@ -1,6 +1,6 @@
 export type WorkspaceBrandingInput = {
   primaryColor?: string | null;
-  themePreference?: "light" | "dark" | "warm" | null;
+  themePreference?: "light" | "dark" | "nocturne" | "graphite" | "warm" | null;
 };
 
 const themeTokens: Record<NonNullable<WorkspaceBrandingInput["themePreference"]>, Record<string, string>> = {
@@ -20,6 +20,24 @@ const themeTokens: Record<NonNullable<WorkspaceBrandingInput["themePreference"]>
     "--muted": "39 44 42",
     "--muted-foreground": "167 177 173",
     "--border": "64 72 69",
+    "--primary-foreground": "255 255 255"
+  },
+  nocturne: {
+    "--background": "18 20 19",
+    "--surface": "29 32 31",
+    "--foreground": "236 241 238",
+    "--muted": "39 44 42",
+    "--muted-foreground": "167 177 173",
+    "--border": "64 72 69",
+    "--primary-foreground": "255 255 255"
+  },
+  graphite: {
+    "--background": "12 14 17",
+    "--surface": "24 27 31",
+    "--foreground": "238 242 246",
+    "--muted": "35 39 45",
+    "--muted-foreground": "164 174 186",
+    "--border": "58 65 74",
     "--primary-foreground": "255 255 255"
   },
   warm: {

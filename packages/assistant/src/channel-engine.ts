@@ -1,4 +1,5 @@
 import { classifyIntent } from "./classify-intent";
+import { createCapabilityResponse } from "./capability-registry";
 import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
 import {
   createLeadChatOrchestratorResponse,
@@ -7,6 +8,11 @@ import {
 
 export function createAssistantChannelResponse(message: AssistantChannelMessage): AssistantChannelResponse {
   const intent = classifyIntent(message.content);
+  const capabilityResponse = createCapabilityResponse(message);
+
+  if (capabilityResponse) {
+    return capabilityResponse;
+  }
 
   if (isHelpMessage(message.content, intent)) {
     return {

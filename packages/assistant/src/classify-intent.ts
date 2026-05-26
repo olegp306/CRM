@@ -1,5 +1,6 @@
 export type AssistantIntent =
   | "crm_action"
+  | "capability_request"
   | "support_request"
   | "bug_report"
   | "feature_request"
@@ -10,6 +11,10 @@ export type AssistantIntent =
 
 export function classifyIntent(message: string): AssistantIntent {
   const text = message.toLowerCase();
+
+  if (isThemeCapabilityRequest(text)) {
+    return "capability_request";
+  }
 
   if (/(bug|broken|does not work|error|ne rabotaet|oshibka|не работает|ошибка)/.test(text)) {
     return "bug_report";
@@ -92,4 +97,19 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   return "other";
+}
+
+function isThemeCapabilityRequest(text: string): boolean {
+  const hasThemeSignal =
+    /\b(theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(text) ||
+    /(тема|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(text);
+
+  if (!hasThemeSignal) {
+    return false;
+  }
+
+  return (
+    /\b(do you have|is there|can i|can we|switch|enable|turn on|set|change|use)\b/i.test(text) ||
+    /(есть|можно|включи|переключи|поставь|смени|изменить|хочу)/i.test(text)
+  );
 }

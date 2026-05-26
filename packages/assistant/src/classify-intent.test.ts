@@ -33,6 +33,12 @@ describe("classifyIntent", () => {
     expect(classifyIntent("who are you and what can you do?")).toBe("support_request");
   });
 
+  it("classifies theme availability questions as capability requests", () => {
+    expect(classifyIntent("а есть цветовая схема или тема темная для вечера ?")).toBe("capability_request");
+    expect(classifyIntent("Do you have dark mode or a night theme?")).toBe("capability_request");
+    expect(classifyIntent("Switch CRM to graphite theme")).toBe("capability_request");
+  });
+
   it("does not convert translation or ordinary lead questions into feature requests", () => {
     expect(classifyIntent("Переведи предыдущее сообщение на русский")).toBe("support_request");
     expect(classifyIntent("Почему у лида L-2026-004 нет коммерческого предложения?")).toBe("support_request");

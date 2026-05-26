@@ -2,9 +2,10 @@ type AssistantResponseButtonLike = {
   label: string;
   url?: string;
   action?: string;
+  value?: string;
 };
 
-export type AssistantResponseButtonUiAction = "confirm" | "cancel" | "open_upload" | "link" | "none";
+export type AssistantResponseButtonUiAction = "confirm" | "cancel" | "open_upload" | "set_theme" | "link" | "none";
 const attachmentOnlySourceMaterialContent = "Please review this source material and create a lead if the data is sufficient.";
 
 export function getAssistantSelectedRecordIds(pathname: string, searchParams: URLSearchParams): string[] {
@@ -21,7 +22,7 @@ export function getAssistantResponseButtonUiAction(button: AssistantResponseButt
     return "link";
   }
 
-  if (button.action === "confirm" || button.action === "cancel" || button.action === "open_upload") {
+  if (button.action === "confirm" || button.action === "cancel" || button.action === "open_upload" || button.action === "set_theme") {
     return button.action;
   }
 
@@ -67,11 +68,22 @@ export function shouldUseOnboardingAssistantAction({
     return false;
   }
 
+  if (isFirstMessageCapabilityRequest(trimmed)) {
+    return false;
+  }
+
   if (isFirstMessageLeadSourceMaterial(trimmed)) {
     return false;
   }
 
   return true;
+}
+
+function isFirstMessageCapabilityRequest(content: string): boolean {
+  return (
+    /\b(?:theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(content) ||
+    /(тема|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(content)
+  );
 }
 
 function isFirstMessageLeadSourceMaterial(content: string): boolean {

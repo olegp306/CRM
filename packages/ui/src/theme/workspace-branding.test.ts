@@ -8,11 +8,20 @@ describe("createWorkspaceThemeStyle", () => {
     });
   });
 
-  it("adds dark theme color tokens", () => {
-    expect(createWorkspaceThemeStyle({ primaryColor: "#2563eb", themePreference: "dark" })).toMatchObject({
+  it("adds nocturne theme color tokens", () => {
+    expect(createWorkspaceThemeStyle({ primaryColor: "#2563eb", themePreference: "nocturne" })).toMatchObject({
       "--background": "18 20 19",
       "--surface": "29 32 31",
       "--foreground": "236 241 238",
+      "--primary": "37 99 235"
+    });
+  });
+
+  it("adds graphite theme color tokens", () => {
+    expect(createWorkspaceThemeStyle({ primaryColor: "#2563eb", themePreference: "graphite" })).toMatchObject({
+      "--background": "12 14 17",
+      "--surface": "24 27 31",
+      "--foreground": "238 242 246",
       "--primary": "37 99 235"
     });
   });

@@ -1,6 +1,11 @@
 "use client";
 
-import { confirmAssistantActionAction, submitAssistantMessageAction, submitOnboardingAssistantMessageAction } from "@/app/(app)/assistant/actions";
+import {
+  confirmAssistantActionAction,
+  setAssistantThemePreferenceAction,
+  submitAssistantMessageAction,
+  submitOnboardingAssistantMessageAction
+} from "@/app/(app)/assistant/actions";
 import { createAssistantAttachmentFromFile } from "@/app/(app)/assistant/upload-source-material";
 import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantChannelAttachment, type AssistantSubmissionResult } from "@app/assistant";
 import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantConversationEntry } from "@app/assistant";
@@ -144,6 +149,16 @@ export function AssistantDrawer() {
     setExecutionButtons(getAssistantExecutionButtons(execution));
   }
 
+  async function applyThemePreference(themePreference: string | undefined) {
+    if (!themePreference) {
+      return;
+    }
+
+    const result = await setAssistantThemePreferenceAction(themePreference);
+    setExecutionSummary(result.summary);
+    window.location.reload();
+  }
+
   return (
     <>
       <button
@@ -231,6 +246,8 @@ export function AssistantDrawer() {
                               ? confirmLatestAction
                               : uiAction === "open_upload"
                                 ? () => fileInputRef.current?.click()
+                                : uiAction === "set_theme"
+                                  ? () => applyThemePreference(button.value)
                                 : uiAction === "cancel"
                                   ? () => setConfirmation("cancelled")
                                   : undefined

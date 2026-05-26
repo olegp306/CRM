@@ -213,6 +213,19 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    const generalAssistantResponse = createTelegramGeneralAssistantResponse(config.workspaceId, message);
+    if (generalAssistantResponse) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: generalAssistantResponse.text,
+        replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     const sourceExternalIds = createTelegramSourceExternalIds(message);
     const repliedLead = message.replyToMessageId
       ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
@@ -763,6 +776,42 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
     },
     attachments: []
   }).text;
+}
+
+function createTelegramGeneralAssistantResponse(workspaceId: string, message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">) {
+  const response = createAssistantChannelResponse({
+    channel: "telegram",
+    threadId: `telegram-${message.chatId}`,
+    messageId: `telegram-${message.chatId}-${message.sourceMessageIds.join("-")}`,
+    content: message.text,
+    receivedAt: message.receivedAt,
+    context: {
+      workspaceId,
+      userId: `telegram:${message.chatId}`,
+      role: "admin",
+      route: "/telegram",
+      module: "assistant"
+    },
+    attachments: []
+  });
+
+  if (response.intent === "capability_request" || response.shouldPersistFeedback) {
+    return response;
+  }
+
+  return null;
+}
+
+function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?: string }> = []) {
+  const linkButtons = buttons.filter((button): button is { label: string; url: string } => Boolean(button.url));
+
+  if (linkButtons.length === 0) {
+    return undefined;
+  }
+
+  return {
+    inline_keyboard: [linkButtons.map((button) => ({ text: button.label, url: button.url }))]
+  };
 }
 function createTelegramLeadConfirmation({
   leadId,

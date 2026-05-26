@@ -4,7 +4,8 @@ import { updateBrandingSettings } from "./actions";
 
 const themeOptions = [
   { id: "light", label: "Studio", swatches: ["bg-[#f8fafa]", "bg-[#0f766e]", "bg-[#4f5b59]"] },
-  { id: "dark", label: "Nocturne", swatches: ["bg-[#121413]", "bg-[#84ccbe]", "bg-[#a7b1ad]"] },
+  { id: "nocturne", label: "Nocturne", swatches: ["bg-[#121413]", "bg-[#84ccbe]", "bg-[#a7b1ad]"] },
+  { id: "graphite", label: "Graphite", swatches: ["bg-[#0c0e11]", "bg-[#93c5fd]", "bg-[#a4aeba]"] },
   { id: "warm", label: "Sage", swatches: ["bg-[#f6f8f3]", "bg-[#3f795d]", "bg-[#5b6858]"] }
 ] as const;
 

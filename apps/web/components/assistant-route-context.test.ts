@@ -81,6 +81,16 @@ describe("shouldUseOnboardingAssistantAction", () => {
     ).toBe(false);
   });
 
+  it("routes first-message theme questions through the shared assistant", () => {
+    expect(
+      shouldUseOnboardingAssistantAction({
+        historyLength: 0,
+        content: "а есть цветовая схема или тема темная для вечера ?",
+        attachmentCount: 0
+      })
+    ).toBe(false);
+  });
+
   it("routes new lead commands through the shared assistant even in a new thread", () => {
     expect(
       shouldUseOnboardingAssistantAction({

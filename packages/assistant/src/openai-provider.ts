@@ -160,6 +160,7 @@ export async function createOpenAIAssistantSubmissionResult(
 function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof createAssistantChannelResponse>): boolean {
   return (
     channelResponse.intent === "help" ||
+    channelResponse.intent === "capability_request" ||
     channelResponse.intent === "lead_intake" ||
     channelResponse.intent === "support_request" ||
     channelResponse.shouldPersistFeedback

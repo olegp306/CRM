@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-const themePreferences = new Set(["light", "dark", "warm"]);
+const themePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
 
 export async function updateBrandingSettings(formData: FormData) {
   const cookieStore = await cookies();

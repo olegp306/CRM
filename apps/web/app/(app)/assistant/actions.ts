@@ -1,5 +1,7 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 import {
   createAuditEventsCsv,
   createAuditReviewSummary,
@@ -47,6 +49,8 @@ export type SubmitAssistantMessageInput = {
 };
 
 export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
+
+const assistantThemePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
 
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
   const result = await createOpenAIAssistantSubmissionResult(
@@ -130,6 +134,24 @@ export async function submitOnboardingAssistantMessageAction(input: SubmitOnboar
       feedbackCount: feedback.length,
       actionCount: actions.length
     }
+  };
+}
+
+export async function setAssistantThemePreferenceAction(themePreference: string) {
+  const normalized = themePreference.trim();
+
+  if (!assistantThemePreferences.has(normalized)) {
+    throw new Error("Unsupported CRM theme preference.");
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set("crm_theme_preference", normalized, { path: "/", sameSite: "lax" });
+  revalidatePath("/");
+  revalidatePath("/settings/branding");
+
+  return {
+    themePreference: normalized,
+    summary: `Theme switched to ${normalized}.`
   };
 }
 
