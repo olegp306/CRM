@@ -3,6 +3,7 @@ import type { AuditReviewFilters, AssistantAuditEventDraft } from "@app/assistan
 export const platformAuditActionFilters = [
   "assistant.action.executed",
   "assistant.action.preview_created",
+  "assistant.channel.event",
   "assistant.message.submitted",
   "platform.release.planned"
 ] as const satisfies AssistantAuditEventDraft["action"][];

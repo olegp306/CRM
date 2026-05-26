@@ -59,6 +59,7 @@ describe("audit review helpers", () => {
       actionCounts: {
         "assistant.action.executed": 1,
         "assistant.action.preview_created": 1,
+        "assistant.channel.event": 0,
         "assistant.message.submitted": 1,
         "platform.release.planned": 1
       },

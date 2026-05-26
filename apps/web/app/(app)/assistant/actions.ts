@@ -7,8 +7,13 @@ import {
   createAuditReviewSummary,
   createPlatformInboxSummary,
   createAssistantPersistenceDraft,
+  createKpGeneratedEvent,
+  createKpSentMarkedEvent,
+  createKpSentUndoneEvent,
+  createLeadCreatedEvent,
   createAssistantSubmissionResult,
   createAssistantMessageDraft,
+  createMessageReceivedEvent,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
   createOnboardingConversationFeedbackContent,
@@ -63,10 +68,25 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
     }
   );
-  const persistenceDraft = createAssistantPersistenceDraft(result, {
-    threadId: input.threadId,
-    messageId: input.messageId
-  });
+  const persistenceDraft = createAssistantPersistenceDraft(
+    result,
+    {
+      threadId: input.threadId,
+      messageId: input.messageId
+    },
+    {
+      channelEvents: [
+        createMessageReceivedEvent({
+          type: "message_received",
+          channel: "web",
+          threadId: input.threadId,
+          messageId: input.messageId,
+          leadId: input.context.selectedRecordIds?.[0],
+          summary: input.content.trim()
+        })
+      ]
+    }
+  );
   const repository = getAssistantRepository();
 
   await repository.save(persistenceDraft);
@@ -367,10 +387,63 @@ export async function confirmAssistantActionAction({
     status: execution.status,
     result: execution
   });
+  const executionChannelEvents = createWebExecutionChannelEvents(action.threadId, execution);
+  await Promise.all(
+    executionChannelEvents.map((event) =>
+      repository.saveAuditEvent({
+        workspaceId,
+        actorUserId: action.requestedByUserId,
+        action: "assistant.channel.event",
+        targetType: "AssistantChannelEvent",
+        targetId: `${event.channel}:${event.type}:${event.threadId}:${"leadId" in event ? event.leadId : "documentId" in event ? event.documentId : messageId}`,
+        metadata: event
+      })
+    )
+  );
 
   return {
     execution,
     action: updatedAction,
     leads: await listAssistantCreatedLeads(workspaceId)
   };
+}
+
+function createWebExecutionChannelEvents(threadId: string, execution: Awaited<ReturnType<typeof executeAssistantAction>>) {
+  if ("actionType" in execution) {
+    if (execution.actionType === "mark_kp_sent") {
+      return [createKpSentMarkedEvent({ type: "kp_sent_marked", channel: "web", threadId, leadId: execution.leadId })];
+    }
+
+    if (execution.actionType === "undo_kp_sent") {
+      return [createKpSentUndoneEvent({ type: "kp_sent_undone", channel: "web", threadId, leadId: execution.leadId })];
+    }
+
+    if (execution.actionType === "generate_kp") {
+      return [];
+    }
+
+    return [];
+  }
+
+  return [
+    createLeadCreatedEvent({
+      type: "lead_created",
+      channel: "web",
+      threadId,
+      leadId: execution.leadId,
+      fieldsCreated: ["rawInput"],
+      missingData: []
+    }),
+    ...(execution.documentId
+      ? [
+          createKpGeneratedEvent({
+            type: "kp_generated",
+            channel: "web",
+            threadId,
+            leadId: execution.leadId,
+            documentId: execution.documentId
+          })
+        ]
+      : [])
+  ];
 }

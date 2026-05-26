@@ -303,7 +303,7 @@ export type AssistantChannelEvent =
   | { type: "kp_sent_undone"; channel: "web" | "telegram"; threadId: string; leadId: string };
 ```
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - Telegram lead creation emits `message_received`, `lead_created`, and `kp_generated` when document exists.
   - Web lead creation emits equivalent events.
   - Lead card history can render these events in chronological order.
@@ -317,7 +317,7 @@ pnpm --filter @app/web test -- lead-table-store.test.ts
 
 Expected first run: FAIL because event mapper is missing.
 
-- [ ] Implement event creation helpers:
+- [x] Implement event creation helpers:
   - `createMessageReceivedEvent`
   - `createLeadDraftUpdatedEvent`
   - `createLeadCreatedEvent`
@@ -325,7 +325,9 @@ Expected first run: FAIL because event mapper is missing.
   - `createKpSentMarkedEvent`
   - `createKpSentUndoneEvent`
 
-- [ ] Persist events through existing assistant repository/audit-log first. Avoid database schema migration in this approach unless the repository already requires it.
+- [x] Persist Web Assistant events through existing assistant repository/audit-log first. Avoid database schema migration in this approach unless the repository already requires it.
+
+- [ ] Add Telegram worker audit-event persistence through an injected assistant repository port.
 
 - [ ] Update lead card history rendering to include web and Telegram events with channel labels.
 

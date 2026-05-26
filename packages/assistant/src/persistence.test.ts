@@ -78,4 +78,39 @@ describe("assistant persistence draft", () => {
       requestedByUserId: "user-1"
     });
   });
+
+  it("can attach normalized channel events to the persistence draft", () => {
+    const result = createAssistantSubmissionResult({
+      context,
+      content: "Create lead Anna Beispiel",
+      threadId: "thread-4",
+      messageId: "message-4"
+    });
+
+    expect(
+      createAssistantPersistenceDraft(
+        result,
+        { threadId: "thread-4", messageId: "message-4" },
+        {
+          channelEvents: [
+            {
+              type: "message_received",
+              channel: "web",
+              threadId: "thread-4",
+              messageId: "message-4",
+              summary: "Create lead Anna Beispiel"
+            }
+          ]
+        }
+      ).channelEvents
+    ).toEqual([
+      {
+        type: "message_received",
+        channel: "web",
+        threadId: "thread-4",
+        messageId: "message-4",
+        summary: "Create lead Anna Beispiel"
+      }
+    ]);
+  });
 });

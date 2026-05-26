@@ -40,6 +40,7 @@ export function createAuditReviewSummary(events: AssistantAuditEventDraft[]): Au
   const actionCounts = {
     "assistant.action.executed": 0,
     "assistant.action.preview_created": 0,
+    "assistant.channel.event": 0,
     "assistant.message.submitted": 0,
     "platform.release.planned": 0
   } satisfies Record<AssistantAuditEventDraft["action"], number>;

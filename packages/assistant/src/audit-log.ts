@@ -4,8 +4,13 @@ import type { ActionConfirmationStatus } from "./confirmation-state";
 export type AssistantAuditEventDraft = {
   workspaceId: string;
   actorUserId?: string;
-  action: "assistant.message.submitted" | "assistant.action.preview_created" | "assistant.action.executed" | "platform.release.planned";
-  targetType: "AssistantMessage" | "AssistantAction" | "PlatformRelease";
+  action:
+    | "assistant.message.submitted"
+    | "assistant.action.preview_created"
+    | "assistant.action.executed"
+    | "assistant.channel.event"
+    | "platform.release.planned";
+  targetType: "AssistantMessage" | "AssistantAction" | "AssistantChannelEvent" | "PlatformRelease";
   targetId: string;
   metadata: Record<string, unknown>;
 };
@@ -59,7 +64,23 @@ export function createAssistantAuditEvents(draft: AssistantPersistenceDraft): As
     });
   }
 
+  for (const event of draft.channelEvents) {
+    events.push({
+      workspaceId: draft.thread.workspaceId,
+      actorUserId: draft.message.userId,
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      targetId: createChannelEventTargetId(event),
+      metadata: event
+    });
+  }
+
   return events;
+}
+
+function createChannelEventTargetId(event: AssistantPersistenceDraft["channelEvents"][number]): string {
+  const leadOrMessageId = "leadId" in event && event.leadId ? event.leadId : "messageId" in event ? event.messageId : "none";
+  return `${event.channel}:${event.type}:${event.threadId}:${leadOrMessageId}`;
 }
 
 export function createAssistantActionExecutionAuditEvent({

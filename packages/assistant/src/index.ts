@@ -5,6 +5,7 @@ export * from "./audit-review";
 export * from "./capability-registry";
 export * from "./channel-message";
 export * from "./channel-engine";
+export * from "./channel-event";
 export * from "./classify-intent";
 export * from "./confirmation-state";
 export * from "./conversation";
