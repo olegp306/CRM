@@ -10,6 +10,11 @@ describe("classifyIntent", () => {
     expect(classifyIntent("The KP generation button does not work")).toBe("bug_report");
   });
 
+  it("detects Russian bug and UX feedback phrases", () => {
+    expect(classifyIntent("Кнопка не работает")).toBe("bug_report");
+    expect(classifyIntent("Добавление лидов неудобно")).toBe("ux_feedback");
+  });
+
   it("detects CRM actions", () => {
     expect(classifyIntent("Create a lead from this text")).toBe("crm_action");
   });
@@ -17,6 +22,7 @@ describe("classifyIntent", () => {
   it("detects Russian CRM actions", () => {
     expect(classifyIntent("Отметь КП отправленным")).toBe("crm_action");
   });
+
   it("classifies identity and capability questions as support requests, not feature requests", () => {
     expect(classifyIntent("Кто ты и что умеешь делать?")).toBe("support_request");
     expect(classifyIntent("who are you and what can you do?")).toBe("support_request");
