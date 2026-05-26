@@ -12,10 +12,12 @@ import {
   createKpSentUndoneEvent,
   createLeadCreatedEvent,
   createAssistantSubmissionResult,
+  createOpenAiAssistantLeadParserClient,
   createAssistantMessageDraft,
   createMessageReceivedEvent,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
+  enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
   createRussianOnboardingAssistantMessage,
   createPlatformFeedbackBulkUpdatePlan,
@@ -64,17 +66,28 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
     ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
     : [[], []];
   const selectedLead = selectedLeadId ? createSelectedLeadChatSnapshot(selectedLeadId, leads, generatedDocuments) : null;
-  const result = await createOpenAIAssistantSubmissionResult(
-    {
-      ...input,
-      attachments: input.attachments ?? [],
-      lead: selectedLead
-    },
+  const assistantInput = {
+    ...input,
+    attachments: input.attachments ?? [],
+    lead: selectedLead
+  };
+  const initialResult = await createOpenAIAssistantSubmissionResult(
+    assistantInput,
     {
       apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
     }
   );
+  const result = process.env.OPENAI_API_KEY?.trim()
+    ? await enrichLeadIntakeSubmissionResult(
+        initialResult,
+        assistantInput,
+        createOpenAiAssistantLeadParserClient({
+          apiKey: process.env.OPENAI_API_KEY.trim(),
+          model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
+        })
+      )
+    : initialResult;
   const persistenceDraft = createAssistantPersistenceDraft(
     result,
     {

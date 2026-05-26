@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantContext } from "./context";
-import { createAssistantSubmissionResult } from "./submission";
+import { createAssistantSubmissionResult, enrichLeadIntakeSubmissionResult } from "./submission";
 
 const baseContext: AssistantContext = {
   workspaceId: "workspace-1",
@@ -152,6 +152,73 @@ describe("assistant submission orchestration", () => {
         }
       ]
     });
+  });
+
+  it("enriches web lead-intake previews with parsed fields before confirmation", async () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Please review this source material and create a lead if the data is sufficient.",
+      threadId: "thread-parsed-source",
+      messageId: "message-parsed-source",
+      attachments: [
+        {
+          id: "attachment-photo",
+          kind: "photo",
+          fileName: "brief.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    });
+
+    const enriched = await enrichLeadIntakeSubmissionResult(result, {
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Please review this source material and create a lead if the data is sufficient.",
+      threadId: "thread-parsed-source",
+      messageId: "message-parsed-source",
+      attachments: [
+        {
+          id: "attachment-photo",
+          kind: "photo",
+          fileName: "brief.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    }, {
+      async parseLead(input) {
+        expect(input.attachments?.[0]?.fileName).toBe("brief.jpg");
+        return {
+          clientName: "Irina Schneider",
+          requestType: "new_build",
+          urgency: "medium",
+          temperature: "warm",
+          bgfM2: 195,
+          projectAddress: "Bad Aibling, Gartenweg 9",
+          email: "irina.schneider@example.com",
+          phone: "+49 160 4442211",
+          missingData: [],
+          summary: "Ready Neubau EFH lead",
+          suggestedReply: "I can prepare the KP."
+        };
+      }
+    });
+
+    expect(enriched.actionPreview?.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "lead.clientName", to: "Irina Schneider" }),
+        expect.objectContaining({ field: "lead.requestType", to: "new_build" }),
+        expect.objectContaining({ field: "lead.projectAddress", to: "Bad Aibling, Gartenweg 9" }),
+        expect.objectContaining({ field: "lead.bgfM2", to: 195 }),
+        expect.objectContaining({ field: "lead.email", to: "irina.schneider@example.com" }),
+        expect.objectContaining({ field: "lead.phone", to: "+49 160 4442211" }),
+        expect.objectContaining({ field: "lead.temperature", to: "warm" }),
+        expect.objectContaining({ field: "lead.missingData", to: [] })
+      ])
+    );
+    expect(enriched.actionPreview?.changes.find((change) => change.field === "lead.sourceText")?.to).toContain(
+      "Summary: Ready Neubau EFH lead"
+    );
   });
 
   it("previews schedule follow-up actions when the request asks for a reminder", () => {
