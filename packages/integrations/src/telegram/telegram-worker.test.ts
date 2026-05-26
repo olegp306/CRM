@@ -1190,6 +1190,70 @@ describe("telegram worker", () => {
     expect(sendBody.text).toContain("Updated lead <b>L-2026-002</b>");
   });
 
+  it("answers support questions on a replied lead card without parsing them as lead updates", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: ["bgfM2"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 22,
+            message: {
+              message_id: 32,
+              date: 1779297060,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "What is the status?"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 22 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("L-2026-002");
+  });
+
   it("marks and undoes KP sent from replies to the bot lead card", async () => {
     const updates: unknown[] = [];
     const client = {

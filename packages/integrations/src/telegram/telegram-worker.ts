@@ -1,4 +1,4 @@
-import { createAssistantChannelResponse, isNewLeadCommand } from "@app/assistant";
+import { createAssistantChannelResponse, decideLeadFlow, type AssistantChannelMessage } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
@@ -172,7 +172,9 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   let skipped = 0;
 
   for (const message of messageBatches) {
-    if (isTelegramNewLeadCommand(message)) {
+    const leadFlowDecision = decideLeadFlow(createTelegramAssistantChannelMessage(config.workspaceId, message));
+
+    if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command") {
       const session = createTelegramLeadDraftSession({
         chatId: message.chatId,
         workspaceId: config.workspaceId,
@@ -213,6 +215,19 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    const sourceExternalIds = createTelegramSourceExternalIds(message);
+    const repliedLead = message.replyToMessageId
+      ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
+      : null;
+    const replyLeadFlowDecision = repliedLead
+      ? decideLeadFlow(
+          createTelegramAssistantChannelMessage(config.workspaceId, message, {
+            leadId: repliedLead.leadId,
+            sourceMessageId: String(message.replyToMessageId)
+          })
+        )
+      : null;
+
     const generalAssistantResponse = createTelegramGeneralAssistantResponse(config.workspaceId, message);
     if (generalAssistantResponse) {
       await sendTelegramMessage({
@@ -225,11 +240,6 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       skipped += message.sourceMessageIds.length;
       continue;
     }
-
-    const sourceExternalIds = createTelegramSourceExternalIds(message);
-    const repliedLead = message.replyToMessageId
-      ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
-      : null;
 
     if (repliedLead && isTelegramKpSentCommand(message) && !isTelegramKpSentUndoCommand(message)) {
       if (!client.lead.update || !repliedLead.id) {
@@ -289,6 +299,24 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         fetchImpl
       });
       processed += 1;
+      continue;
+    }
+
+    if (repliedLead && replyLeadFlowDecision?.kind === "not_lead_flow") {
+      const response = createAssistantChannelResponse(
+        createTelegramAssistantChannelMessage(config.workspaceId, message, {
+          leadId: repliedLead.leadId,
+          sourceMessageId: String(message.replyToMessageId)
+        })
+      );
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: response.text,
+        replyMarkup: createTelegramResponseReplyMarkup(response.buttons),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
       continue;
     }
 
@@ -731,16 +759,6 @@ function isTelegramStartRequest(message: Pick<AllowedTelegramMessage, "text" | "
   return /^\/start(@\w+)?$/i.test(text);
 }
 
-function isTelegramNewLeadCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
-  const text = message.text.trim();
-
-  if ((message.attachments?.length ?? 0) > 0) {
-    return false;
-  }
-
-  return isNewLeadCommand(text.replace(/^\/([a-z_]+)@\w+/i, "/$1"));
-}
-
 function isTelegramKpSentUndoCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
   const text = message.text.trim();
 
@@ -762,28 +780,36 @@ function isTelegramKpSentCommand(message: Pick<AllowedTelegramMessage, "text" | 
 }
 
 function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, content: "/start" | "/help"): string {
-  return createAssistantChannelResponse({
-    channel: "telegram",
-    threadId: `telegram-${chatId}`,
-    messageId: `telegram-${chatId}-${content}`,
-    content,
-    receivedAt: new Date().toISOString(),
-    context: {
-      workspaceId,
-      userId: `telegram:${chatId}`,
-      role: "operator",
-      module: "leads"
-    },
-    attachments: []
-  }).text;
+  return createAssistantChannelResponse(
+    createTelegramAssistantChannelMessage(workspaceId, {
+      chatId,
+      text: content,
+      receivedAt: new Date().toISOString(),
+      sourceMessageIds: [content === "/start" ? 0 : 1]
+    })
+  ).text;
 }
 
 function createTelegramGeneralAssistantResponse(workspaceId: string, message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">) {
-  const response = createAssistantChannelResponse({
+  const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message));
+
+  if (response.intent === "capability_request" || response.shouldPersistFeedback) {
+    return response;
+  }
+
+  return null;
+}
+
+function createTelegramAssistantChannelMessage(
+  workspaceId: string,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">,
+  replyTo?: { leadId: string; sourceMessageId: string }
+): AssistantChannelMessage {
+  return {
     channel: "telegram",
     threadId: `telegram-${message.chatId}`,
     messageId: `telegram-${message.chatId}-${message.sourceMessageIds.join("-")}`,
-    content: message.text,
+    content: normalizeTelegramAssistantContent(message.text),
     receivedAt: message.receivedAt,
     context: {
       workspaceId,
@@ -792,14 +818,21 @@ function createTelegramGeneralAssistantResponse(workspaceId: string, message: Pi
       route: "/telegram",
       module: "assistant"
     },
-    attachments: []
-  });
+    attachments: [],
+    ...(replyTo
+      ? {
+          replyTo: {
+            sourceChannel: "telegram" as const,
+            sourceMessageId: replyTo.sourceMessageId,
+            leadId: replyTo.leadId
+          }
+        }
+      : {})
+  };
+}
 
-  if (response.intent === "capability_request" || response.shouldPersistFeedback) {
-    return response;
-  }
-
-  return null;
+function normalizeTelegramAssistantContent(content: string): string {
+  return content.trim().replace(/^\/([a-z_]+)@\w+/i, "/$1");
 }
 
 function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?: string }> = []) {
