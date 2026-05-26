@@ -52,7 +52,9 @@ describe("leads page layout", () => {
   });
 
   it("renders collapsed lead card sections as visible mobile rows", () => {
-    expect(tableSource).toContain('className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"');
+    expect(tableSource).toContain('className="h-screen max-h-screen overflow-auto p-4 pb-32 scroll-pb-32"');
+    expect(tableSource).not.toContain('className="grid h-screen max-h-screen gap-4 overflow-auto p-4 pb-32 scroll-pb-32"');
+    expect(tableSource).toContain('className="mt-4 min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"');
     expect(tableSource).toContain('className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"');
     expect(tableSource).not.toContain("className={leadAccordionClassName}");
     expect(tableSource).not.toContain("className={leadAccordionSummaryClassName}");

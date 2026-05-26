@@ -563,7 +563,7 @@ function LeadEditor({
       key={lead.id}
       onSubmit={onSubmit}
       data-variant={variant}
-      className="grid h-screen max-h-screen gap-4 overflow-auto p-4 pb-32 scroll-pb-32"
+      className="h-screen max-h-screen overflow-auto p-4 pb-32 scroll-pb-32"
     >
       <input type="hidden" name="id" value={lead.id} />
       <div className="sticky top-0 z-30 -mx-4 -mt-4 flex justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur">
@@ -576,7 +576,7 @@ function LeadEditor({
           Close
         </button>
       </div>
-      <section className="grid gap-1 rounded-lg border border-border bg-muted/20 p-3">
+      <section className="mt-4 grid gap-1 rounded-lg border border-border bg-muted/20 p-3">
         <div className="-mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
           <div className="grid min-w-0 gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
@@ -633,7 +633,7 @@ function LeadEditor({
       <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
-      <div id="lead-edit-fields" className="grid gap-3">
+      <div id="lead-edit-fields" className="mt-4 grid gap-3">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />
         <TextField label="Temperature" name="temperature" defaultValue={lead.temperature} />
         <TextField label="Request type" name="requestType" defaultValue={lead.requestType} />
@@ -657,7 +657,7 @@ function LeadEditor({
         <TextField label="Project ID" name="projectRecordId" defaultValue={lead.projectRecordId} />
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <button
           type="submit"
           disabled={isSaving}
@@ -807,7 +807,7 @@ function LeadCardAccordion({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30">
+    <section className="mt-4 min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30">
       <button
         type="button"
         className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"
