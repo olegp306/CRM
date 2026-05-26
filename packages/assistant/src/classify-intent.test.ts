@@ -32,6 +32,15 @@ describe("classifyIntent", () => {
     expect(classifyIntent("How can I update this lead?")).toBe("support_request");
   });
 
+  it("classifies product UI add requests as feature requests before support or CRM actions", () => {
+    expect(classifyIntent("How can we add a button to compare KP versions?")).toBe("feature_request");
+    expect(classifyIntent("Add a button to compare KP versions")).toBe("feature_request");
+  });
+
+  it("keeps operational lead add commands as CRM actions", () => {
+    expect(classifyIntent("Add this address to lead L-2026-004")).toBe("crm_action");
+  });
+
   it("captures explicit product requests as feature requests", () => {
     expect(classifyIntent("Добавьте кнопку для сравнения версий коммерческого предложения")).toBe("feature_request");
     expect(classifyIntent("It would be nice to upload several lead photos in the web assistant")).toBe(
