@@ -84,4 +84,48 @@ describe("assistant channel engine", () => {
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
   });
+
+  it("treats web source material with attachments as lead intake, not product feedback", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Вот заявка клиента, создай лид если данных хватает",
+      attachments: [{ id: "photo-1", kind: "photo", fileName: "brief.jpg", mimeType: "image/jpeg", base64: "abcd" }]
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+    expect(result.text).toContain("I can create a lead from this source material");
+    expect(result.text).toContain("client, request, address, BGF, contacts");
+    expect(result.text).toContain("missing KP fields");
+    expect(result.text).toContain("source references");
+  });
+
+  it("treats clear English lead source material as lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Source material for a new lead: client Schmidt wants a commercial proposal for BGF 240 m2 at Rosenheim."
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("treats clear Russian commercial proposal source material as lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Материал для лида: клиент просит коммерческое предложение, адрес Мюнхен, BGF 180 м2."
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
 });

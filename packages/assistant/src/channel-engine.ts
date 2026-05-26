@@ -14,6 +14,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (isLeadSourceMaterial(message)) {
+    return {
+      intent: "lead_intake",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [{ label: "Create lead", action: "confirm" }],
+      text: "I can create a lead from this source material. I will extract client, request, address, BGF, contacts, missing KP fields, and source references before saving."
+    };
+  }
+
   if (intent === "feature_request" || intent === "bug_report" || intent === "ux_feedback" || intent === "support_request") {
     return {
       intent,
@@ -44,6 +54,20 @@ function isHelpMessage(content: string, intent: string): boolean {
   }
 
   return intent === "support_request" && /(who are you|what can you do|кто ты|что умеешь)/i.test(content);
+}
+
+function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {
+  if (message.channel !== "web") {
+    return false;
+  }
+
+  if (message.attachments.length > 0) {
+    return true;
+  }
+
+  return /(\bsource material\b|\blead\b|\bclient\b|\bcommercial proposal\b|\bbgf\b|\baddress\b|заявк[аиу]|лид|клиент|коммерческ(?:ое|ого|ому|им)\s+предложени[еяю]|исходн(?:ый|ые|ого|ому)\s+материал|адрес|площадь|бгф)/i.test(
+    message.content
+  );
 }
 
 function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
