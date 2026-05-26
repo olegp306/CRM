@@ -25,11 +25,12 @@ type EditableRecordTableProps = {
   fields: EditableTableField[];
   rows: EditableRecordRow[];
   updateAction: (formData: FormData) => Promise<void>;
+  exportHref?: string;
 };
 
 type MobileTableViewMode = "cards" | "table";
 
-export function EditableRecordTable({ title, kind, fields, rows, updateAction }: EditableRecordTableProps) {
+export function EditableRecordTable({ title, kind, fields, rows, updateAction, exportHref }: EditableRecordTableProps) {
   const tableFields = fields.filter((field) => field.table);
   const editorFields = fields.filter((field) => field.editable);
   const mobileCardFields = useMemo(() => getEditableMobileCardFields(kind, fields), [fields, kind]);
@@ -122,6 +123,11 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction }:
             <p className="text-sm text-muted-foreground">Sort, resize, hide columns, then click a row to edit.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {exportHref ? (
+              <a href={exportHref} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                Export to Excel (CSV)
+              </a>
+            ) : null}
             <div className="md:hidden">
               <MobileViewModeToggle value={mobileViewMode} onChange={setMobileViewMode} />
             </div>

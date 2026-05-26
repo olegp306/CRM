@@ -248,6 +248,150 @@ describe("executeAssistantAction", () => {
     ]);
   });
 
+  it("does not create a duplicate web assistant lead when the source text already exists", async () => {
+    const createdLeads: unknown[] = [];
+    const duplicatedAction: AssistantActionWriteDraft = {
+      ...action,
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          { field: "lead.sourceText", from: null, to: "Uploaded client material with all KP fields in the attachment." },
+          { field: "lead.clientName", from: null, to: "Irina Schneider" },
+          { field: "lead.projectAddress", from: null, to: "Bad Aibling, Gartenweg 9" },
+          { field: "lead.email", from: null, to: "irina.schneider@example.com" },
+          { field: "lead.phone", from: null, to: "+49 160 4442211" }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: duplicatedAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      existingLeads: [
+        {
+          id: "lead-record-existing",
+          workspaceId: "workspace-1",
+          leadId: "L-2026-001",
+          status: "new",
+          rawInput: "Uploaded client material with all KP fields in the attachment.",
+          clientName: "Irina Schneider",
+          projectAddress: "Bad Aibling, Gartenweg 9",
+          email: "irina.schneider@example.com",
+          phone: "+49 160 4442211"
+        }
+      ],
+      createLead: async (lead) => {
+        createdLeads.push(lead);
+        return { id: "lead-record-new", ...lead };
+      },
+      generateKpDocument: async (document) => ({ id: "document-record-1", ...document })
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "duplicate_lead",
+      leadId: "L-2026-001",
+      recordId: "lead-record-existing",
+      reason: "same_text"
+    });
+    expect(createdLeads).toEqual([]);
+  });
+
+  it("does not create a new web assistant lead when source material likely updates an existing lead", async () => {
+    const createdLeads: unknown[] = [];
+    const possibleUpdateAction: AssistantActionWriteDraft = {
+      ...action,
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          { field: "lead.sourceText", from: null, to: "Additional BGF and phone details for Irina Schneider project." },
+          { field: "lead.clientName", from: null, to: "Irina Schneider" },
+          { field: "lead.projectAddress", from: null, to: "Bad Aibling, Gartenweg 9" },
+          { field: "lead.phone", from: null, to: "+49 160 4442211" }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: possibleUpdateAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      existingLeads: [
+        {
+          id: "lead-record-existing",
+          workspaceId: "workspace-1",
+          leadId: "L-2026-001",
+          status: "needs_data",
+          rawInput: "Original client request",
+          clientName: "Irina Schneider",
+          projectAddress: "Bad Aibling, Gartenweg 9",
+          phone: "+49 160 4442211"
+        }
+      ],
+      createLead: async (lead) => {
+        createdLeads.push(lead);
+        return { id: "lead-record-new", ...lead };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "existing_lead_match",
+      leadId: "L-2026-001",
+      recordId: "lead-record-existing",
+      matchedFields: ["clientName", "projectAddress", "phone"]
+    });
+    expect(createdLeads).toEqual([]);
+  });
+
+  it("asks for clarification instead of creating a new web assistant lead on a partial existing lead match", async () => {
+    const createdLeads: unknown[] = [];
+    const partialMatchAction: AssistantActionWriteDraft = {
+      ...action,
+      preview: {
+        ...action.preview,
+        summary: "Create lead from assistant source material",
+        changes: [
+          { field: "lead.sourceText", from: null, to: "Extra message for the Bad Aibling project with updated budget notes." },
+          { field: "lead.projectAddress", from: null, to: "Bad Aibling, Gartenweg 9" }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: partialMatchAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-001"],
+      existingLeads: [
+        {
+          id: "lead-record-existing",
+          workspaceId: "workspace-1",
+          leadId: "L-2026-001",
+          status: "needs_data",
+          rawInput: "Original client request",
+          clientName: "Irina Schneider",
+          projectAddress: "Bad Aibling, Gartenweg 9"
+        }
+      ],
+      createLead: async (lead) => {
+        createdLeads.push(lead);
+        return { id: "lead-record-new", ...lead };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "needs_clarification",
+      leadId: "L-2026-001",
+      recordId: "lead-record-existing",
+      matchedFields: ["projectAddress"]
+    });
+    expect(createdLeads).toEqual([]);
+  });
+
   it("generates a KP document after web assistant lead creation when the document port is available", async () => {
     const generatedDocuments: unknown[] = [];
     const sourceMaterialAction: AssistantActionWriteDraft = {

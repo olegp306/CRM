@@ -1,5 +1,6 @@
 import { createKpSentLeadUpdate, createLeadIntakeDraft, getNextBusinessId, type LeadMissingField } from "@app/core";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
+import { decideIncomingLeadMatch } from "./lead-match-decision";
 import type { AssistantActionWriteDraft } from "./persistence";
 
 export type CreateLeadFromAssistantInput = {
@@ -101,6 +102,7 @@ export type ExecuteAssistantActionInput = {
   action: AssistantActionWriteDraft;
   now: Date;
   existingLeadIds: string[];
+  existingLeads?: CreatedLeadRecord[];
   createLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord>;
   scheduleFollowup?(input: ScheduleFollowupFromAssistantInput): Promise<CreatedFollowupRecord>;
   updateProjectTask?(input: UpdateProjectTaskFromAssistantInput): Promise<UpdatedProjectTaskRecord>;
@@ -148,12 +150,34 @@ export type ExecuteAssistantActionResult =
       actionType: "undo_kp_sent";
       leadId: string;
       recordId: string;
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "duplicate_lead";
+      leadId: string;
+      recordId: string;
+      reason: "source_external_id" | "same_text";
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "existing_lead_match";
+      leadId: string;
+      recordId: string;
+      matchedFields: string[];
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "needs_clarification";
+      leadId: string;
+      recordId: string;
+      matchedFields: string[];
     };
 
 export async function executeAssistantAction({
   action,
   now,
   existingLeadIds,
+  existingLeads = [],
   createLead,
   scheduleFollowup,
   updateProjectTask,
@@ -177,6 +201,68 @@ export async function executeAssistantAction({
       rawInput
     });
     const missingData = previewMissingData ?? draft.missingData;
+    const duplicateDecision = decideIncomingLeadMatch({
+      incoming: {
+        rawInput,
+        clientName: draft.clientName,
+        projectAddress: draft.projectAddress,
+        email: draft.email,
+        phone: draft.phone
+      },
+      candidates: existingLeads
+    });
+
+    if (duplicateDecision.kind === "exact_duplicate") {
+      const existingLead = existingLeads.find((lead) => lead.leadId === duplicateDecision.leadId);
+      const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+      if (executedStatus !== "executed") {
+        throw new Error(`Assistant action ${action.messageId} did not execute`);
+      }
+
+      return {
+        status: executedStatus,
+        actionType: "duplicate_lead",
+        leadId: duplicateDecision.leadId,
+        recordId: existingLead?.id ?? duplicateDecision.leadId,
+        reason: duplicateDecision.reason
+      };
+    }
+
+    if (duplicateDecision.kind === "likely_update") {
+      const existingLead = existingLeads.find((lead) => lead.leadId === duplicateDecision.leadId);
+      const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+      if (executedStatus !== "executed") {
+        throw new Error(`Assistant action ${action.messageId} did not execute`);
+      }
+
+      return {
+        status: executedStatus,
+        actionType: "existing_lead_match",
+        leadId: duplicateDecision.leadId,
+        recordId: existingLead?.id ?? duplicateDecision.leadId,
+        matchedFields: duplicateDecision.matchedFields
+      };
+    }
+
+    if (duplicateDecision.kind === "needs_clarification") {
+      const existingLead = existingLeads.find((lead) => lead.leadId === duplicateDecision.leadId);
+      const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+      if (executedStatus !== "executed") {
+        throw new Error(`Assistant action ${action.messageId} did not execute`);
+      }
+
+      return {
+        status: executedStatus,
+        actionType: "needs_clarification",
+        leadId: duplicateDecision.leadId,
+        recordId: existingLead?.id ?? duplicateDecision.leadId,
+        matchedFields: duplicateDecision.matchedFields
+      };
+    }
+
     const leadId = getNextBusinessId({ kind: "lead", now, existingIds: existingLeadIds });
     const lead = await createLead({
       workspaceId: action.workspaceId,

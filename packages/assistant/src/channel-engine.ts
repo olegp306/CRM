@@ -6,6 +6,7 @@ import {
   type LeadChatSnapshot,
   isLeadChatSourceMaterial
 } from "./lead-chat-orchestrator";
+import { createLeadInteractionNoteSummary, isLeadInteractionNoteCommand } from "./lead-interaction-note";
 
 export function createAssistantChannelResponse(
   message: AssistantChannelMessage,
@@ -16,6 +17,16 @@ export function createAssistantChannelResponse(
 
   if (capabilityResponse) {
     return capabilityResponse;
+  }
+
+  const tableExportResponse = createTableExportResponse(message);
+  if (tableExportResponse) {
+    return tableExportResponse;
+  }
+
+  const noteResponse = createLeadInteractionNoteResponse(message);
+  if (noteResponse) {
+    return noteResponse;
   }
 
   if (isHelpMessage(message.content, intent)) {
@@ -93,6 +104,84 @@ export function createAssistantChannelResponse(
     normalizedActions: [],
     text: "I can help with CRM leads. Send client text, photos, PDFs, or ask about the selected lead."
   };
+}
+
+function createLeadInteractionNoteResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  const leadId = getReferencedLeadId(message);
+  if (!leadId || !isLeadInteractionNoteCommand(message.content)) {
+    return null;
+  }
+
+  const summary = createLeadInteractionNoteSummary(message.content);
+
+  return {
+    intent: "business_process_note",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: createLeadCrmButtons(leadId),
+    normalizedActions: ["open_crm"],
+    text: `Saved this note to lead ${leadId} history: ${summary}`
+  };
+}
+
+function createTableExportResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  const exportKind = detectTableExportKind(message.content, message.context.module);
+  if (!exportKind) {
+    return null;
+  }
+
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [{ label: "Download CSV", action: "download_csv", url: `/exports/${exportKind}` }],
+    normalizedActions: [],
+    text: `Готово, подготовил CSV export для таблицы ${getExportKindLabel(exportKind)}. Его можно открыть в Excel.`
+  };
+}
+
+function detectTableExportKind(content: string, moduleContext?: string): "leads" | "clients" | "projects" | "cold-targets" | null {
+  const text = content.toLowerCase();
+  const asksForExport = /\b(csv|excel|xlsx|spreadsheet|export|download)\b/i.test(text) || /(csv|excel|СЌРєСЃРµР»|СЌРєСЃРїРѕСЂС‚|СЃРєРёРЅСЊ|СЃРєР°С‡Р°Р№|С‚Р°Р±Р»РёС†)/i.test(text);
+  if (!asksForExport) {
+    return null;
+  }
+
+  if (/\bclients?\b|РєР»РёРµРЅС‚/i.test(text)) {
+    return "clients";
+  }
+
+  if (/\bprojects?\b|РїСЂРѕРµРєС‚/i.test(text)) {
+    return "projects";
+  }
+
+  if (/\bcold[-\s]?targets?\b|\boutreach\b|С…РѕР»РѕРґРЅ|cold target/i.test(text)) {
+    return "cold-targets";
+  }
+
+  if (/\bleads?\b|Р»РёРґ|Р·Р°СЏРІРє/i.test(text)) {
+    return "leads";
+  }
+
+  if (moduleContext === "clients" || moduleContext === "projects" || moduleContext === "leads") {
+    return moduleContext;
+  }
+
+  if (moduleContext === "outreach") {
+    return "cold-targets";
+  }
+
+  return null;
+}
+
+function getExportKindLabel(kind: "leads" | "clients" | "projects" | "cold-targets"): string {
+  const labels = {
+    leads: "leads",
+    clients: "clients",
+    projects: "projects",
+    "cold-targets": "cold targets"
+  };
+  return labels[kind];
 }
 
 function isHelpMessage(content: string, intent: string): boolean {

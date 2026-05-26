@@ -482,6 +482,88 @@ describe("lead table model", () => {
     ]);
   });
 
+  it("shows Telegram interaction notes in lead history", () => {
+    const history = createLeadHistory({
+      leadId: "L-2026-044",
+      createdDate: "2026-05-26",
+      source: "telegram",
+      temperature: "warm",
+      requestType: "new_build",
+      projectAddress: "Obernsee",
+      bgfM2: "",
+      budgetEur: "",
+      isStandard: "no",
+      missingData: "",
+      kpGeneratedDocumentId: "",
+      kpSentDate: "",
+      followup1Date: "",
+      followupStatus: "",
+      outcome: "",
+      projectRecordId: "",
+      channelEvents: [
+        {
+          createdAt: "2026-05-26T13:00:00.000Z",
+          metadata: {
+            type: "lead_interaction_note",
+            channel: "telegram",
+            threadId: "telegram:12345",
+            leadId: "L-2026-044",
+            messageId: "92",
+            summary: "Sent the client a birthday gift"
+          }
+        }
+      ]
+    });
+
+    expect(history[0]).toMatchObject({
+      title: "Telegram note",
+      actor: "Telegram",
+      stageLabel: "Interaction",
+      description: "Sent the client a birthday gift"
+    });
+  });
+
+  it("shows assistant duplicate-prevention matches in lead history", () => {
+    const history = createLeadHistory({
+      leadId: "L-2026-044",
+      createdDate: "2026-05-26",
+      source: "web",
+      temperature: "warm",
+      requestType: "new_build",
+      projectAddress: "Obernsee",
+      bgfM2: "",
+      budgetEur: "",
+      isStandard: "no",
+      missingData: "",
+      kpGeneratedDocumentId: "",
+      kpSentDate: "",
+      followup1Date: "",
+      followupStatus: "",
+      outcome: "",
+      projectRecordId: "",
+      channelEvents: [
+        {
+          createdAt: "2026-05-26T13:00:00.000Z",
+          metadata: {
+            type: "lead_match_detected",
+            channel: "web",
+            threadId: "thread-1",
+            leadId: "L-2026-044",
+            matchType: "needs_clarification",
+            matchedFields: ["projectAddress"]
+          }
+        }
+      ]
+    });
+
+    expect(history[0]).toMatchObject({
+      title: "Needs clarification",
+      actor: "Operator",
+      stageLabel: "Duplicate check",
+      description: "Operator found a possible existing lead match by projectAddress."
+    });
+  });
+
   it("shows an undo history entry when a generated KP is back before sent state", () => {
     const history = createLeadHistory({
       leadId: "L-2026-004",

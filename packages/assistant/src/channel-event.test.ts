@@ -3,8 +3,10 @@ import {
   createKpGeneratedEvent,
   createKpSentMarkedEvent,
   createKpSentUndoneEvent,
+  createLeadInteractionNoteEvent,
   createLeadCreatedEvent,
   createLeadDraftUpdatedEvent,
+  createLeadMatchDetectedEvent,
   createMessageReceivedEvent
 } from "./channel-event";
 
@@ -85,5 +87,45 @@ describe("assistant channel events", () => {
       { type: "kp_sent_marked", channel: "web", threadId: "thread-1", leadId: "L-2026-004" },
       { type: "kp_sent_undone", channel: "web", threadId: "thread-1", leadId: "L-2026-004" }
     ]);
+  });
+
+  it("creates lead interaction note events for human Telegram notes", () => {
+    expect(
+      createLeadInteractionNoteEvent({
+        type: "lead_interaction_note",
+        channel: "telegram",
+        threadId: "telegram:12345",
+        leadId: "L-2026-004",
+        messageId: "92",
+        summary: "Sent the client a birthday gift"
+      })
+    ).toEqual({
+      type: "lead_interaction_note",
+      channel: "telegram",
+      threadId: "telegram:12345",
+      leadId: "L-2026-004",
+      messageId: "92",
+      summary: "Sent the client a birthday gift"
+    });
+  });
+
+  it("creates lead match detected events for duplicate prevention and clarification", () => {
+    expect(
+      createLeadMatchDetectedEvent({
+        type: "lead_match_detected",
+        channel: "web",
+        threadId: "thread-1",
+        leadId: "L-2026-004",
+        matchType: "needs_clarification",
+        matchedFields: ["projectAddress"]
+      })
+    ).toEqual({
+      type: "lead_match_detected",
+      channel: "web",
+      threadId: "thread-1",
+      leadId: "L-2026-004",
+      matchType: "needs_clarification",
+      matchedFields: ["projectAddress"]
+    });
   });
 });

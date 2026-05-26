@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.2.1`
+Current stable version: `0.2.2`
 
 Stable tag format:
 
@@ -12,6 +12,7 @@ Stable tag format:
 v0.1.0
 v0.2.0
 v0.2.1
+v0.2.2
 ```
 
 ## Branch Workflow
@@ -138,6 +139,15 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.2.2
+
+Assistant duplicate safety and CSV export release:
+
+- Tables now expose CSV export actions for leads, clients, projects, and cold targets.
+- Web Assistant and Telegram share stronger lead duplicate/update matching behavior.
+- Exact duplicate lead creation is blocked, likely updates point to the existing lead, and partial matches ask for clarification.
+- Lead history records duplicate checks, interaction notes, KP status actions, and channel events more clearly.
 
 ## 0.2.1
 

@@ -14,9 +14,10 @@ import {
   createAssistantSubmissionResult,
   createOpenAiAssistantLeadParserClient,
   createAssistantMessageDraft,
-  createMessageReceivedEvent,
+  createInboundMessageChannelEvents,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
+  createExecutionChannelEvents,
   enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
   createRussianOnboardingAssistantMessage,
@@ -96,13 +97,12 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
     },
     {
       channelEvents: [
-        createMessageReceivedEvent({
-          type: "message_received",
+        ...createInboundMessageChannelEvents({
           channel: "web",
           threadId: input.threadId,
           messageId: input.messageId,
           leadId: input.context.selectedRecordIds?.[0],
-          summary: input.content.trim()
+          content: input.content
         })
       ]
     }
@@ -391,10 +391,12 @@ export async function confirmAssistantActionAction({
     throw new Error(`Assistant action ${messageId} was not found`);
   }
 
+  const existingLeads = await listAssistantCreatedLeads(workspaceId);
   const execution = await executeAssistantAction({
     action,
     now: new Date(),
-    existingLeadIds: (await listAssistantCreatedLeads(workspaceId)).map((lead) => lead.leadId),
+    existingLeadIds: existingLeads.map((lead) => lead.leadId),
+    existingLeads,
     createLead: createAssistantLead,
     scheduleFollowup: createAssistantFollowup,
     updateProjectTask: updateAssistantProjectTask,
@@ -429,6 +431,11 @@ export async function confirmAssistantActionAction({
 }
 
 function createWebExecutionChannelEvents(threadId: string, execution: Awaited<ReturnType<typeof executeAssistantAction>>) {
+  const sharedEvents = createExecutionChannelEvents({ channel: "web", threadId, execution });
+  if (sharedEvents.length > 0) {
+    return sharedEvents;
+  }
+
   if ("actionType" in execution) {
     if (execution.actionType === "mark_kp_sent") {
       return [createKpSentMarkedEvent({ type: "kp_sent_marked", channel: "web", threadId, leadId: execution.leadId })];

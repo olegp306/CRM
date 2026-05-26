@@ -16,6 +16,22 @@ export type AssistantChannelEvent =
       missingData: string[];
     }
   | {
+      type: "lead_interaction_note";
+      channel: "web" | "telegram";
+      threadId: string;
+      leadId: string;
+      messageId: string;
+      summary: string;
+    }
+  | {
+      type: "lead_match_detected";
+      channel: "web" | "telegram";
+      threadId: string;
+      leadId: string;
+      matchType: "duplicate" | "likely_update" | "needs_clarification";
+      matchedFields: string[];
+    }
+  | {
       type: "lead_created";
       channel: "web" | "telegram";
       threadId: string;
@@ -49,6 +65,18 @@ export function createMessageReceivedEvent(input: Extract<AssistantChannelEvent,
 
 export function createLeadDraftUpdatedEvent(
   input: Extract<AssistantChannelEvent, { type: "lead_draft_updated" }>
+): AssistantChannelEvent {
+  return { ...input };
+}
+
+export function createLeadInteractionNoteEvent(
+  input: Extract<AssistantChannelEvent, { type: "lead_interaction_note" }>
+): AssistantChannelEvent {
+  return { ...input };
+}
+
+export function createLeadMatchDetectedEvent(
+  input: Extract<AssistantChannelEvent, { type: "lead_match_detected" }>
 ): AssistantChannelEvent {
   return { ...input };
 }

@@ -649,6 +649,40 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
         }
       ];
     }
+    case "lead_interaction_note":
+      return [
+        {
+          title: channelEvent.channel === "telegram" ? "Telegram note" : "Assistant note",
+          at,
+          actor,
+          stageLabel: "Interaction",
+          description: String(channelEvent.summary ?? ""),
+          sortTime
+        }
+      ];
+    case "lead_match_detected": {
+      const matchedFields = Array.isArray(channelEvent.matchedFields)
+        ? channelEvent.matchedFields.filter((field): field is string => typeof field === "string")
+        : [];
+      const matchType = String(channelEvent.matchType ?? "");
+      const title =
+        matchType === "duplicate" ? "Duplicate blocked" : matchType === "likely_update" ? "Existing lead match" : "Needs clarification";
+      const description =
+        matchType === "duplicate"
+          ? `${actor} blocked a duplicate lead creation.`
+          : `${actor} found a possible existing lead match by ${matchedFields.length > 0 ? matchedFields.join(", ") : "lead data"}.`;
+
+      return [
+        {
+          title,
+          at,
+          actor,
+          stageLabel: "Duplicate check",
+          description,
+          sortTime
+        }
+      ];
+    }
     case "kp_generated":
       return [
         {

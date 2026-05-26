@@ -6,6 +6,18 @@ export type AssistantExecutionButton = {
 };
 
 export function getAssistantExecutionLabel(execution: ExecuteAssistantActionResult): string {
+  if ("actionType" in execution && execution.actionType === "existing_lead_match") {
+    return `Existing lead ${execution.leadId}`;
+  }
+
+  if ("actionType" in execution && execution.actionType === "needs_clarification") {
+    return `Needs clarification for ${execution.leadId}`;
+  }
+
+  if ("actionType" in execution && execution.actionType === "duplicate_lead") {
+    return `Duplicate lead ${execution.leadId}`;
+  }
+
   if ("leadId" in execution) {
     return execution.leadId;
   }

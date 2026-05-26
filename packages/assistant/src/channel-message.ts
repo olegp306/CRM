@@ -47,6 +47,7 @@ export type AssistantChannelResponseButton = {
     | "open_crm"
     | "open_pdf"
     | "download_doc"
+    | "download_csv"
     | "set_theme"
     | "send_kp"
     | "mark_kp_sent"

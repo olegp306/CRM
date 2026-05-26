@@ -251,6 +251,24 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("L-2026-004");
   });
 
+  it("confirms selected-lead note commands instead of treating them as generic chat", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Record that we sent the client a birthday gift.",
+      context: {
+        ...baseMessage.context,
+        selectedRecordIds: ["L-2026-004"]
+      }
+    });
+
+    expect(result.intent).toBe("business_process_note");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("Saved this note");
+    expect(result.text).toContain("L-2026-004");
+  });
+
   it("answers Russian selected-lead status questions with a CRM deep link", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

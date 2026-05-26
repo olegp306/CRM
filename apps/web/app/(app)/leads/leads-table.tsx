@@ -10,7 +10,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   canMarkLeadKpSent,
   canUndoLeadKpSent,
@@ -51,7 +51,7 @@ type LeadsTableProps = {
 };
 
 const leadAccordionClassName = "min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30";
-const leadAccordionSummaryClassName = "flex min-h-12 cursor-pointer items-center px-3 py-3 text-sm font-semibold";
+const leadAccordionSummaryClassName = "flex min-h-12 w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold";
 
 export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoLeadKpSentAction }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -284,6 +284,9 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <a href="/exports/leads" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+              Export to Excel (CSV)
+            </a>
             <div className="inline-flex rounded-lg border border-border bg-muted p-1">
               {leadTableViewModes.map((mode) => (
                 <button
@@ -804,12 +807,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <details
-      className={leadAccordionClassName}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className={leadAccordionSummaryClassName}>Lead summary info</summary>
+    <LeadCardAccordion title="Lead summary info" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       <div className="grid min-w-0 gap-2 px-3 pb-3">
         {items.length > 0 ? (
           items.map((item, index) => (
@@ -837,7 +835,31 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
           <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No summarized source materials saved yet.</p>
         )}
       </div>
-    </details>
+    </LeadCardAccordion>
+  );
+}
+
+function LeadCardAccordion({
+  title,
+  isOpen,
+  onToggle,
+  children
+}: {
+  title: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className={leadAccordionClassName}>
+      <button type="button" className={leadAccordionSummaryClassName} aria-expanded={isOpen} onClick={onToggle}>
+        <span>{title}</span>
+        <span aria-hidden="true" className="text-xs text-muted-foreground">
+          {isOpen ? "Hide" : "Show"}
+        </span>
+      </button>
+      {isOpen ? children : null}
+    </section>
   );
 }
 
@@ -845,12 +867,7 @@ function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <details
-      className={leadAccordionClassName}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className={leadAccordionSummaryClassName}>History</summary>
+    <LeadCardAccordion title="History" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       <div className="grid gap-2 px-3 pb-3">
         {history.map((item, index) => (
           <article key={`${item.title}-${item.at}-${index}`} className="rounded-lg bg-white p-3 text-sm">
@@ -867,7 +884,7 @@ function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
           </article>
         ))}
       </div>
-    </details>
+    </LeadCardAccordion>
   );
 }
 
@@ -875,12 +892,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <details
-      className={leadAccordionClassName}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className={leadAccordionSummaryClassName}>Action plan</summary>
+    <LeadCardAccordion title="Action plan" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       <div className="grid gap-2 px-3 pb-3">
         {actionPlan.length > 0 ? (
           actionPlan.map((item) => (
@@ -897,7 +909,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
           <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No action is waiting right now.</p>
         )}
       </div>
-    </details>
+    </LeadCardAccordion>
   );
 }
 
@@ -966,12 +978,7 @@ function SourceMaterialsPanel({
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <details
-      className={leadAccordionClassName}
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-    >
-      <summary className={leadAccordionSummaryClassName}>Source materials</summary>
+    <LeadCardAccordion title="Source materials" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       {sourceText ? (
         <div className="grid min-w-0 gap-2 px-3 pb-3">
           {references.length > 0 ? (
@@ -1002,7 +1009,7 @@ function SourceMaterialsPanel({
       ) : (
         <p className="mx-3 mb-3 rounded-lg bg-white p-3 text-sm text-muted-foreground">No source text or document references saved yet.</p>
       )}
-    </details>
+    </LeadCardAccordion>
   );
 }
 

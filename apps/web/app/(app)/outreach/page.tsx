@@ -164,6 +164,7 @@ export default async function OutreachPage() {
         fields={coldTargetFields}
         rows={rows}
         updateAction={updateColdTargetAction}
+        exportHref="/exports/cold-targets"
       />
     </section>
   );

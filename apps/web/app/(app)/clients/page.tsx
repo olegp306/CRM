@@ -50,7 +50,14 @@ export default async function ClientsPage() {
         <h1 className="text-2xl font-semibold">Clients</h1>
         <p className="text-sm text-muted-foreground">People and companies connected to leads and projects.</p>
       </div>
-      <EditableRecordTable title="Clients table" kind="clients" fields={clientFields} rows={rows} updateAction={updateClientAction} />
+      <EditableRecordTable
+        title="Clients table"
+        kind="clients"
+        fields={clientFields}
+        rows={rows}
+        updateAction={updateClientAction}
+        exportHref="/exports/clients"
+      />
     </section>
   );
 }

@@ -157,6 +157,248 @@ describe("telegram worker", () => {
     );
   });
 
+  it("answers duplicate Telegram source messages with the existing CRM lead link", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-2",
+            leadId: "L-2026-002",
+            rawInput: "Need EFH offer\nTelegram sources: telegram:12345:5"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 13,
+            message: {
+              message_id: 5,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Need EFH offer"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 13 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Lead <b>L-2026-002</b> already exists")
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("https://crm.example.com/leads?leadId=L-2026-002")
+      })
+    );
+  });
+
+  it("updates an existing lead when new Telegram material matches its client and address", async () => {
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { OR?: unknown } }).where;
+          if (where?.OR) {
+            return [];
+          }
+
+          return [
+            {
+              id: "lead-record-35",
+              leadId: "L-2026-035",
+              status: "needs_data",
+              rawInput: "Irina Schneider asks for Neubau EFH",
+              clientName: "Irina Schneider",
+              projectAddress: "Bad Aibling, Gartenweg 9",
+              missingData: ["bgfM2"]
+            }
+          ];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-35", leadId: "L-2026-035", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 195,
+        projectAddress: "Bad Aibling, Gartenweg 9",
+        email: "irina.schneider@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Adds missing BGF",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 14,
+            message: {
+              message_id: 8,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Irina Schneider, Bad Aibling Gartenweg 9, BGF 195"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 14 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(updates[0]).toEqual({
+      where: { id: "lead-record-35" },
+      data: expect.objectContaining({
+        projectAddress: "Bad Aibling, Gartenweg 9",
+        bgfM2: 195,
+        status: "new"
+      })
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Updated lead <b>L-2026-035</b>")
+      })
+    );
+  });
+
+  it("asks for clarification when Telegram material only partially matches an existing lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { OR?: unknown } }).where;
+          if (where?.OR) {
+            return [];
+          }
+
+          return [
+            {
+              id: "lead-record-35",
+              leadId: "L-2026-035",
+              status: "needs_data",
+              rawInput: "Irina Schneider, Gartenweg 9",
+              missingData: ["bgfM2"]
+            }
+          ];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 195,
+        projectAddress: "Gartenweg 9",
+        email: null,
+        phone: null,
+        missingData: ["clientName"],
+        summary: "Partial matching source",
+        suggestedReply: "Clarify."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 15,
+            message: {
+              message_id: 9,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Gartenweg 9, BGF 195"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 15 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("This may belong to lead <b>L-2026-035</b>")
+      })
+    );
+  });
+
   it("groups nearby Telegram messages from one chat into one CRM lead and adds a CRM button", async () => {
     const created: unknown[] = [];
     const client = {
@@ -1841,6 +2083,171 @@ describe("telegram worker", () => {
     expect(sendBody.text).toContain("Updated lead <b>L-2026-002</b>");
   });
 
+  it("persists a Telegram interaction note when replying to a lead card with a human note", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { rawInput?: { contains?: string } } }).where;
+          if (where?.rawInput?.contains === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: undefined,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Sent the client a birthday gift",
+        suggestedReply: "Saved."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 41,
+            message: {
+              message_id: 901,
+              date: 1779297400,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "Запиши: клиенту отправили подарок на день рождения"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 41 });
+
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "901",
+          summary: expect.stringContaining("подарок")
+        })
+      })
+    );
+  });
+
+  it("records an explicit replied lead note without parsing it as a lead update", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 42,
+            message: {
+              message_id: 902,
+              date: 1779297400,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "Record that we sent the client a birthday gift."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 42 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "902",
+          summary: "we sent the client a birthday gift."
+        })
+      })
+    );
+  });
+
   it("answers support questions on a replied lead card without parsing them as lead updates", async () => {
     const client = {
       lead: {
@@ -2158,6 +2565,13 @@ describe("telegram worker", () => {
     const parser: OpenAiLeadParserClient = {
       parseLead: vi.fn()
     };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
 
     await expect(
       processTelegramUpdates(
@@ -2178,13 +2592,17 @@ describe("telegram worker", () => {
           workspaceId: "workspace-demo",
           parser,
           prisma: client,
-          fetchImpl: vi.fn() as unknown as typeof fetch
+          fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
     ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 10 });
 
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("already exists") })
+    );
   });
 
   it("runs worker iterations in loop mode with injectable sleep", async () => {

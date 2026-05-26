@@ -48,7 +48,14 @@ export default async function ProjectsPage() {
         <h1 className="text-2xl font-semibold">Projects</h1>
         <p className="text-sm text-muted-foreground">Project operations, tasks, decisions, and documents.</p>
       </div>
-      <EditableRecordTable title="Projects table" kind="projects" fields={projectFields} rows={rows} updateAction={updateProjectAction} />
+      <EditableRecordTable
+        title="Projects table"
+        kind="projects"
+        fields={projectFields}
+        rows={rows}
+        updateAction={updateProjectAction}
+        exportHref="/exports/projects"
+      />
     </section>
   );
 }

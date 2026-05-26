@@ -25,6 +25,11 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Send KP");
   });
 
+  it("offers a CSV export from the lead table", () => {
+    expect(tableSource).toContain("/exports/leads");
+    expect(tableSource).toContain("Export to Excel (CSV)");
+  });
+
   it("shows lead summary info before history and keeps source blocks mobile-safe", () => {
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeGreaterThan(-1);
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeLessThan(tableSource.indexOf("<LeadHistoryPanel"));
@@ -33,5 +38,8 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("min-w-0 overflow-hidden");
     expect(tableSource).toContain("min-h-12");
     expect(tableSource).toContain("px-3 py-3");
+    expect(tableSource).toContain("function LeadCardAccordion");
+    expect(tableSource).toContain("aria-expanded={isOpen}");
+    expect(tableSource).toContain('type="button"');
   });
 });

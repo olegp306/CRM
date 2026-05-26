@@ -46,7 +46,7 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.2.1"
+      appVersion: "0.2.2"
     });
     expect(result.response).toBe("I saved this as product feedback for review.");
   });
@@ -444,6 +444,22 @@ describe("assistant submission orchestration", () => {
     expect(result.response).toContain("I can create and update leads");
     expect(result.feedback).toBeNull();
     expect(result.actionPreview).toBeNull();
+  });
+
+  it("answers CSV and Excel table export requests with a download button", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Скинь мне Excel таблицу лидов",
+      threadId: "thread-csv-export",
+      messageId: "message-csv-export"
+    });
+
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.response).toContain("CSV");
+    expect(result.responseButtons).toEqual([
+      { label: "Download CSV", action: "download_csv", url: "/exports/leads" }
+    ]);
   });
 
   it("answers selected KP-ready lead questions with shared lead actions", () => {
