@@ -245,7 +245,7 @@ export function AssistantDrawer() {
               placeholder={
                 history.length === 0
                   ? "Send text, attach photos/PDFs, or answer onboarding. On mobile, use keyboard dictation."
-                  : "Ask about leads or add source material. On mobile, use keyboard dictation."
+                  : "Ask about leads, attach photos/PDFs, or add source material. On mobile, use keyboard dictation."
               }
             />
             <div className="mt-2 flex items-center justify-between gap-2">
