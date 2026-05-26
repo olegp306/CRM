@@ -72,4 +72,41 @@ describe("telegram polling", () => {
       ).map((message) => message.text)
     ).toEqual(["[Telegram PDF attachment: lead.pdf]"]);
   });
+
+  it("accepts allowed Telegram voice messages as source material", () => {
+    expect(
+      createAllowedTelegramMessages(
+        [
+          {
+            update_id: 50,
+            message: {
+              message_id: 501,
+              date: 1779299000,
+              chat: { id: 12345 },
+              from: { id: 7, first_name: "Oleg", username: "olegp" },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg", duration: 18 }
+            }
+          }
+        ],
+        new Set(["12345"])
+      )
+    ).toEqual([
+      expect.objectContaining({
+        updateId: 50,
+        messageId: 501,
+        chatId: "12345",
+        text: "[Telegram audio attachment: voice-file]",
+        authorName: "Oleg",
+        authorUsername: "olegp",
+        attachments: [
+          expect.objectContaining({
+            kind: "audio",
+            fileId: "voice-file",
+            fileName: "telegram-voice-501.ogg",
+            mimeType: "audio/ogg"
+          })
+        ]
+      })
+    ]);
+  });
 });

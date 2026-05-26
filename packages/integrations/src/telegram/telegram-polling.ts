@@ -12,6 +12,12 @@ export type TelegramUpdate = {
     chat: {
       id: number | string;
     };
+    from?: {
+      id: number | string;
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+    };
     text?: string;
     caption?: string;
     photo?: Array<{
@@ -24,6 +30,17 @@ export type TelegramUpdate = {
       file_id: string;
       file_name?: string;
       mime_type?: string;
+    };
+    voice?: {
+      file_id: string;
+      mime_type?: string;
+      duration?: number;
+    };
+    audio?: {
+      file_id: string;
+      file_name?: string;
+      mime_type?: string;
+      duration?: number;
     };
     reply_to_message?: {
       message_id: number;
@@ -81,6 +98,7 @@ export function createAllowedTelegramMessages(updates: TelegramUpdate[], allowed
         chatId,
         text,
         receivedAt: new Date(message.date * 1000).toISOString(),
+        ...createTelegramAuthor(message),
         ...(attachments.length > 0 ? { attachments } : {})
       }
     ];
@@ -212,7 +230,34 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
     });
   }
 
+  if (message.voice) {
+    attachments.push({
+      kind: "audio",
+      fileId: message.voice.file_id,
+      fileName: `telegram-voice-${message.message_id}.ogg`,
+      mimeType: message.voice.mime_type ?? "audio/ogg"
+    });
+  }
+
+  if (message.audio) {
+    attachments.push({
+      kind: "audio",
+      fileId: message.audio.file_id,
+      fileName: message.audio.file_name ?? `telegram-audio-${message.message_id}.ogg`,
+      mimeType: message.audio.mime_type ?? "application/octet-stream"
+    });
+  }
+
   return attachments;
+}
+
+function createTelegramAuthor(message: NonNullable<TelegramUpdate["message"]>): Pick<AllowedTelegramMessage, "authorName" | "authorUsername"> {
+  const authorName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ").trim();
+
+  return {
+    ...(authorName ? { authorName } : {}),
+    ...(message.from?.username ? { authorUsername: message.from.username } : {})
+  };
 }
 
 function createTelegramLeadText(text: string, attachments: TelegramPendingAttachment[]): string {
@@ -221,6 +266,10 @@ function createTelegramLeadText(text: string, attachments: TelegramPendingAttach
     .map((attachment) => {
       if (attachment.kind === "photo") {
         return `[Telegram image attachment: ${attachment.fileId}]`;
+      }
+
+      if (attachment.kind === "audio") {
+        return `[Telegram audio attachment: ${attachment.fileId}]`;
       }
 
       return `[Telegram PDF attachment: ${attachment.fileName ?? attachment.fileId}]`;

@@ -17,6 +17,7 @@ import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, createAssistantPrismaRepository, prisma as defaultPrisma } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
+import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
 import {
   createLeadDraftFromTelegramMessage,
   createOpenAiLeadParserClient,
@@ -110,6 +111,7 @@ export type TelegramWorkerConfig = {
   telegramDraftStore?: TelegramLeadDraftSessionStore;
   generateKpDocument?: (input: TelegramGenerateKpDocumentInput) => Promise<TelegramGeneratedKpDocumentRecord>;
   saveAuditEvent?: (event: AssistantAuditEventDraft) => void | Promise<void>;
+  audioTranscriber?: TelegramAudioTranscriber;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -479,6 +481,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     });
     const draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
 
+    if (!repliedLead && shouldAskClarifyingQuestionForAudio(draft, hydratedMessage)) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramAmbiguousAudioClarificationMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     if (repliedLead) {
       if (!client.lead.update || !repliedLead.id) {
         await sendTelegramMessage({
@@ -746,6 +759,10 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     }).create,
     saveAuditEvent: createAssistantPrismaRepository(defaultPrisma).saveAuditEvent,
     kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo"),
+    audioTranscriber: createOpenAiAudioTranscriber({
+      apiKey,
+      model: env.OPENAI_AUDIO_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe"
+    }),
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: env.OPENAI_MODEL ?? "gpt-4o-mini"
@@ -805,23 +822,35 @@ export async function runTelegramWorkerLoopFromEnv(env = process.env): Promise<T
 }
 
 async function hydrateTelegramLeadMessage(message: AllowedTelegramMessage, config: TelegramWorkerConfig): Promise<TelegramLeadMessage> {
-  if (!message.attachments?.length) {
-    return {
+  const base = {
     chatId: message.chatId,
     messageId: message.messageId,
     sourceMessageIds: "sourceMessageIds" in message ? (message.sourceMessageIds as number[]) : [message.messageId],
     receivedAt: message.receivedAt,
-    text: message.text
+    authorName: message.authorName,
+    authorUsername: message.authorUsername
+  };
+
+  if (!message.attachments?.length) {
+    return {
+      ...base,
+      text: appendTelegramAuthorLine(message.text, message)
     };
   }
 
+  const attachments = await Promise.all(message.attachments.map((attachment) => downloadTelegramAttachment(attachment, config)));
+  const text = [
+    message.text,
+    createTelegramAudioTranscriptText(attachments),
+    createTelegramAuthorLine(message)
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
   return {
-    chatId: message.chatId,
-    messageId: message.messageId,
-    sourceMessageIds: "sourceMessageIds" in message ? (message.sourceMessageIds as number[]) : [message.messageId],
-    receivedAt: message.receivedAt,
-    text: message.text,
-    attachments: await Promise.all(message.attachments.map((attachment) => downloadTelegramAttachment(attachment, config)))
+    ...base,
+    attachments,
+    text
   };
 }
 
@@ -849,12 +878,53 @@ async function downloadTelegramAttachment(
     throw new Error(`Telegram file download failed: ${fileResponse.status} ${fileResponse.statusText}`);
   }
 
-  return {
+  const base64 = Buffer.from(await fileResponse.arrayBuffer()).toString("base64");
+  const downloaded = {
     kind: attachment.kind,
     mimeType: attachment.mimeType,
     fileName: attachment.fileName,
-    base64: Buffer.from(await fileResponse.arrayBuffer()).toString("base64")
+    base64
   };
+
+  if (attachment.kind !== "audio" || !config.audioTranscriber) {
+    return downloaded;
+  }
+
+  const transcript = await config.audioTranscriber.transcribe({
+    base64,
+    mimeType: attachment.mimeType,
+    fileName: attachment.fileName ?? "telegram-audio.ogg",
+    language: "ru"
+  });
+
+  return {
+    ...downloaded,
+    transcript: transcript.text
+  };
+}
+
+function createTelegramAudioTranscriptText(attachments: TelegramLeadAttachment[]): string {
+  return attachments
+    .map((attachment, index) => {
+      if (attachment.kind !== "audio" || !attachment.transcript?.trim()) {
+        return "";
+      }
+
+      return `Audio transcript ${index + 1} (${attachment.fileName ?? "telegram-audio"}):\n${attachment.transcript.trim()}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function appendTelegramAuthorLine(text: string, message: Pick<AllowedTelegramMessage, "authorName" | "authorUsername">): string {
+  return [text, createTelegramAuthorLine(message)].filter(Boolean).join("\n\n");
+}
+
+function createTelegramAuthorLine(message: Pick<AllowedTelegramMessage, "authorName" | "authorUsername">): string {
+  const username = message.authorUsername ? `@${message.authorUsername}` : "";
+  const author = [message.authorName, username ? `(${username})` : ""].filter(Boolean).join(" ").trim();
+
+  return author ? `Author: ${author}` : "";
 }
 
 function defaultSleep(intervalMs: number): Promise<void> {
@@ -1173,6 +1243,30 @@ function createTelegramLeadDraftMessage(session: TelegramLeadDraftSession): stri
     `Missing for KP: ${kpStatus.missing.join(", ")}`,
     "",
     "Send the missing details in the next message. I will add them to this draft."
+  ].join("\n");
+}
+
+function shouldAskClarifyingQuestionForAudio(
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  message: TelegramLeadMessage
+): boolean {
+  const hasAudio = message.attachments?.some((attachment) => attachment.kind === "audio") ?? false;
+
+  if (!hasAudio) {
+    return false;
+  }
+
+  const hasCoreLeadSignal = Boolean(draft.clientName?.trim() || draft.requestType?.trim() || draft.projectAddress?.trim());
+  const missingCoreFields = ["clientName", "requestType", "projectAddress"].filter((field) => draft.missingData.includes(field));
+
+  return !hasCoreLeadSignal && missingCoreFields.length >= 2;
+}
+
+function createTelegramAmbiguousAudioClarificationMessage(): string {
+  return [
+    "I listened to the audio, but I am not sure what action you want.",
+    "Should I create a new lead, update an existing lead, or save this as feedback?",
+    "You can reply with: new lead, update lead, or feedback."
   ].join("\n");
 }
 
