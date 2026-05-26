@@ -14,6 +14,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (isPersistedFeedbackIntent(intent)) {
+    return {
+      intent,
+      shouldPersistFeedback: true,
+      feedbackType: intent,
+      buttons: [],
+      text: "I saved this as product feedback for review."
+    };
+  }
+
   if (isLeadSourceMaterial(message)) {
     return {
       intent: "lead_intake",
@@ -24,16 +34,13 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
-  if (intent === "feature_request" || intent === "bug_report" || intent === "ux_feedback" || intent === "support_request") {
+  if (intent === "support_request") {
     return {
       intent,
-      shouldPersistFeedback: intent !== "support_request",
-      feedbackType: intent === "support_request" ? undefined : intent,
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
       buttons: [],
-      text:
-        intent === "support_request"
-          ? "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
-          : "I saved this as product feedback for review."
+      text: "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
     };
   }
 
@@ -54,6 +61,10 @@ function isHelpMessage(content: string, intent: string): boolean {
   }
 
   return intent === "support_request" && /(who are you|what can you do|кто ты|что умеешь)/i.test(content);
+}
+
+function isPersistedFeedbackIntent(intent: string): intent is "feature_request" | "bug_report" | "ux_feedback" {
+  return intent === "feature_request" || intent === "bug_report" || intent === "ux_feedback";
 }
 
 function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {

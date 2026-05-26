@@ -103,6 +103,20 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("source references");
   });
 
+  it("keeps neutral source material with attachments as lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Please review this client request",
+      attachments: [{ id: "photo-1", kind: "photo", fileName: "request.jpg", mimeType: "image/jpeg", base64: "abcd" }]
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
   it("treats clear English lead source material as lead intake", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
@@ -160,6 +174,33 @@ describe("assistant channel engine", () => {
       ...baseMessage,
       channel: "web",
       content: "Add lead button is confusing"
+    });
+
+    expect(result.intent).toBe("ux_feedback");
+    expect(result.shouldPersistFeedback).toBe(true);
+    expect(result.feedbackType).toBe("ux_feedback");
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("keeps add lead button bug reports with screenshots as persisted feedback", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Add lead button is broken",
+      attachments: [{ id: "screenshot-1", kind: "photo", fileName: "broken-button.png", mimeType: "image/png", base64: "abcd" }]
+    });
+
+    expect(result.intent).toBe("bug_report");
+    expect(result.shouldPersistFeedback).toBe(true);
+    expect(result.feedbackType).toBe("bug_report");
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("keeps create lead button UX complaints as persisted feedback", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "Create lead button is confusing"
     });
 
     expect(result.intent).toBe("ux_feedback");
