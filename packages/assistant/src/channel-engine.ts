@@ -149,7 +149,7 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
   const uploadHint =
     channel === "web"
       ? "In the web app, you can also attach files and photos here. On mobile, use your keyboard microphone for voice dictation."
-      : "In Telegram, reply to a lead card to update that exact lead.";
+      : "In Telegram, you can send text, photos, PDFs, and voice messages. Reply to a lead card to update that exact lead.";
 
   return [
     "Hi, I am Oleg's CRM assistant.",

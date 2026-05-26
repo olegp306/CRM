@@ -329,6 +329,7 @@ Spec coverage:
 - Author metadata when available: Tasks 1 and 3.
 - KP workflow reuse: Tasks 3-4 reuse existing lead/KP path.
 - Clarifying questions below confidence threshold: Task 5.
+- Final robustness addendum: Telegram raw input now retains original audio `file_id` source metadata, transcription failures produce a user-facing resend/text-summary prompt instead of failing the worker, and shared Telegram help explicitly advertises voice messages.
 
 Placeholder scan:
 

@@ -475,6 +475,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     const hydratedMessage = await hydrateTelegramLeadMessage(message, config);
+    if (hasAudioTranscriptionFailure(hydratedMessage)) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramAudioTranscriptionFailureMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     const existingIds = await client.lead.findMany({
       where: { workspaceId: config.workspaceId },
       select: { leadId: true, rawInput: true }
@@ -883,6 +894,7 @@ async function downloadTelegramAttachment(
     kind: attachment.kind,
     mimeType: attachment.mimeType,
     fileName: attachment.fileName,
+    sourceFileId: attachment.fileId,
     base64
   };
 
@@ -890,17 +902,24 @@ async function downloadTelegramAttachment(
     return downloaded;
   }
 
-  const transcript = await config.audioTranscriber.transcribe({
-    base64,
-    mimeType: attachment.mimeType,
-    fileName: attachment.fileName ?? "telegram-audio.ogg",
-    language: "ru"
-  });
+  try {
+    const transcript = await config.audioTranscriber.transcribe({
+      base64,
+      mimeType: attachment.mimeType,
+      fileName: attachment.fileName ?? "telegram-audio.ogg",
+      language: "ru"
+    });
 
-  return {
-    ...downloaded,
-    transcript: transcript.text
-  };
+    return {
+      ...downloaded,
+      transcript: transcript.text
+    };
+  } catch (error) {
+    return {
+      ...downloaded,
+      transcriptError: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 function createTelegramAudioTranscriptText(attachments: TelegramLeadAttachment[]): string {
@@ -914,6 +933,17 @@ function createTelegramAudioTranscriptText(attachments: TelegramLeadAttachment[]
     })
     .filter(Boolean)
     .join("\n\n");
+}
+
+function hasAudioTranscriptionFailure(message: TelegramLeadMessage): boolean {
+  return message.attachments?.some((attachment) => attachment.kind === "audio" && !attachment.transcript?.trim() && attachment.transcriptError) ?? false;
+}
+
+function createTelegramAudioTranscriptionFailureMessage(): string {
+  return [
+    "I received the audio, but I could not transcribe it.",
+    "Please resend the voice message, send a text summary, or add photos/PDFs with the missing details."
+  ].join("\n");
 }
 
 function appendTelegramAuthorLine(text: string, message: Pick<AllowedTelegramMessage, "authorName" | "authorUsername">): string {

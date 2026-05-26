@@ -16,7 +16,9 @@ export type TelegramLeadAttachment = {
   mimeType: string;
   base64: string;
   fileName?: string;
+  sourceFileId?: string;
   transcript?: string;
+  transcriptError?: string;
 };
 
 export type ParsedTelegramLeadInput = {
@@ -115,8 +117,9 @@ function createTelegramAttachmentSummary(attachments: TelegramLeadAttachment[] |
       }
 
       if (attachment.kind === "audio") {
+        const source = attachment.sourceFileId ? `, source ${attachment.sourceFileId}` : "";
         return [
-          `Telegram attachment ${number}: audio (${attachment.fileName ?? "telegram-audio"})`,
+          `Telegram attachment ${number}: audio (${attachment.fileName ?? "telegram-audio"}${source})`,
           attachment.transcript ? `Audio transcript ${number}: ${attachment.transcript}` : ""
         ]
           .filter(Boolean)
