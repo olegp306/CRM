@@ -2,6 +2,7 @@ export * from "./action-preview";
 export * from "./action-execution";
 export * from "./audit-log";
 export * from "./audit-review";
+export * from "./channel-message";
 export * from "./classify-intent";
 export * from "./confirmation-state";
 export * from "./conversation";
