@@ -6,7 +6,12 @@ import {
   type LeadChatSnapshot,
   isLeadChatSourceMaterial
 } from "./lead-chat-orchestrator";
-import { createLeadInteractionNoteSummary, isLeadInteractionNoteCommand } from "./lead-interaction-note";
+import {
+  createLeadInteractionNoteSummary,
+  createLeadNaturalContextSummary,
+  isLeadInteractionNoteCommand,
+  isLeadNaturalContextNote
+} from "./lead-interaction-note";
 import { createReminderHistorySummary, isReminderRequest } from "./lead-reminder";
 
 export function createAssistantChannelResponse(
@@ -28,6 +33,11 @@ export function createAssistantChannelResponse(
   const noteResponse = createLeadInteractionNoteResponse(message);
   if (noteResponse) {
     return noteResponse;
+  }
+
+  const contextNoteResponse = createLeadNaturalContextNoteResponse(message);
+  if (contextNoteResponse) {
+    return contextNoteResponse;
   }
 
   const reminderResponse = createLeadReminderResponse(message);
@@ -127,6 +137,24 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
+  };
+}
+
+function createLeadNaturalContextNoteResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  const leadId = getReferencedLeadId(message);
+  if (!leadId || !isLeadNaturalContextNote(message.content)) {
+    return null;
+  }
+
+  const summary = createLeadNaturalContextSummary(message.content);
+
+  return {
+    intent: "business_process_note",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: createLeadCrmButtons(leadId),
+    normalizedActions: ["open_crm"],
+    text: `Saved this client context to lead ${leadId} history: ${summary}`
   };
 }
 

@@ -269,6 +269,26 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("L-2026-004");
   });
 
+  it("stores natural selected-lead client context as history instead of lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content:
+        "\u0412\u0447\u0435\u0440\u0430 \u0432\u0438\u0434\u0435\u043b\u0438 \u0435\u0433\u043e \u043d\u0430 \u0432\u044b\u0441\u0442\u0430\u0432\u043a\u0435, \u043e\u043d \u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442\u0441\u044f \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437.",
+      context: {
+        ...baseMessage.context,
+        selectedRecordIds: ["L-2026-004"]
+      }
+    });
+
+    expect(result.intent).toBe("business_process_note");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("Saved this client context");
+    expect(result.text).toContain("L-2026-004");
+    expect(result.text).toContain("Client context:");
+  });
+
   it("answers Russian selected-lead status questions with a CRM deep link", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

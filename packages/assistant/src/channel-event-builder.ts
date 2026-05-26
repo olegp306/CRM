@@ -3,7 +3,12 @@ import {
   createMessageReceivedEvent,
   type AssistantChannelEvent
 } from "./channel-event";
-import { createLeadInteractionNoteSummary, isLeadInteractionNoteCommand } from "./lead-interaction-note";
+import {
+  createLeadInteractionNoteSummary,
+  createLeadNaturalContextSummary,
+  isLeadInteractionNoteCommand,
+  isLeadNaturalContextNote
+} from "./lead-interaction-note";
 import { createReminderHistorySummary, isReminderRequest } from "./lead-reminder";
 
 export type CreateInboundMessageChannelEventsInput = {
@@ -53,6 +58,17 @@ export function createInboundMessageChannelEvents({
         messageId,
         leadId,
         summary: createReminderHistorySummary(summary)
+      })
+    );
+  } else if (leadId && isLeadNaturalContextNote(summary)) {
+    events.push(
+      createLeadInteractionNoteEvent({
+        type: "lead_interaction_note",
+        channel,
+        threadId,
+        messageId,
+        leadId,
+        summary: createLeadNaturalContextSummary(summary)
       })
     );
   }

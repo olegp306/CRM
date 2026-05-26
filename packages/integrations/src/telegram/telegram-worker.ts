@@ -8,11 +8,13 @@ import {
   createLeadDraftUpdatedEvent,
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
+  createLeadNaturalContextSummary,
   createMessageReceivedEvent,
   createReminderHistorySummary,
   decideIncomingLeadMatch,
   decideLeadFlow,
   isLeadInteractionNoteCommand,
+  isLeadNaturalContextNote,
   isReminderRequest,
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
@@ -381,11 +383,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         )
       : null;
 
-    if (repliedLead && (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text))) {
+    if (repliedLead && (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text) || isLeadNaturalContextNote(message.text))) {
       const isExplicitNote = isLeadInteractionNoteCommand(message.text);
+      const isReminder = !isExplicitNote && isReminderRequest(message.text);
       const summary = isExplicitNote
         ? createLeadInteractionNoteSummary(message.text)
-        : createReminderHistorySummary(message.text);
+        : isReminder
+          ? createReminderHistorySummary(message.text)
+          : createLeadNaturalContextSummary(message.text);
       await saveTelegramChannelEvent(
         config,
         message,
@@ -403,7 +408,9 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: isExplicitNote
           ? `Saved this note to lead <b>${escapeHtml(repliedLead.leadId)}</b> history.`
-          : `Saved this reminder to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`,
+          : isReminder
+            ? `Saved this reminder to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`
+            : `Saved this client context to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`,
         parseMode: "HTML",
         replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
