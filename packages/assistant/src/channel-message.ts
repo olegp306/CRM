@@ -39,7 +39,17 @@ export type AssistantChannelMessage = {
 export type AssistantChannelResponseButton = {
   label: string;
   url?: string;
-  action?: "confirm" | "cancel" | "open_upload" | "open_lead" | "send_kp" | "mark_kp_sent" | "undo_kp_sent";
+  action?:
+    | "confirm"
+    | "cancel"
+    | "open_upload"
+    | "open_lead"
+    | "open_crm"
+    | "open_pdf"
+    | "download_doc"
+    | "send_kp"
+    | "mark_kp_sent"
+    | "undo_kp_sent";
 };
 
 export type AssistantChannelResponse = {
@@ -57,5 +67,8 @@ export type AssistantChannelResponse = {
     | "other";
   feedbackType?: "support_request" | "bug_report" | "feature_request" | "ux_feedback" | "permission_blocked";
   buttons: AssistantChannelResponseButton[];
+  normalizedActions?: Array<
+    "open_crm" | "open_pdf" | "download_doc" | "send_kp" | "mark_kp_sent" | "undo_kp_sent"
+  >;
   shouldPersistFeedback: boolean;
 };

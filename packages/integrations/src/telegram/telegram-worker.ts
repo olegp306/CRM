@@ -1,4 +1,4 @@
-import { createAssistantChannelResponse } from "@app/assistant";
+import { createAssistantChannelResponse, isNewLeadCommand } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
@@ -725,7 +725,7 @@ function isTelegramNewLeadCommand(message: Pick<AllowedTelegramMessage, "text" |
     return false;
   }
 
-  return /^\/(newlead|new_lead|lead)(@\w+)?$/i.test(text) || /^new lead$/i.test(text);
+  return isNewLeadCommand(text.replace(/^\/([a-z_]+)@\w+/i, "/$1"));
 }
 
 function isTelegramKpSentUndoCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {

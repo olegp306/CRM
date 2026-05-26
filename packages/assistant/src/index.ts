@@ -11,6 +11,7 @@ export * from "./context";
 export * from "./feedback-item";
 export * from "./feedback-triage";
 export * from "./lead-channel-intake";
+export * from "./lead-chat-orchestrator";
 export * from "./memory-repository";
 export * from "./openai-provider";
 export * from "./onboarding";
