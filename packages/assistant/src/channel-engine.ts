@@ -24,6 +24,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (isPrioritySupportRequest(message.content, intent)) {
+    return {
+      intent,
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      text: "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+    };
+  }
+
   if (isLeadSourceMaterial(message)) {
     return {
       intent: "lead_intake",
@@ -65,6 +75,10 @@ function isHelpMessage(content: string, intent: string): boolean {
 
 function isPersistedFeedbackIntent(intent: string): intent is "feature_request" | "bug_report" | "ux_feedback" {
   return intent === "feature_request" || intent === "bug_report" || intent === "ux_feedback";
+}
+
+function isPrioritySupportRequest(content: string, intent: string): boolean {
+  return intent === "support_request" && /\b(?:help|support|status|what(?:'s| is)\s+the\s+status|where\s+is|check|update)\b/i.test(content);
 }
 
 function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {

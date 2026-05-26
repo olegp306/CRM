@@ -222,6 +222,22 @@ describe("assistant channel engine", () => {
     expect(result.buttons).toEqual([]);
   });
 
+  it("keeps lead status questions with screenshots as support requests", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "What is the status of lead L-2026-004?",
+      attachments: [{ id: "screenshot-1", kind: "photo", fileName: "lead-status.png", mimeType: "image/png", base64: "abcd" }]
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.intent).not.toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.feedbackType).toBeUndefined();
+    expect(result.buttons).toEqual([]);
+    expect(result.buttons).not.toContainEqual({ label: "Create lead", action: "confirm" });
+  });
+
   it.each(["lead", "client", "address", "BGF"])("does not treat the single word %s as lead intake", (content) => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
