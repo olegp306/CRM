@@ -1,9 +1,10 @@
 "use client";
 
 import { confirmAssistantActionAction, submitAssistantMessageAction, submitOnboardingAssistantMessageAction } from "@/app/(app)/assistant/actions";
-import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantSubmissionResult } from "@app/assistant";
+import { createAssistantAttachmentFromFile } from "@/app/(app)/assistant/upload-source-material";
+import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantChannelAttachment, type AssistantSubmissionResult } from "@app/assistant";
 import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantConversationEntry } from "@app/assistant";
-import { MessageSquareText, Sparkles, X } from "lucide-react";
+import { MessageSquareText, Mic, Paperclip, Sparkles, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { getAssistantExecutionLabel } from "./assistant-execution-label";
@@ -22,9 +23,17 @@ export function AssistantDrawer() {
   const [executionSummary, setExecutionSummary] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [savedSummary, setSavedSummary] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AssistantChannelAttachment[]>([]);
   const latestResult = history.length > 0 ? result : null;
   const onboardingMessage = createOnboardingAssistantMessage();
   const hasUnreadOnboarding = !open && history.length === 0;
+
+  async function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    const nextAttachments = await Promise.all(files.map(createAssistantAttachmentFromFile));
+    setAttachments((current) => [...current, ...nextAttachments]);
+    event.target.value = "";
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,6 +92,7 @@ export function AssistantDrawer() {
       setConfirmation("idle");
       setExecutionSummary(null);
       setText("");
+      setAttachments([]);
     } finally {
       setSubmitting(false);
     }
@@ -232,8 +242,32 @@ export function AssistantDrawer() {
               value={text}
               onChange={(event) => setText(event.target.value)}
               className="min-h-24 w-full resize-none rounded-lg border border-border p-3 text-sm outline-none focus:ring-2 focus:ring-foreground/15"
-              placeholder={history.length === 0 ? "Answer the onboarding questions here in one message." : "Type here. On mobile, use your keyboard dictation microphone."}
+              placeholder={
+                history.length === 0
+                  ? "Send text, attach photos/PDFs, or answer onboarding. On mobile, use keyboard dictation."
+                  : "Ask about leads or add source material. On mobile, use keyboard dictation."
+              }
             />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold">
+                <Paperclip aria-hidden="true" className="h-4 w-4" />
+                Attach
+                <input type="file" multiple accept="image/*,.pdf,.docx,.txt" onChange={handleFilesSelected} className="sr-only" />
+              </label>
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Mic aria-hidden="true" className="h-4 w-4" />
+                On mobile, use keyboard dictation.
+              </span>
+            </div>
+            {attachments.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <span key={attachment.id} className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {attachment.fileName}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <button
               type="submit"
               disabled={!text.trim() || submitting}
