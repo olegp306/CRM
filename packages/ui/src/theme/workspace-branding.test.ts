@@ -10,18 +10,18 @@ describe("createWorkspaceThemeStyle", () => {
 
   it("adds dark theme color tokens", () => {
     expect(createWorkspaceThemeStyle({ primaryColor: "#2563eb", themePreference: "dark" })).toMatchObject({
-      "--background": "18 18 18",
-      "--surface": "31 31 31",
-      "--foreground": "245 245 244",
+      "--background": "18 20 19",
+      "--surface": "29 32 31",
+      "--foreground": "236 241 238",
       "--primary": "37 99 235"
     });
   });
 
   it("adds warm theme color tokens", () => {
     expect(createWorkspaceThemeStyle({ primaryColor: "#92400e", themePreference: "warm" })).toMatchObject({
-      "--background": "252 247 240",
-      "--surface": "255 251 245",
-      "--foreground": "41 33 27",
+      "--background": "246 248 243",
+      "--surface": "255 255 252",
+      "--foreground": "31 37 32",
       "--primary": "146 64 14"
     });
   });

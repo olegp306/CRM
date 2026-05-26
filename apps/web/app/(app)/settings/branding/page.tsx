@@ -3,9 +3,9 @@ import { getWorkspaceSession } from "../../../workspace-session";
 import { updateBrandingSettings } from "./actions";
 
 const themeOptions = [
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
-  { id: "warm", label: "Warm" }
+  { id: "light", label: "Studio", swatches: ["bg-[#f8fafa]", "bg-[#0f766e]", "bg-[#4f5b59]"] },
+  { id: "dark", label: "Nocturne", swatches: ["bg-[#121413]", "bg-[#84ccbe]", "bg-[#a7b1ad]"] },
+  { id: "warm", label: "Sage", swatches: ["bg-[#f6f8f3]", "bg-[#3f795d]", "bg-[#5b6858]"] }
 ] as const;
 
 export default async function BrandingSettingsPage() {
@@ -60,7 +60,14 @@ export default async function BrandingSettingsPage() {
                   defaultChecked={session.themePreference === theme.id}
                   className="sr-only"
                 />
-                {theme.label}
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-flex overflow-hidden rounded-full border border-border">
+                    {theme.swatches.map((swatch) => (
+                      <span key={swatch} className={`h-3 w-3 ${swatch}`} />
+                    ))}
+                  </span>
+                  {theme.label}
+                </span>
               </label>
             ))}
           </div>

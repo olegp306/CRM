@@ -77,7 +77,8 @@ export function createAssistantSubmissionResult({
         channelResponse,
         context,
         threadId,
-        messageId
+        messageId,
+        attachments: attachments ?? []
       });
     }
 
@@ -128,7 +129,8 @@ export function createAssistantSubmissionResult({
     channelResponse,
     context,
     threadId,
-    messageId
+    messageId,
+    attachments: attachments ?? []
   });
 }
 
@@ -138,7 +140,8 @@ export function createAssistantSubmissionResultFromChannelResponse({
   channelResponse,
   context,
   threadId,
-  messageId
+  messageId,
+  attachments = []
 }: {
   thread: AssistantThreadDraft;
   message: AssistantMessageDraft;
@@ -146,10 +149,11 @@ export function createAssistantSubmissionResultFromChannelResponse({
   context: AssistantContext;
   threadId: string;
   messageId: string;
+  attachments?: AssistantChannelAttachment[];
 }): AssistantSubmissionResult {
   let feedback: FeedbackItemDraft | null = null;
   const actionPreview = canUseAssistantActionMode(context.role)
-    ? createChannelActionPreview(channelResponse, message.content)
+    ? createChannelActionPreview(channelResponse, message.content, attachments)
     : null;
 
   if (channelResponse.shouldPersistFeedback) {
@@ -181,7 +185,11 @@ export function createAssistantSubmissionResultFromChannelResponse({
   };
 }
 
-function createChannelActionPreview(channelResponse: AssistantChannelResponse, sourceText: string): ActionPreview | null {
+function createChannelActionPreview(
+  channelResponse: AssistantChannelResponse,
+  sourceText: string,
+  attachments: AssistantChannelAttachment[]
+): ActionPreview | null {
   const hasConfirmButton = channelResponse.buttons.some((button) => button.action === "confirm");
 
   if (channelResponse.intent !== "lead_intake" || !hasConfirmButton) {
@@ -191,8 +199,22 @@ function createChannelActionPreview(channelResponse: AssistantChannelResponse, s
   return createActionPreview({
     actionType: "create_lead",
     summary: "Create lead from assistant source material",
-    changes: [{ field: "lead.sourceText", from: null, to: sourceText }]
+    changes: [{ field: "lead.sourceText", from: null, to: appendAttachmentSummary(sourceText, attachments) }]
   });
+}
+
+function appendAttachmentSummary(sourceText: string, attachments: AssistantChannelAttachment[]): string {
+  if (attachments.length === 0) {
+    return sourceText;
+  }
+
+  return [
+    sourceText,
+    ...attachments.map((attachment, index) => {
+      const kind = attachment.kind.toUpperCase();
+      return `Web attachment ${index + 1}: ${kind} (${attachment.fileName || attachment.id})`;
+    })
+  ].join("\n");
 }
 
 function canUseAssistantActionMode(role: string): boolean {

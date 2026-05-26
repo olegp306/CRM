@@ -93,7 +93,13 @@ describe("assistant submission orchestration", () => {
     expect(result.actionPreview).toMatchObject({
       actionType: "create_lead",
       summary: "Create lead from assistant source material",
-      changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel from this source material" }]
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Create lead Anna Beispiel from this source material\nWeb attachment 1: PDF (brief.pdf)"
+        }
+      ]
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
@@ -117,6 +123,35 @@ describe("assistant submission orchestration", () => {
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();
     expect(result.responseButtons).toEqual([{ label: "Create lead", action: "confirm" }]);
+  });
+
+  it("keeps attachment-only source references in the lead preview", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Please review this source material and create a lead if the data is sufficient.",
+      threadId: "thread-source-only",
+      messageId: "message-source-only",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "photo",
+          fileName: "site.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    });
+
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Please review this source material and create a lead if the data is sufficient.\nWeb attachment 1: PHOTO (site.jpg)"
+        }
+      ]
+    });
   });
 
   it("previews schedule follow-up actions when the request asks for a reminder", () => {

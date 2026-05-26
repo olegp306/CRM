@@ -199,7 +199,13 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.actionPreview).toMatchObject({
       actionType: "create_lead",
       summary: "Create lead from assistant source material",
-      changes: [{ field: "lead.sourceText", from: null, to: "Create lead Anna Beispiel from this source material" }]
+      changes: [
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Create lead Anna Beispiel from this source material\nWeb attachment 1: PDF (brief.pdf)"
+        }
+      ]
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.feedback).toBeNull();

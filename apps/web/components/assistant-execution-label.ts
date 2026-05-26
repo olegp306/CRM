@@ -22,8 +22,12 @@ export function getAssistantExecutionLabel(execution: ExecuteAssistantActionResu
 }
 
 export function getAssistantExecutionButtons(execution: ExecuteAssistantActionResult): AssistantExecutionButton[] {
-  if ("leadId" in execution && !("actionType" in execution)) {
+  if ("leadId" in execution) {
     const buttons: AssistantExecutionButton[] = [{ label: "CRM", url: `/leads?leadId=${encodeURIComponent(execution.leadId)}` }];
+
+    if ("actionType" in execution) {
+      return buttons;
+    }
 
     if (execution.pdfAttachmentId) {
       buttons.push({ label: "PDF", url: `/documents/attachments/${encodeURIComponent(execution.pdfAttachmentId)}` });

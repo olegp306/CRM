@@ -85,7 +85,8 @@ export async function createOpenAIAssistantSubmissionResult(
       channelResponse: deterministicChannelResponse,
       context: input.context,
       threadId: input.threadId,
-      messageId: input.messageId
+      messageId: input.messageId,
+      attachments: input.attachments ?? []
     });
   }
 
@@ -99,7 +100,8 @@ export async function createOpenAIAssistantSubmissionResult(
         channelResponse: deterministicChannelResponse,
         context: input.context,
         threadId: input.threadId,
-        messageId: input.messageId
+        messageId: input.messageId,
+        attachments: input.attachments ?? []
       });
     }
 
@@ -150,7 +152,8 @@ export async function createOpenAIAssistantSubmissionResult(
     channelResponse: deterministicChannelResponse,
     context: input.context,
     threadId: input.threadId,
-    messageId: input.messageId
+    messageId: input.messageId,
+    attachments: input.attachments ?? []
   });
 }
 

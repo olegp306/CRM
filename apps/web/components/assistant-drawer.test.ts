@@ -69,4 +69,26 @@ describe("getAssistantExecutionButtons", () => {
       })
     ).toEqual([]);
   });
+
+  it("creates a CRM deep link after KP sent lead actions", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        actionType: "mark_kp_sent",
+        leadId: "L-2026-004",
+        recordId: "lead-record-4"
+      })
+    ).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+  });
+
+  it("creates a CRM deep link after KP sent undo lead actions", () => {
+    expect(
+      getAssistantExecutionButtons({
+        status: "executed",
+        actionType: "undo_kp_sent",
+        leadId: "L-2026-004",
+        recordId: "lead-record-4"
+      })
+    ).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+  });
 });

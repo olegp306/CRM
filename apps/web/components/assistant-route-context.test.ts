@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getAssistantResponseButtonUiAction, getAssistantSelectedRecordIds, shouldUseOnboardingAssistantAction } from "./assistant-route-context";
+import {
+  getAssistantResponseButtonUiAction,
+  getAssistantSelectedRecordIds,
+  getAssistantSubmitContent,
+  isAssistantSubmitDisabled,
+  shouldUseOnboardingAssistantAction
+} from "./assistant-route-context";
 
 describe("getAssistantSelectedRecordIds", () => {
   it("captures the deep-linked lead as the selected assistant record on the leads page", () => {
@@ -34,6 +40,23 @@ describe("getAssistantResponseButtonUiAction", () => {
 
   it("maps cancel response buttons to cancellation", () => {
     expect(getAssistantResponseButtonUiAction({ label: "Cancel", action: "cancel" })).toBe("cancel");
+  });
+});
+
+describe("assistant submit source content", () => {
+  it("keeps typed text as the submitted content", () => {
+    expect(getAssistantSubmitContent("Create lead from this client request", 1)).toBe("Create lead from this client request");
+  });
+
+  it("uses source-material copy for attachment-only submissions", () => {
+    expect(getAssistantSubmitContent("   ", 1)).toBe("Please review this source material and create a lead if the data is sufficient.");
+  });
+
+  it("disables submit only when there is no text and no attachment", () => {
+    expect(isAssistantSubmitDisabled({ content: "", attachmentCount: 0, submitting: false })).toBe(true);
+    expect(isAssistantSubmitDisabled({ content: "", attachmentCount: 1, submitting: false })).toBe(false);
+    expect(isAssistantSubmitDisabled({ content: "Hi", attachmentCount: 0, submitting: false })).toBe(false);
+    expect(isAssistantSubmitDisabled({ content: "Hi", attachmentCount: 1, submitting: true })).toBe(true);
   });
 });
 

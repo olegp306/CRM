@@ -5,6 +5,7 @@ type AssistantResponseButtonLike = {
 };
 
 export type AssistantResponseButtonUiAction = "confirm" | "cancel" | "open_upload" | "link" | "none";
+const attachmentOnlySourceMaterialContent = "Please review this source material and create a lead if the data is sufficient.";
 
 export function getAssistantSelectedRecordIds(pathname: string, searchParams: URLSearchParams): string[] {
   if (pathname !== "/leads") {
@@ -25,6 +26,23 @@ export function getAssistantResponseButtonUiAction(button: AssistantResponseButt
   }
 
   return "none";
+}
+
+export function getAssistantSubmitContent(content: string, attachmentCount: number): string {
+  const trimmed = content.trim();
+  return trimmed || (attachmentCount > 0 ? attachmentOnlySourceMaterialContent : "");
+}
+
+export function isAssistantSubmitDisabled({
+  content,
+  attachmentCount,
+  submitting
+}: {
+  content: string;
+  attachmentCount: number;
+  submitting: boolean;
+}): boolean {
+  return submitting || getAssistantSubmitContent(content, attachmentCount).length === 0;
 }
 
 export function shouldUseOnboardingAssistantAction({

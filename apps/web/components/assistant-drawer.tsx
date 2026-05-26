@@ -11,6 +11,8 @@ import { getAssistantExecutionButtons, getAssistantExecutionLabel, type Assistan
 import {
   getAssistantResponseButtonUiAction,
   getAssistantSelectedRecordIds,
+  getAssistantSubmitContent,
+  isAssistantSubmitDisabled,
   shouldUseOnboardingAssistantAction
 } from "./assistant-route-context";
 import { useWorkspaceSession } from "./workspace-session-provider";
@@ -45,7 +47,9 @@ export function AssistantDrawer() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!text.trim()) {
+    const submittedContent = getAssistantSubmitContent(text, attachments.length);
+
+    if (!submittedContent) {
       return;
     }
 
@@ -64,14 +68,14 @@ export function AssistantDrawer() {
     try {
       const submitAction = shouldUseOnboardingAssistantAction({
         historyLength: history.length,
-        content: text,
+        content: submittedContent,
         attachmentCount: attachments.length
       })
         ? submitOnboardingAssistantMessageAction
         : submitAssistantMessageAction;
       const response = await submitAction({
         context,
-        content: text,
+        content: submittedContent,
         threadId,
         messageId,
         attachments
@@ -352,7 +356,7 @@ export function AssistantDrawer() {
             ) : null}
             <button
               type="submit"
-              disabled={!text.trim() || submitting}
+              disabled={isAssistantSubmitDisabled({ content: text, attachmentCount: attachments.length, submitting })}
               className="mt-2 h-10 w-full rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? "Sending" : "Send"}
