@@ -1,4 +1,5 @@
 import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
+import { createLeadChatActionButtons, createLeadChatActions, type LeadChatAction } from "./lead-action-orchestrator";
 
 export type LeadChatNormalizedAction = "open_crm" | "open_pdf" | "download_doc" | "send_kp" | "mark_kp_sent" | "undo_kp_sent";
 
@@ -58,15 +59,14 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
     }
 
     if (lead.kpReady) {
-      const buttons = createKpReadyButtons(lead);
+      const actions = createLeadChatActions(lead);
+      const buttons = createLeadChatActionButtons(actions);
       return {
         intent: "crm_action",
         shouldPersistFeedback: false,
         feedbackType: undefined,
         buttons,
-        normalizedActions: buttons
-          .map((button) => button.action)
-          .filter((action): action is LeadChatNormalizedAction => isLeadChatNormalizedAction(action)),
+        normalizedActions: actions.map((action) => action.type),
         text: `Lead ${lead.leadId} has enough data for KP. You can open CRM, review PDF, download DOC, send KP, or update the KP sent status.`
       };
     }
@@ -132,42 +132,7 @@ function createLeadCrmButtons(leadId: string): AssistantChannelResponseButton[] 
   return [{ label: "CRM", action: "open_crm", url: `/leads?leadId=${encodeURIComponent(leadId)}` }];
 }
 
-function createKpReadyButtons(lead: LeadChatSnapshot): AssistantChannelResponseButton[] {
-  const buttons: AssistantChannelResponseButton[] = [
-    { label: "CRM", action: "open_crm", url: `/leads?leadId=${encodeURIComponent(lead.leadId)}` }
-  ];
-
-  if (lead.pdfUrl) {
-    buttons.push({ label: "PDF", action: "open_pdf", url: lead.pdfUrl });
-  }
-
-  if (lead.docxUrl) {
-    buttons.push({ label: "DOC", action: "download_doc", url: lead.docxUrl });
-  }
-
-  if (lead.canSendKp) {
-    buttons.push({ label: "Send KP", action: "send_kp" });
-  }
-
-  buttons.push({ label: "Mark KP sent", action: "mark_kp_sent" });
-
-  if (lead.kpSent) {
-    buttons.push({ label: "Undo KP sent", action: "undo_kp_sent" });
-  }
-
-  return buttons;
-}
-
-function isLeadChatNormalizedAction(action: AssistantChannelResponseButton["action"]): action is LeadChatNormalizedAction {
-  return (
-    action === "open_crm" ||
-    action === "open_pdf" ||
-    action === "download_doc" ||
-    action === "send_kp" ||
-    action === "mark_kp_sent" ||
-    action === "undo_kp_sent"
-  );
-}
+type _EnsureLeadChatNormalizedAction = LeadChatAction["type"] extends LeadChatNormalizedAction ? true : never;
 
 function isBareLeadActionRequest(content: string): boolean {
   return (

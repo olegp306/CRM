@@ -128,9 +128,9 @@ describe("lead chat orchestrator", () => {
       { label: "CRM", action: "open_crm", url: "/leads?leadId=L-2026-011" },
       { label: "PDF", action: "open_pdf", url: "/api/kp/L-2026-011.pdf" },
       { label: "DOC", action: "download_doc", url: "/api/kp/L-2026-011.docx" },
-      { label: "Send KP", action: "send_kp" },
+      { label: "Send KP", action: "send_kp", url: "mailto:?subject=KP%20L-2026-011" },
       { label: "Mark KP sent", action: "mark_kp_sent" },
-      { label: "Undo KP sent", action: "undo_kp_sent" }
+      { label: "Undo", action: "undo_kp_sent" }
     ]);
   });
 });

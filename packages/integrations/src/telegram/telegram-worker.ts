@@ -1,4 +1,4 @@
-import { createAssistantChannelResponse, decideLeadFlow, type AssistantChannelMessage } from "@app/assistant";
+import { createAssistantChannelResponse, createLeadChatActions, decideLeadFlow, type AssistantChannelMessage } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
@@ -1261,32 +1261,36 @@ function createTelegramCrmReplyMarkup(
   leadId: string,
   kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string }
 ): unknown | undefined {
-  const trimmedBaseUrl = crmBaseUrl?.trim().replace(/\/$/, "");
-
-  if (!trimmedBaseUrl) {
+  if (!crmBaseUrl?.trim()) {
     return undefined;
   }
 
-  const row: Array<{ text: string; url: string }> = [
+  const actions = createLeadChatActions(
     {
-      text: "CRM",
-      url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
+      leadId,
+      kpReady: true,
+      pdfUrl: isTelegramHttpUrl(kpMail?.pdfUrl) ? kpMail.pdfUrl : undefined,
+      docxUrl: isTelegramHttpUrl(kpMail?.docxUrl) ? kpMail.docxUrl : undefined,
+      canSendKp: Boolean(kpMail?.email?.trim()),
+      clientEmail: kpMail?.email
+    },
+    { crmBaseUrl }
+  );
+  const row = actions.flatMap((action): Array<{ text: string; url: string }> => {
+    switch (action.type) {
+      case "open_crm":
+        return [{ text: "CRM", url: action.url }];
+      case "open_pdf":
+        return [{ text: "PDF", url: action.url }];
+      case "download_doc":
+        return [{ text: "DOC", url: action.url }];
+      case "send_kp":
+        return [{ text: "Send KP", url: action.mailtoUrl }];
+      case "mark_kp_sent":
+      case "undo_kp_sent":
+        return [];
     }
-  ];
-
-  if (isTelegramHttpUrl(kpMail?.pdfUrl)) {
-    row.push({
-      text: "PDF",
-      url: kpMail.pdfUrl
-    });
-  }
-
-  if (isTelegramHttpUrl(kpMail?.docxUrl)) {
-    row.push({
-      text: "DOC",
-      url: kpMail.docxUrl
-    });
-  }
+  });
 
   return {
     inline_keyboard: [row]

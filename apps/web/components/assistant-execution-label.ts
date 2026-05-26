@@ -1,4 +1,4 @@
-import type { ExecuteAssistantActionResult } from "@app/assistant";
+import { createLeadChatActionButtons, createLeadChatActions, type ExecuteAssistantActionResult } from "@app/assistant";
 
 export type AssistantExecutionButton = {
   label: string;
@@ -23,21 +23,20 @@ export function getAssistantExecutionLabel(execution: ExecuteAssistantActionResu
 
 export function getAssistantExecutionButtons(execution: ExecuteAssistantActionResult): AssistantExecutionButton[] {
   if ("leadId" in execution) {
-    const buttons: AssistantExecutionButton[] = [{ label: "CRM", url: `/leads?leadId=${encodeURIComponent(execution.leadId)}` }];
-
     if ("actionType" in execution) {
-      return buttons;
+      return createLeadChatActionButtons(createLeadChatActions({ leadId: execution.leadId })).flatMap((button) =>
+        button.url ? [{ label: button.label, url: button.url }] : []
+      );
     }
 
-    if (execution.pdfAttachmentId) {
-      buttons.push({ label: "PDF", url: `/documents/attachments/${encodeURIComponent(execution.pdfAttachmentId)}` });
-    }
-
-    if (execution.docxAttachmentId) {
-      buttons.push({ label: "DOC", url: `/documents/attachments/${encodeURIComponent(execution.docxAttachmentId)}?download=1` });
-    }
-
-    return buttons;
+    return createLeadChatActionButtons(
+      createLeadChatActions({
+        leadId: execution.leadId,
+        kpReady: true,
+        pdfUrl: execution.pdfAttachmentId ? `/documents/attachments/${encodeURIComponent(execution.pdfAttachmentId)}` : undefined,
+        docxUrl: execution.docxAttachmentId ? `/documents/attachments/${encodeURIComponent(execution.docxAttachmentId)}?download=1` : undefined
+      })
+    ).flatMap((button) => (button.url ? [{ label: button.label, url: button.url }] : []));
   }
 
   return [];

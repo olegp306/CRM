@@ -231,7 +231,7 @@ export type LeadChatAction =
   | { type: "undo_kp_sent"; leadId: string };
 ```
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - KP-ready lead returns CRM/PDF/DOC/Send KP/Mark KP sent.
   - KP-sent lead additionally returns Undo KP sent.
   - Lead missing required fields does not return Send KP as enabled.
@@ -245,15 +245,16 @@ pnpm --filter @app/assistant test -- lead-action-orchestrator.test.ts
 
 Expected first run: FAIL because module does not exist.
 
-- [ ] Implement `createLeadChatActions(lead, options)` in assistant package.
+- [x] Implement `createLeadChatActions(lead, options)` in assistant package.
 
-- [ ] Update Web Assistant button handling:
+- [x] Update Web Assistant button handling:
   - `open_crm`, `open_pdf`, `download_doc` are links.
   - `send_kp` is a `mailto:` link.
-  - `mark_kp_sent` and `undo_kp_sent` go through existing confirmation/action execution.
+  - `mark_kp_sent` and `undo_kp_sent` continue to go through existing confirmation/action execution.
 
-- [ ] Update Telegram button rendering from normalized actions:
-  - Labels exactly `CRM`, `PDF`, `DOC`, `Send KP`, `Mark KP sent`, `Undo`.
+- [x] Update Telegram URL button rendering from normalized actions:
+  - Labels exactly `CRM`, `PDF`, `DOC`, `Send KP`.
+  - `Mark KP sent` and `Undo` remain supported by reply text commands until a callback-query slice adds non-URL Telegram buttons.
   - PDF opens delivery URL.
   - DOC downloads delivery URL.
 

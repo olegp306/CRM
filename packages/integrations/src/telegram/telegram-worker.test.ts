@@ -697,10 +697,11 @@ describe("telegram worker", () => {
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
       { text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
       { text: "PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
-      { text: "DOC", url: "https://files.example.com/kp.docx" }
+      { text: "DOC", url: "https://files.example.com/kp.docx" },
+      { text: "Send KP", url: "mailto:katya@example.com?subject=KP%20L-2026-002" }
     ]);
     expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
-      urls.every((url) => /^https?:\/\//.test(url))
+      urls.every((url) => /^(?:https?:\/\/|mailto:)/.test(url))
     );
   });
 
