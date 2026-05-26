@@ -68,6 +68,43 @@ describe("assistant submission orchestration", () => {
     expect(result.response).toBe("I prepared a create lead preview. Confirm before I execute it.");
   });
 
+  it("routes source-material uploads to lead intake before create lead previews", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Create lead Anna Beispiel from this source material",
+      threadId: "thread-source-upload",
+      messageId: "message-source-upload",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "pdf",
+          fileName: "brief.pdf",
+          mimeType: "application/pdf",
+          base64: "JVBERi0x"
+        }
+      ]
+    });
+
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
+  it("routes clear source-material intake text to lead intake before create lead previews", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Create a lead from this client request with address and BGF",
+      threadId: "thread-source-text",
+      messageId: "message-source-text"
+    });
+
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
   it("previews schedule follow-up actions when the request asks for a reminder", () => {
     const result = createAssistantSubmissionResult({
       context: baseContext,

@@ -68,6 +68,59 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
   });
 
+  it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I prepared a lead creation preview.",
+                  action: {
+                    actionType: "create_lead",
+                    summary: "Create lead from upload",
+                    sourceText: "Create lead Anna Beispiel from this source material"
+                  }
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Create lead Anna Beispiel from this source material",
+        threadId: "thread-source-upload",
+        messageId: "message-source-upload",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "pdf",
+            fileName: "brief.pdf",
+            mimeType: "application/pdf",
+            base64: "JVBERi0x"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
   it("blocks OpenAI-requested actions when the user role lacks permission", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(

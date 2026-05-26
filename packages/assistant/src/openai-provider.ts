@@ -1,11 +1,12 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
-import { createAssistantChannelResponse } from "./channel-engine";
+import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import type { AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
 import type { AssistantSubmissionInput, AssistantSubmissionResult } from "./submission";
-import { createAssistantMessageDraft, createAssistantThreadDraft } from "./thread-message";
+import { createAssistantMessageDraft, createAssistantThreadDraft, type AssistantMessageDraft, type AssistantThreadDraft } from "./thread-message";
 
 export type OpenAIAssistantFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -55,9 +56,31 @@ export async function createOpenAIAssistantSubmissionResult(
     content: trimmedContent,
     context: input.context
   });
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId: input.threadId,
+    messageId: input.messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context: input.context,
+    attachments: input.attachments ?? []
+  };
   const plan = await requestOpenAIPlan(input, config);
 
   if (plan.action) {
+    if (plan.action.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
+      const channelResponse = createAssistantChannelResponse(channelMessage);
+
+      return createResultFromChannelResponse({
+        thread,
+        message,
+        channelResponse,
+        context: input.context,
+        threadId: input.threadId,
+        messageId: input.messageId
+      });
+    }
+
     const actionPreview = createPreviewFromPlan(plan, trimmedContent, input.context);
 
     if (!canUseAssistantActionMode(input.context.role)) {
@@ -97,16 +120,33 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  const channelResponse = createAssistantChannelResponse({
-    channel: "web",
-    threadId: input.threadId,
-    messageId: input.messageId,
-    content: trimmedContent,
-    receivedAt: new Date().toISOString(),
-    context: input.context,
-    attachments: input.attachments ?? []
-  });
+  const channelResponse = createAssistantChannelResponse(channelMessage);
 
+  return createResultFromChannelResponse({
+    thread,
+    message,
+    channelResponse,
+    context: input.context,
+    threadId: input.threadId,
+    messageId: input.messageId
+  });
+}
+
+function createResultFromChannelResponse({
+  thread,
+  message,
+  channelResponse,
+  context,
+  threadId,
+  messageId
+}: {
+  thread: AssistantThreadDraft;
+  message: AssistantMessageDraft;
+  channelResponse: AssistantChannelResponse;
+  context: AssistantContext;
+  threadId: string;
+  messageId: string;
+}): AssistantSubmissionResult {
   let feedback: FeedbackItemDraft | null = null;
 
   if (channelResponse.shouldPersistFeedback) {
@@ -117,12 +157,12 @@ export async function createOpenAIAssistantSubmissionResult(
     }
 
     feedback = createFeedbackItemFromMessage({
-      workspaceId: input.context.workspaceId,
-      sourceThreadId: input.threadId,
-      sourceMessageId: input.messageId,
+      workspaceId: context.workspaceId,
+      sourceThreadId: threadId,
+      sourceMessageId: messageId,
       intent: feedbackType,
-      moduleContext: input.context.module,
-      role: input.context.role
+      moduleContext: context.module,
+      role: context.role
     });
   }
 

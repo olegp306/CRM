@@ -26,7 +26,7 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
 
   if (isPrioritySupportRequest(message.content, intent)) {
     return {
-      intent,
+      intent: "support_request",
       shouldPersistFeedback: false,
       feedbackType: undefined,
       buttons: [],
@@ -81,7 +81,7 @@ function isPrioritySupportRequest(content: string, intent: string): boolean {
   return intent === "support_request" && /\b(?:help|support|status|what(?:'s| is)\s+the\s+status|where\s+is|check|update)\b/i.test(content);
 }
 
-function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {
+export function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {
   if (message.channel !== "web") {
     return false;
   }
@@ -95,9 +95,20 @@ function isLeadSourceMaterial(message: AssistantChannelMessage): boolean {
     return false;
   }
 
+  if (isBareLeadActionRequest(content)) {
+    return false;
+  }
+
   return (
     (hasLeadIntakePhrase(content) && hasLeadRequestOrProposalSignal(content)) ||
     hasMultipleStrongKpSignalsInSourceParagraph(content)
+  );
+}
+
+function isBareLeadActionRequest(content: string): boolean {
+  return (
+    /^\s*(?:help me\s+)?(?:add|create|capture|register|import)\s+(?:a\s+)?lead\b/i.test(content) &&
+    !/\b(?:source material|client request|from this|attached|upload|uploaded|file|pdf|photo)\b/i.test(content)
   );
 }
 

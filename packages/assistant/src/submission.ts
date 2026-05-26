@@ -1,6 +1,6 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
-import { createAssistantChannelResponse } from "./channel-engine";
-import type { AssistantChannelAttachment } from "./channel-message";
+import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import type { AssistantChannelAttachment, AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -49,9 +49,31 @@ export function createAssistantSubmissionResult({
     content: trimmedContent,
     context
   });
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId,
+    messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context,
+    attachments: attachments ?? []
+  };
 
   if (message.intent === "crm_action") {
     const actionPreview = createCrmActionPreview(trimmedContent, context);
+
+    if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
+      const channelResponse = createAssistantChannelResponse(channelMessage);
+
+      return createResultFromChannelResponse({
+        thread,
+        message,
+        channelResponse,
+        context,
+        threadId,
+        messageId
+      });
+    }
 
     if (!canUseAssistantActionMode(context.role)) {
       const permissionBlocked = getPermissionBlockedResponse({
@@ -90,16 +112,33 @@ export function createAssistantSubmissionResult({
     };
   }
 
-  const channelResponse = createAssistantChannelResponse({
-    channel: "web",
-    threadId,
-    messageId,
-    content: trimmedContent,
-    receivedAt: new Date().toISOString(),
-    context,
-    attachments: attachments ?? []
-  });
+  const channelResponse = createAssistantChannelResponse(channelMessage);
 
+  return createResultFromChannelResponse({
+    thread,
+    message,
+    channelResponse,
+    context,
+    threadId,
+    messageId
+  });
+}
+
+function createResultFromChannelResponse({
+  thread,
+  message,
+  channelResponse,
+  context,
+  threadId,
+  messageId
+}: {
+  thread: AssistantThreadDraft;
+  message: AssistantMessageDraft;
+  channelResponse: AssistantChannelResponse;
+  context: AssistantContext;
+  threadId: string;
+  messageId: string;
+}): AssistantSubmissionResult {
   let feedback: FeedbackItemDraft | null = null;
 
   if (channelResponse.shouldPersistFeedback) {
