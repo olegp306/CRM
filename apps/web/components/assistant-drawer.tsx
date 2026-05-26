@@ -92,7 +92,6 @@ export function AssistantDrawer() {
       setConfirmation("idle");
       setExecutionSummary(null);
       setText("");
-      setAttachments([]);
     } finally {
       setSubmitting(false);
     }
@@ -260,12 +259,24 @@ export function AssistantDrawer() {
               </span>
             </div>
             {attachments.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {attachments.map((attachment) => (
-                  <span key={attachment.id} className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                    {attachment.fileName}
-                  </span>
-                ))}
+              <div className="mt-2 grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">Files are staged for the next assistant upload step.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments([])}
+                    className="h-7 shrink-0 rounded-lg border border-border px-2 text-xs font-semibold"
+                  >
+                    Clear files
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((attachment) => (
+                    <span key={attachment.id} className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                      {attachment.fileName}
+                    </span>
+                  ))}
+                </div>
               </div>
             ) : null}
             <button
