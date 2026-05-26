@@ -1,9 +1,10 @@
 "use client";
 
 import { confirmAssistantActionAction, submitAssistantMessageAction, submitOnboardingAssistantMessageAction } from "@/app/(app)/assistant/actions";
-import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantSubmissionResult } from "@app/assistant";
+import { createAssistantAttachmentFromFile } from "@/app/(app)/assistant/upload-source-material";
+import { captureAssistantContext, createOnboardingAssistantMessage, type AssistantChannelAttachment, type AssistantSubmissionResult } from "@app/assistant";
 import { appendAssistantExchange, getAssistantModuleFromRoute, type AssistantConversationEntry } from "@app/assistant";
-import { MessageSquareText, Sparkles, X } from "lucide-react";
+import { MessageSquareText, Mic, Paperclip, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { getAssistantExecutionLabel } from "./assistant-execution-label";
@@ -22,9 +23,17 @@ export function AssistantDrawer() {
   const [executionSummary, setExecutionSummary] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [savedSummary, setSavedSummary] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AssistantChannelAttachment[]>([]);
   const latestResult = history.length > 0 ? result : null;
   const onboardingMessage = createOnboardingAssistantMessage();
   const hasUnreadOnboarding = !open && history.length === 0;
+
+  async function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    const nextAttachments = await Promise.all(files.map(createAssistantAttachmentFromFile));
+    setAttachments((current) => [...current, ...nextAttachments]);
+    event.target.value = "";
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +59,8 @@ export function AssistantDrawer() {
         context,
         content: text,
         threadId,
-        messageId
+        messageId,
+        attachments
       });
       const { result: nextResult, saved } = response;
       const displayUserContent =
@@ -83,6 +93,7 @@ export function AssistantDrawer() {
       setConfirmation("idle");
       setExecutionSummary(null);
       setText("");
+      setAttachments([]);
     } finally {
       setSubmitting(false);
     }
@@ -117,20 +128,17 @@ export function AssistantDrawer() {
         type="button"
         onClick={() => setOpen(true)}
         className="fixed bottom-4 right-4 z-50 inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg transition hover:opacity-90"
-        aria-label="Open Assistant"
-        title="Open Assistant"
+        aria-label={hasUnreadOnboarding ? "Open Assistant, new onboarding message" : "Open Assistant"}
+        title={hasUnreadOnboarding ? "Open Assistant, new onboarding message" : "Open Assistant"}
       >
         <MessageSquareText aria-hidden="true" className="h-4 w-4" />
         Assistant
         {hasUnreadOnboarding ? (
-          <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] font-semibold">
-            <Sparkles aria-hidden="true" className="h-3 w-3" />
-            Onboarding
-          </span>
+          <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-500" aria-hidden="true" />
         ) : null}
       </button>
       {open ? (
-        <aside className="fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-white shadow-xl">
+        <aside className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-white shadow-xl sm:w-[420px]">
           <header className="flex items-start justify-between gap-4 border-b border-border p-4">
             <div>
               <h2 className="text-sm font-semibold">Assistant</h2>
@@ -227,13 +235,49 @@ export function AssistantDrawer() {
               </div>
             )}
           </div>
-          <form onSubmit={handleSubmit} className="border-t border-border p-3">
+          <form onSubmit={handleSubmit} className="border-t border-border p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             <textarea
               value={text}
               onChange={(event) => setText(event.target.value)}
               className="min-h-24 w-full resize-none rounded-lg border border-border p-3 text-sm outline-none focus:ring-2 focus:ring-foreground/15"
-              placeholder={history.length === 0 ? "Answer the onboarding questions here in one message." : "Type here. On mobile, use your keyboard dictation microphone."}
+              placeholder={
+                history.length === 0
+                  ? "Send text, attach photos/PDFs, or answer onboarding. On mobile, use keyboard dictation."
+                  : "Ask about leads, attach photos/PDFs, or add source material. On mobile, use keyboard dictation."
+              }
             />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold">
+                <Paperclip aria-hidden="true" className="h-4 w-4" />
+                Attach
+                <input type="file" multiple accept="image/*,.pdf,.docx,.txt" onChange={handleFilesSelected} className="sr-only" />
+              </label>
+              <span className="inline-flex min-w-0 flex-1 items-center justify-end gap-1 text-right text-xs text-muted-foreground max-[360px]:basis-full max-[360px]:justify-start max-[360px]:text-left">
+                <Mic aria-hidden="true" className="h-4 w-4" />
+                Use mobile dictation.
+              </span>
+            </div>
+            {attachments.length > 0 ? (
+              <div className="mt-2 grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">Files are staged for the next assistant upload step.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments([])}
+                    className="h-7 shrink-0 rounded-lg border border-border px-2 text-xs font-semibold"
+                  >
+                    Clear files
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((attachment) => (
+                    <span key={attachment.id} className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                      {attachment.fileName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <button
               type="submit"
               disabled={!text.trim() || submitting}

@@ -5,12 +5,13 @@ describe("workspace session context", () => {
   it("creates a demo workspace session for the app shell", () => {
     expect(createDemoWorkspaceSession()).toEqual({
       workspaceId: "workspace-demo",
-      workspaceName: "Reyzbikh architect CRM",
+      workspaceName: "Workspace CRM",
       workspaceDescription: "Architecture CRM workspace",
       userId: "user-demo",
       userName: "Demo Admin",
       role: "admin",
-      primaryColor: "#1c1917"
+      primaryColor: "#1c1917",
+      themePreference: "light"
     });
   });
 
@@ -27,6 +28,20 @@ describe("workspace session context", () => {
     });
   });
 
+  it("resolves partial workspace branding overrides on top of the default session", () => {
+    expect(
+      resolveWorkspaceSession({
+        workspaceName: "Acme CRM",
+        themePreference: "dark"
+      })
+    ).toMatchObject({
+      workspaceId: "workspace-demo",
+      workspaceName: "Acme CRM",
+      themePreference: "dark",
+      role: "admin"
+    });
+  });
+
   it("resolves workspace session from request-like values", () => {
     expect(
       resolveWorkspaceSession({
@@ -36,7 +51,8 @@ describe("workspace session context", () => {
         userId: "user-2",
         userName: "Ada Lovelace",
         role: "manager",
-        primaryColor: "#0f766e"
+        primaryColor: "#0f766e",
+        themePreference: "warm"
       })
     ).toEqual({
       workspaceId: "workspace-2",
@@ -45,7 +61,8 @@ describe("workspace session context", () => {
       userId: "user-2",
       userName: "Ada Lovelace",
       role: "manager",
-      primaryColor: "#0f766e"
+      primaryColor: "#0f766e",
+      themePreference: "warm"
     });
   });
 

@@ -192,7 +192,7 @@ describe("telegram worker", () => {
     const sendBody = JSON.parse(String(sendCall[1]?.body));
     expect(sendBody.text).toContain("<b>Missing data</b>: budget");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Open in CRM",
+      text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
   });
@@ -642,9 +642,9 @@ describe("telegram worker", () => {
     expect(finalMessageBody.text).toContain("<b>Pricing branch</b>: standard");
     expect(finalMessageBody.text).toContain("<b>KP document</b>: D-telegram-12345-13");
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
-      { text: "Open in CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
-      { text: "Скачать PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
-      { text: "Скачать DOCX", url: "https://files.example.com/kp.docx" }
+      { text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
+      { text: "PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
+      { text: "DOC", url: "https://files.example.com/kp.docx" }
     ]);
     expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url: string }) => button.url)).toSatisfy((urls: string[]) =>
       urls.every((url) => /^https?:\/\//.test(url))
@@ -1277,7 +1277,57 @@ describe("telegram worker", () => {
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
-    expect(String(sendCall[1]?.body)).toContain("Я умею принимать заявки");
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("I can create and update leads");
+  });
+
+  it("answers /help with the shared assistant capability text", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 11,
+            message: {
+              message_id: 6,
+              date: 1779296460,
+              chat: { id: 12345 },
+              text: "/help"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 11 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("I can create and update leads");
   });
 
   it("sends a friendly onboarding message on start", async () => {
@@ -1326,9 +1376,7 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("CRM-помощник Олега");
-    expect(body.text).toContain("Присылайте первую заявку свободным текстом");
-    expect(body.text).toContain("ждём ваших впечатлений");
+    expect(body.text).toContain("I can create and update leads");
   });
 
   it("skips duplicate Telegram source messages before parsing", async () => {

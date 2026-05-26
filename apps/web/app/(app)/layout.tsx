@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <WorkspaceSessionProvider session={session}>
       <AppChrome
-        primaryStyle={createWorkspaceThemeStyle({ primaryColor: session.primaryColor })}
+        primaryStyle={createWorkspaceThemeStyle({ primaryColor: session.primaryColor, themePreference: session.themePreference })}
         workspaceName={session.workspaceName}
         userName={session.userName}
         appVersion={currentAppMetadata.version}

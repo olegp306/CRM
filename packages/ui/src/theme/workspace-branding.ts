@@ -1,11 +1,35 @@
 export type WorkspaceBrandingInput = {
   primaryColor?: string | null;
+  themePreference?: "light" | "dark" | "warm" | null;
 };
 
-export function createWorkspaceThemeStyle({ primaryColor }: WorkspaceBrandingInput): Record<string, string> {
-  const rgb = primaryColor ? hexToRgb(primaryColor) : null;
+const themeTokens: Record<NonNullable<WorkspaceBrandingInput["themePreference"]>, Record<string, string>> = {
+  light: {},
+  dark: {
+    "--background": "18 18 18",
+    "--surface": "31 31 31",
+    "--foreground": "245 245 244",
+    "--muted": "43 43 43",
+    "--muted-foreground": "168 162 158",
+    "--border": "68 64 60",
+    "--primary-foreground": "255 255 255"
+  },
+  warm: {
+    "--background": "252 247 240",
+    "--surface": "255 251 245",
+    "--foreground": "41 33 27",
+    "--muted": "244 234 222",
+    "--muted-foreground": "105 83 67",
+    "--border": "225 211 196",
+    "--primary-foreground": "255 255 255"
+  }
+};
 
-  return rgb ? { "--primary": `${rgb.r} ${rgb.g} ${rgb.b}` } : {};
+export function createWorkspaceThemeStyle({ primaryColor, themePreference }: WorkspaceBrandingInput): Record<string, string> {
+  const rgb = primaryColor ? hexToRgb(primaryColor) : null;
+  const style = { ...(themePreference ? themeTokens[themePreference] ?? {} : {}) };
+
+  return rgb ? { ...style, "--primary": `${rgb.r} ${rgb.g} ${rgb.b}` } : style;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {

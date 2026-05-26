@@ -68,6 +68,59 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
   });
 
+  it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I prepared a lead creation preview.",
+                  action: {
+                    actionType: "create_lead",
+                    summary: "Create lead from upload",
+                    sourceText: "Create lead Anna Beispiel from this source material"
+                  }
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Create lead Anna Beispiel from this source material",
+        threadId: "thread-source-upload",
+        messageId: "message-source-upload",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "pdf",
+            fileName: "brief.pdf",
+            mimeType: "application/pdf",
+            base64: "JVBERi0x"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
   it("blocks OpenAI-requested actions when the user role lacks permission", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(
@@ -109,5 +162,104 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.permissionBlocked?.feedbackType).toBe("permission_blocked");
     expect(result.feedback?.type).toBe("permission_blocked");
     expect(result.confirmationStatus).toBe("cancelled");
+  });
+
+  it("answers assistant identity questions without persisting feedback", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can answer CRM questions.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Кто ты и что умеешь?",
+        threadId: "thread-help",
+        messageId: "message-help"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(result.response).toContain("I can create and update leads");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+  });
+
+  it("accepts source-material uploads without persisting feature feedback when OpenAI returns no action", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can review the uploaded source material.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Проверь этот план и создай лид, если данных хватает",
+        threadId: "thread-upload",
+        messageId: "message-upload",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "photo",
+            fileName: "site.jpg",
+            mimeType: "image/jpeg",
+            base64: "abcd"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [];
+    const requestBody = JSON.parse(String(requestInit?.body)) as { messages: Array<{ role: string; content: string }> };
+    const userPayload = JSON.parse(requestBody.messages.find((message) => message.role === "user")?.content ?? "{}") as {
+      attachments?: Array<{ fileName?: string; kind?: string; mimeType?: string }>;
+    };
+
+    expect(userPayload.attachments).toEqual([
+      expect.objectContaining({
+        fileName: "site.jpg",
+        kind: "photo",
+        mimeType: "image/jpeg"
+      })
+    ]);
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
   });
 });

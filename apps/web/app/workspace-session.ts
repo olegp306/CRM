@@ -11,7 +11,8 @@ const cookieKeys: Record<keyof WorkspaceSessionContext, string> = {
   userId: "crm_user_id",
   userName: "crm_user_name",
   role: "crm_workspace_role",
-  primaryColor: "crm_primary_color"
+  primaryColor: "crm_primary_color",
+  themePreference: "crm_theme_preference"
 };
 
 const headerKeys: Record<keyof WorkspaceSessionContext, string> = {
@@ -21,7 +22,8 @@ const headerKeys: Record<keyof WorkspaceSessionContext, string> = {
   userId: "x-crm-user-id",
   userName: "x-crm-user-name",
   role: "x-crm-workspace-role",
-  primaryColor: "x-crm-primary-color"
+  primaryColor: "x-crm-primary-color",
+  themePreference: "x-crm-theme-preference"
 };
 
 export async function getWorkspaceSession(): Promise<WorkspaceSessionContext> {

@@ -46,9 +46,9 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.1.6"
+      appVersion: "0.1.7"
     });
-    expect(result.response).toBe("Captured as feature_request feedback for the platform team.");
+    expect(result.response).toBe("I saved this as product feedback for review.");
   });
 
   it("previews create lead actions for owner and admin roles", () => {
@@ -66,6 +66,43 @@ describe("assistant submission orchestration", () => {
     });
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
     expect(result.response).toBe("I prepared a create lead preview. Confirm before I execute it.");
+  });
+
+  it("routes source-material uploads to lead intake before create lead previews", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Create lead Anna Beispiel from this source material",
+      threadId: "thread-source-upload",
+      messageId: "message-source-upload",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "pdf",
+          fileName: "brief.pdf",
+          mimeType: "application/pdf",
+          base64: "JVBERi0x"
+        }
+      ]
+    });
+
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
+  it("routes clear source-material intake text to lead intake before create lead previews", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Create a lead from this client request with address and BGF",
+      threadId: "thread-source-text",
+      messageId: "message-source-text"
+    });
+
+    expect(result.response).toContain("I can create a lead from this source material");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.feedback).toBeNull();
   });
 
   it("previews schedule follow-up actions when the request asks for a reminder", () => {
@@ -162,5 +199,38 @@ describe("assistant submission orchestration", () => {
     expect(result.permissionBlocked?.feedbackType).toBe("permission_blocked");
     expect(result.feedback?.type).toBe("permission_blocked");
     expect(result.confirmationStatus).toBe("cancelled");
+  });
+
+  it("answers assistant identity questions without creating feedback", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Кто ты и что умеешь?",
+      threadId: "thread-help",
+      messageId: "message-help"
+    });
+
+    expect(result.response).toContain("I can create and update leads");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps source-material uploads in assistant context without creating feature feedback", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads" },
+      content: "Проверь этот план и создай лид, если данных хватает",
+      threadId: "thread-upload",
+      messageId: "message-upload",
+      attachments: [
+        {
+          id: "attachment-1",
+          kind: "photo",
+          fileName: "site.jpg",
+          mimeType: "image/jpeg",
+          base64: "abcd"
+        }
+      ]
+    });
+
+    expect(result.feedback).toBeNull();
   });
 });

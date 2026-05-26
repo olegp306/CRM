@@ -1,3 +1,4 @@
+import { createAssistantChannelResponse } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, prisma as defaultPrisma } from "@app/db";
@@ -194,7 +195,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramWelcomeMessage(),
+        text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/start"),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -205,7 +206,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramHelpMessage(),
+        text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/help"),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -747,26 +748,21 @@ function isTelegramKpSentCommand(message: Pick<AllowedTelegramMessage, "text" | 
   return /(kp|кп|commercial proposal|offer).{0,24}(sent|send|отправ|выслал|выслали)/i.test(text);
 }
 
-function createTelegramHelpMessage(): string {
-  return [
-    "Я умею принимать заявки на архитектурные проекты и создавать по ним лиды в CRM.",
-    "",
-    "Можно отправить одним скопом текст, несколько сообщений, фотографии или PDF. Я попробую разобрать это как одну заявку.",
-    "",
-    "Ответом на карточку лида можно добавить недостающие данные, приложить материалы, отметить КП отправленным или отменить отправку КП. Если я не пойму действие, задам короткий уточняющий вопрос."
-  ].join("\n");
-}
-
-function createTelegramWelcomeMessage(): string {
-  return [
-    "Здравствуйте! Я CRM-помощник Олега для архитектурных заявок.",
-    "",
-    "Я могу принять сообщение, фото или PDF из Telegram, разобрать заявку, создать лид в CRM, подготовить КП и дать ссылки на карточку лида и документы.",
-    "",
-    "Если отвечать reply на карточку лида, я смогу добавить недостающие данные, отметить КП отправленным или отменить эту отметку.",
-    "",
-    "Присылайте первую заявку свободным текстом. Мы очень ждём ваших впечатлений и замечаний: они помогают быстро сделать систему удобнее."
-  ].join("\n");
+function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, content: "/start" | "/help"): string {
+  return createAssistantChannelResponse({
+    channel: "telegram",
+    threadId: `telegram-${chatId}`,
+    messageId: `telegram-${chatId}-${content}`,
+    content,
+    receivedAt: new Date().toISOString(),
+    context: {
+      workspaceId,
+      userId: `telegram:${chatId}`,
+      role: "operator",
+      module: "leads"
+    },
+    attachments: []
+  }).text;
 }
 function createTelegramLeadConfirmation({
   leadId,
@@ -1191,21 +1187,21 @@ function createTelegramCrmReplyMarkup(
 
   const row: Array<{ text: string; url: string }> = [
     {
-      text: "Open in CRM",
+      text: "CRM",
       url: `${trimmedBaseUrl}/leads?leadId=${encodeURIComponent(leadId)}`
     }
   ];
 
   if (isTelegramHttpUrl(kpMail?.pdfUrl)) {
     row.push({
-      text: "Скачать PDF",
+      text: "PDF",
       url: kpMail.pdfUrl
     });
   }
 
   if (isTelegramHttpUrl(kpMail?.docxUrl)) {
     row.push({
-      text: "Скачать DOCX",
+      text: "DOC",
       url: kpMail.docxUrl
     });
   }

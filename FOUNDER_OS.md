@@ -9,9 +9,23 @@ Founder OS is the central control plane for founder-owned products, bots, assist
 - Keep this project under `C:\repos`.
 - Treat this project as a Founder OS-managed product.
 - Check `.founderos/project.json` before changing architecture, user data flows, assistant behavior, deployment, or analytics.
+- Check `C:\repos\PORTS.md` before starting web, API, worker, preview, or LAN/mobile-viewable dev servers.
 - Prefer structured events, tags, summaries, and consent records over raw user-message storage.
 - Do not commit secrets, tokens, deploy credentials, or customer data.
 - Any assistant or bot added here should report token usage and feedback signals to Founder OS.
+
+## Parallel Development And Preview Ports
+
+This project must use its assigned ports from `C:\repos\PORTS.md` and `.founderos/project.json`.
+
+When a visual web result is worth reviewing, provide both:
+
+- Local computer link: `http://localhost:<assigned_web_port>`
+- Phone-on-same-Wi-Fi link: `http://<LAN_IP>:<assigned_web_port>`
+
+Bind to `0.0.0.0` when phone/LAN preview is needed.
+
+Before sharing links, verify the server is running the current project, current workspace, current branch, and latest code. If the assigned port is occupied by a stale process, identify and stop only that stale process before restarting this project.
 
 ## Integration Expectations
 

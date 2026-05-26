@@ -158,6 +158,9 @@ importers:
 
   packages/integrations:
     dependencies:
+      '@app/assistant':
+        specifier: workspace:*
+        version: link:../assistant
       '@app/core':
         specifier: workspace:*
         version: link:../core

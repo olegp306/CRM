@@ -1,10 +1,12 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
+import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import type { AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
 import type { AssistantSubmissionInput, AssistantSubmissionResult } from "./submission";
-import { createAssistantMessageDraft, createAssistantThreadDraft } from "./thread-message";
+import { createAssistantMessageDraft, createAssistantThreadDraft, type AssistantMessageDraft, type AssistantThreadDraft } from "./thread-message";
 
 export type OpenAIAssistantFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -24,8 +26,19 @@ type OpenAIPlan = {
   };
 };
 
+type OpenAIAttachmentSummary = {
+  id: string;
+  kind: string;
+  fileName: string;
+  mimeType: string;
+  hasBase64?: boolean;
+  estimatedBytes?: number;
+  textPreview?: string;
+};
+
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
 const allowedActionTypes = new Set<AssistantActionType>(["create_lead", "generate_kp", "schedule_followup", "update_project_task", "mark_kp_sent"]);
+const maxAttachmentTextPreviewLength = 500;
 
 export async function createOpenAIAssistantSubmissionResult(
   input: AssistantSubmissionInput,
@@ -43,9 +56,31 @@ export async function createOpenAIAssistantSubmissionResult(
     content: trimmedContent,
     context: input.context
   });
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId: input.threadId,
+    messageId: input.messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context: input.context,
+    attachments: input.attachments ?? []
+  };
   const plan = await requestOpenAIPlan(input, config);
 
   if (plan.action) {
+    if (plan.action.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
+      const channelResponse = createAssistantChannelResponse(channelMessage);
+
+      return createResultFromChannelResponse({
+        thread,
+        message,
+        channelResponse,
+        context: input.context,
+        threadId: input.threadId,
+        messageId: input.messageId
+      });
+    }
+
     const actionPreview = createPreviewFromPlan(plan, trimmedContent, input.context);
 
     if (!canUseAssistantActionMode(input.context.role)) {
@@ -85,19 +120,56 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  const feedback = createFeedbackItemFromMessage({
-    workspaceId: input.context.workspaceId,
-    sourceThreadId: input.threadId,
-    sourceMessageId: input.messageId,
-    intent: message.intent,
-    moduleContext: input.context.module,
-    role: input.context.role
+  const channelResponse = createAssistantChannelResponse(channelMessage);
+
+  return createResultFromChannelResponse({
+    thread,
+    message,
+    channelResponse,
+    context: input.context,
+    threadId: input.threadId,
+    messageId: input.messageId
   });
+}
+
+function createResultFromChannelResponse({
+  thread,
+  message,
+  channelResponse,
+  context,
+  threadId,
+  messageId
+}: {
+  thread: AssistantThreadDraft;
+  message: AssistantMessageDraft;
+  channelResponse: AssistantChannelResponse;
+  context: AssistantContext;
+  threadId: string;
+  messageId: string;
+}): AssistantSubmissionResult {
+  let feedback: FeedbackItemDraft | null = null;
+
+  if (channelResponse.shouldPersistFeedback) {
+    const feedbackType = channelResponse.feedbackType;
+
+    if (!feedbackType) {
+      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
+    }
+
+    feedback = createFeedbackItemFromMessage({
+      workspaceId: context.workspaceId,
+      sourceThreadId: threadId,
+      sourceMessageId: messageId,
+      intent: feedbackType,
+      moduleContext: context.module,
+      role: context.role
+    });
+  }
 
   return {
     thread,
     message,
-    response: plan.response,
+    response: channelResponse.text,
     feedback,
     actionPreview: null,
     confirmationStatus: null,
@@ -124,7 +196,8 @@ async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAI
           role: "user",
           content: JSON.stringify({
             content: input.content,
-            context: input.context
+            context: input.context,
+            attachments: createOpenAIAttachmentSummaries(input.attachments ?? [])
           })
         }
       ]
@@ -143,6 +216,56 @@ async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAI
   }
 
   return parseOpenAIPlan(content);
+}
+
+function createOpenAIAttachmentSummaries(attachments: NonNullable<AssistantSubmissionInput["attachments"]>): OpenAIAttachmentSummary[] {
+  return attachments.map((attachment) => {
+    const summary: OpenAIAttachmentSummary = {
+      id: attachment.id,
+      kind: attachment.kind,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType
+    };
+
+    if (!attachment.base64) {
+      return summary;
+    }
+
+    summary.hasBase64 = true;
+    summary.estimatedBytes = estimateBase64Bytes(attachment.base64);
+
+    if (attachment.kind === "text") {
+      const textPreview = decodeBase64TextPreview(attachment.base64);
+
+      if (textPreview) {
+        summary.textPreview = textPreview;
+      }
+    }
+
+    return summary;
+  });
+}
+
+function estimateBase64Bytes(base64: string): number {
+  const paddingLength = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - paddingLength);
+}
+
+function decodeBase64TextPreview(base64: string): string | null {
+  try {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes).trim();
+
+    if (!text) {
+      return null;
+    }
+
+    return text.slice(0, maxAttachmentTextPreviewLength);
+  } catch {
+    return null;
+  }
 }
 
 function parseOpenAIPlan(content: string): OpenAIPlan {

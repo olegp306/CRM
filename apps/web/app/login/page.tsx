@@ -7,7 +7,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10 text-foreground">
       <section className="w-full max-w-sm rounded-lg border border-border bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Reyzbikh architect CRM</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Workspace CRM</p>
         <h1 className="mt-3 text-2xl font-semibold">Sign in</h1>
         <p className="mt-2 text-sm text-muted-foreground">Access is limited to approved Gmail admin accounts.</p>
         {isConfigured ? (

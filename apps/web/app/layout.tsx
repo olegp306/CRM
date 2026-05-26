@@ -2,8 +2,8 @@ import "../styles/globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Reyzbikh architect CRM",
-  description: "Architecture CRM for Reyzbikh architect operations"
+  title: "Workspace CRM",
+  description: "Configurable CRM workspace for lead intake and operations"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

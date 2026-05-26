@@ -1,4 +1,6 @@
 import { createActionPreview, type ActionPreview } from "./action-preview";
+import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import type { AssistantChannelAttachment, AssistantChannelMessage, AssistantChannelResponse } from "./channel-message";
 import { advanceActionConfirmation, type ActionConfirmationStatus } from "./confirmation-state";
 import type { AssistantContext } from "./context";
 import { createFeedbackItemFromMessage, type FeedbackItemDraft } from "./feedback-item";
@@ -15,6 +17,7 @@ export type AssistantSubmissionInput = {
   content: string;
   threadId: string;
   messageId: string;
+  attachments?: AssistantChannelAttachment[];
 };
 
 export type AssistantSubmissionResult = {
@@ -31,7 +34,8 @@ export function createAssistantSubmissionResult({
   context,
   content,
   threadId,
-  messageId
+  messageId,
+  attachments
 }: AssistantSubmissionInput): AssistantSubmissionResult {
   const trimmedContent = content.trim();
   const thread = createAssistantThreadDraft({
@@ -45,9 +49,31 @@ export function createAssistantSubmissionResult({
     content: trimmedContent,
     context
   });
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId,
+    messageId,
+    content: trimmedContent,
+    receivedAt: new Date().toISOString(),
+    context,
+    attachments: attachments ?? []
+  };
 
   if (message.intent === "crm_action") {
     const actionPreview = createCrmActionPreview(trimmedContent, context);
+
+    if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
+      const channelResponse = createAssistantChannelResponse(channelMessage);
+
+      return createResultFromChannelResponse({
+        thread,
+        message,
+        channelResponse,
+        context,
+        threadId,
+        messageId
+      });
+    }
 
     if (!canUseAssistantActionMode(context.role)) {
       const permissionBlocked = getPermissionBlockedResponse({
@@ -86,21 +112,56 @@ export function createAssistantSubmissionResult({
     };
   }
 
-  const feedback = createFeedbackItemFromMessage({
-    workspaceId: context.workspaceId,
-    sourceThreadId: threadId,
-    sourceMessageId: messageId,
-    intent: message.intent,
-    moduleContext: context.module,
-    role: context.role
+  const channelResponse = createAssistantChannelResponse(channelMessage);
+
+  return createResultFromChannelResponse({
+    thread,
+    message,
+    channelResponse,
+    context,
+    threadId,
+    messageId
   });
+}
+
+function createResultFromChannelResponse({
+  thread,
+  message,
+  channelResponse,
+  context,
+  threadId,
+  messageId
+}: {
+  thread: AssistantThreadDraft;
+  message: AssistantMessageDraft;
+  channelResponse: AssistantChannelResponse;
+  context: AssistantContext;
+  threadId: string;
+  messageId: string;
+}): AssistantSubmissionResult {
+  let feedback: FeedbackItemDraft | null = null;
+
+  if (channelResponse.shouldPersistFeedback) {
+    const feedbackType = channelResponse.feedbackType;
+
+    if (!feedbackType) {
+      throw new Error("Assistant channel response requested feedback persistence without a feedback type.");
+    }
+
+    feedback = createFeedbackItemFromMessage({
+      workspaceId: context.workspaceId,
+      sourceThreadId: threadId,
+      sourceMessageId: messageId,
+      intent: feedbackType,
+      moduleContext: context.module,
+      role: context.role
+    });
+  }
 
   return {
     thread,
     message,
-    response: feedback
-      ? `Captured as ${feedback.type} feedback for the platform team.`
-      : "I captured your message and will use the current workspace context.",
+    response: channelResponse.text,
     feedback,
     actionPreview: null,
     confirmationStatus: null,
