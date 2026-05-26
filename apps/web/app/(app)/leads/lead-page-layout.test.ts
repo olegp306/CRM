@@ -24,4 +24,12 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Close");
     expect(tableSource).toContain("Send KP");
   });
+
+  it("shows lead summary info before history and keeps source blocks mobile-safe", () => {
+    expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeGreaterThan(-1);
+    expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeLessThan(tableSource.indexOf("<LeadHistoryPanel"));
+    expect(tableSource).toContain("Lead summary info");
+    expect(tableSource).toContain("break-all");
+    expect(tableSource).toContain("min-w-0 overflow-hidden");
+  });
 });

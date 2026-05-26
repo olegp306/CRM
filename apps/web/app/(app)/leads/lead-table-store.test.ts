@@ -8,6 +8,7 @@ import {
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
+  createLeadSummaryInfo,
   createLeadTableRows,
   getLeadSourceMaterials,
   inlineEditableLeadFields,
@@ -131,6 +132,47 @@ describe("lead table model", () => {
       ],
       sourceText: "Need EFH offer\nTelegram sources: telegram:-100777:42, telegram:777:43\nTelegram attachment 1: PDF (lead.pdf)"
     });
+  });
+
+  it("summarizes saved source materials with attachment links and audio transcript snippets", () => {
+    expect(
+      createLeadSummaryInfo(
+        [
+          "Need EFH offer",
+          "Telegram sources: telegram:-100777:42",
+          "Telegram attachment 1: audio (client-brief.mp3, source audio-document, saved attachment-audio-1)",
+          "Audio transcript 1 (client-brief.mp3):",
+          "Client says the address is Gartenweg 9 and BGF is 195 m2.",
+          "Telegram attachment 2: PDF (grundriss.pdf, saved attachment-pdf-1)",
+          "Summary: Ready Neubau EFH lead"
+        ].join("\n")
+      )
+    ).toEqual([
+      {
+        title: "Telegram message",
+        kind: "message",
+        description: "telegram:-100777:42",
+        url: "https://t.me/c/777/42"
+      },
+      {
+        title: "client-brief.mp3",
+        kind: "audio",
+        description: "Client says the address is Gartenweg 9 and BGF is 195 m2.",
+        url: "/documents/attachments/attachment-audio-1?download=1"
+      },
+      {
+        title: "grundriss.pdf",
+        kind: "pdf",
+        description: "Saved Telegram PDF source material.",
+        url: "/documents/attachments/attachment-pdf-1?download=1"
+      },
+      {
+        title: "Lead summary",
+        kind: "summary",
+        description: "Ready Neubau EFH lead",
+        url: null
+      }
+    ]);
   });
 
   it("serializes lead records for a client-side table and edit drawer", () => {

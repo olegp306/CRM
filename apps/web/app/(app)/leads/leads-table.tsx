@@ -20,6 +20,7 @@ import {
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
+  createLeadSummaryInfo,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadTableColumns,
@@ -33,6 +34,7 @@ import {
   type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadHistoryItem,
+  type LeadSummaryInfoItem,
   type LeadLoopStepMode,
   type LeadLoopTimelineStep,
   type LeadTableColumnKey,
@@ -596,6 +598,7 @@ function LeadEditor({
   variant?: "panel" | "modal" | "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
+  const leadSummaryInfo = createLeadSummaryInfo(lead.rawInput);
   const history = createLeadHistory(lead);
   const timeline = createLeadLoopTimelineViewModel(lead);
   const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
@@ -663,6 +666,7 @@ function LeadEditor({
         </div>
       </section>
 
+      <LeadSummaryInfoPanel items={leadSummaryInfo} />
       <LeadHistoryPanel history={history} />
       <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
@@ -793,12 +797,53 @@ function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextActio
   );
 }
 
+function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <details
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm font-semibold">Lead summary info</summary>
+      <div className="mt-3 grid min-w-0 gap-2">
+        {items.length > 0 ? (
+          items.map((item, index) => (
+            <article key={`${item.title}-${item.kind}-${index}`} className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="break-words font-semibold text-foreground">{item.title}</p>
+                  <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.kind}</p>
+                </div>
+                {item.url ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary"
+                  >
+                    Download
+                  </a>
+                ) : null}
+              </div>
+              <p className="mt-2 break-words text-sm text-muted-foreground">{item.description}</p>
+            </article>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No summarized source materials saved yet.</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <details
-      className="rounded-lg border border-border bg-muted/30 p-3"
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
@@ -828,7 +873,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
 
   return (
     <details
-      className="rounded-lg border border-border bg-muted/30 p-3"
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
@@ -919,15 +964,15 @@ function SourceMaterialsPanel({
 
   return (
     <details
-      className="rounded-lg border border-border bg-muted/30 p-3"
+      className="min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30 p-3"
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
     >
       <summary className="cursor-pointer text-sm font-semibold">Source materials</summary>
       {sourceText ? (
-        <div className="mt-3 grid gap-2">
+        <div className="mt-3 grid min-w-0 gap-2">
           {references.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2">
               {references.map((reference) =>
                 reference.url ? (
                   <a
@@ -935,13 +980,13 @@ function SourceMaterialsPanel({
                     href={reference.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                    className="max-w-full rounded-md bg-white px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
                   >
-                    {reference.label}
+                    <span className="break-all">{reference.label}</span>
                   </a>
                 ) : (
-                  <span key={reference.label} className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
-                    {reference.label}
+                  <span key={reference.label} className="max-w-full rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
+                    <span className="break-all">{reference.label}</span>
                   </span>
                 )
               )}

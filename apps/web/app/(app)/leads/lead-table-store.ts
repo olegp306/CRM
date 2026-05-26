@@ -115,6 +115,13 @@ export type LeadSourceReference = {
   url: string | null;
 };
 
+export type LeadSummaryInfoItem = {
+  title: string;
+  kind: "message" | "photo" | "pdf" | "audio" | "summary";
+  description: string;
+  url: string | null;
+};
+
 export const leadTableColumns: LeadTableColumn[] = [
   { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
   { key: "loopStage", label: "Loop stage", enableSorting: true, defaultSize: 132 },
@@ -218,6 +225,119 @@ export function getLeadSourceMaterials(rawInput: string): { references: LeadSour
     .map(createLeadSourceReference);
 
   return { references, sourceText };
+}
+
+export function createLeadSummaryInfo(rawInput: string): LeadSummaryInfoItem[] {
+  const sourceText = rawInput.trim();
+  if (!sourceText) {
+    return [];
+  }
+
+  const lines = sourceText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const transcriptByNumber = createAudioTranscriptMap(lines);
+  const items: LeadSummaryInfoItem[] = [];
+
+  for (const line of lines) {
+    if (/^Telegram sources?:/i.test(line)) {
+      items.push(
+        ...createLeadSourceReferenceEntries(line).map((entry) => {
+          const reference = createLeadSourceReference(entry.trim());
+          return {
+            title: "Telegram message",
+            kind: "message" as const,
+            description: reference.label,
+            url: reference.url
+          };
+        })
+      );
+      continue;
+    }
+
+    const attachment = parseTelegramAttachmentSummaryLine(line);
+    if (attachment) {
+      items.push({
+        title: attachment.fileName,
+        kind: attachment.kind,
+        description: createAttachmentDescription(attachment, transcriptByNumber.get(attachment.number)),
+        url: attachment.savedAttachmentId ? `/documents/attachments/${encodeURIComponent(attachment.savedAttachmentId)}?download=1` : null
+      });
+      continue;
+    }
+
+    const summary = /^Summary:\s*(.+)$/i.exec(line)?.[1]?.trim();
+    if (summary) {
+      items.push({
+        title: "Lead summary",
+        kind: "summary",
+        description: summary,
+        url: null
+      });
+    }
+  }
+
+  return items;
+}
+
+function createAudioTranscriptMap(lines: string[]): Map<number, string> {
+  const transcripts = new Map<number, string>();
+
+  lines.forEach((line, index) => {
+    const match = /^Audio transcript (\d+)(?:\s*\([^)]+\))?:\s*(.*)$/i.exec(line);
+    if (!match) {
+      return;
+    }
+
+    const number = Number(match[1]);
+    const inlineTranscript = match[2]?.trim();
+    const nextLine = lines[index + 1]?.trim();
+    transcripts.set(number, inlineTranscript || (nextLine && !isLeadSummaryControlLine(nextLine) ? nextLine : ""));
+  });
+
+  return transcripts;
+}
+
+function isLeadSummaryControlLine(line: string): boolean {
+  return /^(Telegram sources?:|Telegram attachment \d+:|\[Telegram .+ attachment:|Audio transcript \d+|Summary:|Suggested reply:)/i.test(line);
+}
+
+function parseTelegramAttachmentSummaryLine(line: string): {
+  number: number;
+  kind: "photo" | "pdf" | "audio";
+  fileName: string;
+  savedAttachmentId: string | null;
+} | null {
+  const normalizedLine = line.replace(/^\[(.*)\]$/, "$1");
+  const match = /^Telegram attachment (\d+):\s*(photo|audio|pdf)\s*\((.*)\)$/i.exec(normalizedLine);
+  if (!match) {
+    return null;
+  }
+
+  const kind = match[2].toLowerCase() as "photo" | "pdf" | "audio";
+  const details = match[3].trim();
+  const savedAttachmentId = /(?:^|,\s*)saved\s+([^,\s)]+)/i.exec(details)?.[1] ?? null;
+  const fileName = details.split(",")[0]?.trim() || `telegram-${kind}`;
+
+  return {
+    number: Number(match[1]),
+    kind,
+    fileName,
+    savedAttachmentId
+  };
+}
+
+function createAttachmentDescription(
+  attachment: { kind: "photo" | "pdf" | "audio" },
+  transcript: string | undefined
+): string {
+  if (attachment.kind === "audio") {
+    return transcript?.trim() || "Saved Telegram audio source material.";
+  }
+
+  if (attachment.kind === "pdf") {
+    return "Saved Telegram PDF source material.";
+  }
+
+  return "Saved Telegram photo source material.";
 }
 
 function createLeadSourceReferenceEntries(line: string): string[] {
