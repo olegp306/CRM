@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.2.0`
+Current stable version: `0.2.1`
 
 Stable tag format:
 
@@ -138,6 +138,15 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.2.1
+
+Telegram audio intake release:
+
+- Telegram now accepts voice messages and uploaded audio files as lead source material.
+- Audio is saved with the original attachments, transcribed, and included in lead parsing.
+- Mixed photos, PDFs, and audio can feed the same lead/KP workflow.
+- The bot asks for clarification when audio cannot be understood safely.
 
 ## 0.2.0
 
