@@ -30,9 +30,9 @@ export function createAssistantChannelResponse(
     return tableExportResponse;
   }
 
-  const noteResponse = createLeadInteractionNoteResponse(message);
-  if (noteResponse) {
-    return noteResponse;
+  const reminderResponse = createLeadReminderResponse(message);
+  if (reminderResponse) {
+    return reminderResponse;
   }
 
   const contextNoteResponse = createLeadNaturalContextNoteResponse(message);
@@ -40,9 +40,9 @@ export function createAssistantChannelResponse(
     return contextNoteResponse;
   }
 
-  const reminderResponse = createLeadReminderResponse(message);
-  if (reminderResponse) {
-    return reminderResponse;
+  const noteResponse = createLeadInteractionNoteResponse(message);
+  if (noteResponse) {
+    return noteResponse;
   }
 
   if (isHelpMessage(message.content, intent)) {

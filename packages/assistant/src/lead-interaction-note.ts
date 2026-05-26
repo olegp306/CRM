@@ -23,7 +23,19 @@ export function isLeadNaturalContextNote(content: string): boolean {
     return false;
   }
 
-  if (isLeadInteractionNoteCommand(text) || hasLeadCreationSignal(text) || hasSupportQuestionSignal(text)) {
+  if (hasSupportQuestionSignal(text)) {
+    return false;
+  }
+
+  if (hasExplicitClientContextKeyword(text)) {
+    return true;
+  }
+
+  if (isLeadInteractionNoteCommand(text)) {
+    return false;
+  }
+
+  if (hasLeadCreationSignal(text)) {
     return false;
   }
 
@@ -47,6 +59,12 @@ function getNaturalContextScore(content: string): number {
   ];
 
   return signals.filter((signal) => signal.test(content)).length;
+}
+
+function hasExplicitClientContextKeyword(content: string): boolean {
+  return /(\b(?:client context|client info|additional info|remember about this client|important about this client|note about this client|client fact|customer context|customer info)\b|(?:\u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d[а-яё]*\s+\u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446|\u0437\u0430\u043f\u043e\u043c\u043d\u0438\s+(?:\u043e\u0431\s+)?(?:\u044d\u0442\u043e\u043c\s+)?\u043a\u043b\u0438\u0435\u043d\u0442|\u0432\u0430\u0436\u043d[а-яё]*\s+\u043f\u0440\u043e\s+\u043a\u043b\u0438\u0435\u043d\u0442|\u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446[а-яё]*\s+\u043f\u043e\s+\u043a\u043b\u0438\u0435\u043d\u0442|\u043f\u0440\u043e\s+\u043a\u043b\u0438\u0435\u043d\u0442\u0430|\u0444\u0430\u043a\u0442\s+\u043e\s+\u043a\u043b\u0438\u0435\u043d\u0442))/i.test(
+    content
+  );
 }
 
 function hasLeadCreationSignal(content: string): boolean {

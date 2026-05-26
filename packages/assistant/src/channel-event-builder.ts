@@ -38,18 +38,7 @@ export function createInboundMessageChannelEvents({
     })
   ];
 
-  if (leadId && isLeadInteractionNoteCommand(summary)) {
-    events.push(
-      createLeadInteractionNoteEvent({
-        type: "lead_interaction_note",
-        channel,
-        threadId,
-        messageId,
-        leadId,
-        summary: createLeadInteractionNoteSummary(summary)
-      })
-    );
-  } else if (leadId && isReminderRequest(summary)) {
+  if (leadId && isReminderRequest(summary)) {
     events.push(
       createLeadInteractionNoteEvent({
         type: "lead_interaction_note",
@@ -69,6 +58,17 @@ export function createInboundMessageChannelEvents({
         messageId,
         leadId,
         summary: createLeadNaturalContextSummary(summary)
+      })
+    );
+  } else if (leadId && isLeadInteractionNoteCommand(summary)) {
+    events.push(
+      createLeadInteractionNoteEvent({
+        type: "lead_interaction_note",
+        channel,
+        threadId,
+        messageId,
+        leadId,
+        summary: createLeadInteractionNoteSummary(summary)
       })
     );
   }
