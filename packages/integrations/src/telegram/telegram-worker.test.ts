@@ -279,6 +279,10 @@ describe("telegram worker", () => {
     const audioTranscriber = {
       transcribe: vi.fn(async () => ({ text: "Нужен проект дома Gartenweg 9, BGF 190, бюджет 32000 EUR." }))
     };
+    const saveSourceAttachment = vi.fn(async () => ({
+      attachmentId: "attachment-voice-source-501",
+      storageKey: "workspaces/workspace-demo/telegram-source/12345/501-voice-file-telegram-voice-501.ogg"
+    }));
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("/getFile")) {
         return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/file_501.ogg" } }) };
@@ -316,11 +320,25 @@ describe("telegram worker", () => {
           parser,
           prisma: client,
           audioTranscriber,
+          saveSourceAttachment,
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
     ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 50 });
 
+    expect(saveSourceAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        chatId: "12345",
+        messageId: 501,
+        fileId: "voice-file",
+        kind: "audio",
+        fileName: "telegram-voice-501.ogg",
+        mimeType: "audio/ogg",
+        body: new TextEncoder().encode("voice bytes"),
+        requestedByUserId: "telegram:12345"
+      })
+    );
     expect(audioTranscriber.transcribe).toHaveBeenCalledWith(
       expect.objectContaining({
         base64: Buffer.from("voice bytes").toString("base64"),
@@ -341,7 +359,7 @@ describe("telegram worker", () => {
     expect(created[0]).toEqual(
       expect.objectContaining({
         data: expect.objectContaining({
-          rawInput: expect.stringContaining("Telegram attachment 1: audio (telegram-voice-501.ogg, source voice-file)")
+          rawInput: expect.stringContaining("Telegram attachment 1: audio (telegram-voice-501.ogg, source voice-file, saved attachment-voice-source-501)")
         })
       })
     );

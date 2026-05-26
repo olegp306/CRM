@@ -13,7 +13,7 @@ import {
   type AssistantChannelMessage
 } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
-import { createObjectStorageFromEnv } from "@app/core/storage";
+import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
 import { createAssistantGeneratedDocumentPrismaStore, createAssistantPrismaRepository, prisma as defaultPrisma } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
@@ -49,6 +49,9 @@ import {
 } from "./telegram-lead-draft-session";
 
 export type TelegramWorkerPrismaLike = {
+  attachment?: {
+    create(args: unknown): Promise<{ id: string }>;
+  };
   lead: {
     findMany(
       args: unknown
@@ -100,6 +103,24 @@ export type TelegramGeneratedKpDocumentRecord = TelegramGenerateKpDocumentInput 
   pdfDeliveryUrl?: string;
 };
 
+export type TelegramSourceAttachmentInput = {
+  workspaceId: string;
+  chatId: string;
+  messageId: number;
+  fileId: string;
+  kind: TelegramLeadAttachment["kind"];
+  fileName: string;
+  mimeType: string;
+  body: Uint8Array;
+  receivedAt: string;
+  requestedByUserId: string;
+};
+
+export type TelegramSourceAttachmentRecord = {
+  attachmentId: string;
+  storageKey: string;
+};
+
 export type TelegramWorkerConfig = {
   allowedChatIds: Set<string>;
   botToken: string;
@@ -111,6 +132,7 @@ export type TelegramWorkerConfig = {
   telegramDraftStore?: TelegramLeadDraftSessionStore;
   generateKpDocument?: (input: TelegramGenerateKpDocumentInput) => Promise<TelegramGeneratedKpDocumentRecord>;
   saveAuditEvent?: (event: AssistantAuditEventDraft) => void | Promise<void>;
+  saveSourceAttachment?: (input: TelegramSourceAttachmentInput) => Promise<TelegramSourceAttachmentRecord>;
   audioTranscriber?: TelegramAudioTranscriber;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
@@ -163,6 +185,12 @@ type AllowedTelegramLeadActionCallback = {
   receivedAt: string;
   action: "mark_kp_sent" | "undo_kp_sent";
   leadId: string;
+};
+
+type TelegramSourceAttachmentPrismaLike = {
+  attachment?: {
+    create(args: unknown): Promise<{ id: string }>;
+  };
 };
 
 const defaultTelegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
@@ -769,6 +797,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       pdfConverter: createLibreOfficeDocxToPdfConverter()
     }).create,
     saveAuditEvent: createAssistantPrismaRepository(defaultPrisma).saveAuditEvent,
+    saveSourceAttachment: createTelegramSourceAttachmentStore(defaultPrisma, createObjectStorageFromEnv()).save,
     kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo"),
     audioTranscriber: createOpenAiAudioTranscriber({
       apiKey,
@@ -849,7 +878,7 @@ async function hydrateTelegramLeadMessage(message: AllowedTelegramMessage, confi
     };
   }
 
-  const attachments = await Promise.all(message.attachments.map((attachment) => downloadTelegramAttachment(attachment, config)));
+  const attachments = await Promise.all(message.attachments.map((attachment) => downloadTelegramAttachment(attachment, message, config)));
   const text = [
     message.text,
     createTelegramAudioTranscriptText(attachments),
@@ -867,6 +896,7 @@ async function hydrateTelegramLeadMessage(message: AllowedTelegramMessage, confi
 
 async function downloadTelegramAttachment(
   attachment: TelegramPendingAttachment,
+  message: Pick<AllowedTelegramMessage, "chatId" | "receivedAt">,
   config: TelegramWorkerConfig
 ): Promise<TelegramLeadAttachment> {
   const fetchImpl = config.fetchImpl ?? fetch;
@@ -889,12 +919,16 @@ async function downloadTelegramAttachment(
     throw new Error(`Telegram file download failed: ${fileResponse.status} ${fileResponse.statusText}`);
   }
 
-  const base64 = Buffer.from(await fileResponse.arrayBuffer()).toString("base64");
+  const body = new Uint8Array(await fileResponse.arrayBuffer());
+  const base64 = Buffer.from(body).toString("base64");
+  const savedSource = await saveTelegramSourceAttachment(attachment, message, body, config);
   const downloaded = {
     kind: attachment.kind,
     mimeType: attachment.mimeType,
     fileName: attachment.fileName,
     sourceFileId: attachment.fileId,
+    sourceAttachmentId: savedSource?.attachmentId,
+    sourceStorageKey: savedSource?.storageKey,
     base64
   };
 
@@ -922,6 +956,35 @@ async function downloadTelegramAttachment(
   }
 }
 
+async function saveTelegramSourceAttachment(
+  attachment: TelegramPendingAttachment,
+  message: Pick<AllowedTelegramMessage, "chatId" | "receivedAt">,
+  body: Uint8Array,
+  config: TelegramWorkerConfig
+): Promise<TelegramSourceAttachmentRecord | undefined> {
+  if (!config.saveSourceAttachment) {
+    return undefined;
+  }
+
+  try {
+    return await config.saveSourceAttachment({
+      workspaceId: config.workspaceId,
+      chatId: message.chatId,
+      messageId: attachment.sourceMessageId,
+      fileId: attachment.fileId,
+      kind: attachment.kind,
+      fileName: attachment.fileName ?? createTelegramSourceAttachmentFileName(attachment),
+      mimeType: attachment.mimeType,
+      body,
+      receivedAt: message.receivedAt,
+      requestedByUserId: `telegram:${message.chatId}`
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return undefined;
+  }
+}
+
 function createTelegramAudioTranscriptText(attachments: TelegramLeadAttachment[]): string {
   return attachments
     .map((attachment, index) => {
@@ -944,6 +1007,69 @@ function createTelegramAudioTranscriptionFailureMessage(): string {
     "I received the audio, but I could not transcribe it.",
     "Please resend the voice message, send a text summary, or add photos/PDFs with the missing details."
   ].join("\n");
+}
+
+function createTelegramSourceAttachmentStore(client: TelegramSourceAttachmentPrismaLike, objectStorage: ObjectStorage) {
+  return {
+    async save(input: TelegramSourceAttachmentInput): Promise<TelegramSourceAttachmentRecord> {
+      if (!client.attachment) {
+        throw new Error("Attachment storage is not available for Telegram source material.");
+      }
+
+      const storageKey = createTelegramSourceAttachmentStorageKey(input);
+      await objectStorage.putObject({
+        key: storageKey,
+        body: input.body,
+        contentType: input.mimeType
+      });
+      const attachment = await client.attachment.create({
+        data: {
+          workspaceId: input.workspaceId,
+          storageKey,
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          sizeBytes: input.body.byteLength,
+          status: "draft",
+          source: "telegram_source",
+          createdByUserId: input.requestedByUserId
+        }
+      });
+
+      return { attachmentId: attachment.id, storageKey };
+    }
+  };
+}
+
+function createTelegramSourceAttachmentStorageKey(input: TelegramSourceAttachmentInput): string {
+  return [
+    "workspaces",
+    toStorageSegment(input.workspaceId),
+    "telegram-source",
+    toStorageSegment(input.chatId),
+    `${input.messageId}-${toStorageSegment(input.fileId)}-${toStorageSegment(input.fileName)}`
+  ].join("/");
+}
+
+function createTelegramSourceAttachmentFileName(attachment: TelegramPendingAttachment): string {
+  if (attachment.kind === "photo") {
+    return `telegram-photo-${attachment.sourceMessageId}.jpg`;
+  }
+
+  if (attachment.kind === "audio") {
+    return `telegram-audio-${attachment.sourceMessageId}.ogg`;
+  }
+
+  return `telegram-document-${attachment.sourceMessageId}.pdf`;
+}
+
+function toStorageSegment(value: string | number): string {
+  return (
+    String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9.]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "item"
+  );
 }
 
 function appendTelegramAuthorLine(text: string, message: Pick<AllowedTelegramMessage, "authorName" | "authorUsername">): string {

@@ -330,6 +330,7 @@ Spec coverage:
 - KP workflow reuse: Tasks 3-4 reuse existing lead/KP path.
 - Clarifying questions below confidence threshold: Task 5.
 - Final robustness addendum: Telegram raw input now retains original audio `file_id` source metadata, transcription failures produce a user-facing resend/text-summary prompt instead of failing the worker, and shared Telegram help explicitly advertises voice messages.
+- Final source-storage addendum: downloaded Telegram photos/PDF/audio can now be saved as `Attachment` rows with object storage keys via the worker's `saveSourceAttachment` port; env wiring uses the existing `Attachment` model and configured object storage, and raw input records the saved attachment id.
 
 Placeholder scan:
 

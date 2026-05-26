@@ -40,7 +40,7 @@ describe("telegram polling", () => {
         chatId: "123",
         text: "See attached request\n\n[Telegram image attachment: large]",
         receivedAt: "2026-05-20T17:00:00.000Z",
-        attachments: [{ kind: "photo", fileId: "large", mimeType: "image/jpeg" }]
+        attachments: [{ kind: "photo", sourceMessageId: 10, fileId: "large", mimeType: "image/jpeg" }]
       }
     ]);
   });
@@ -101,6 +101,7 @@ describe("telegram polling", () => {
         attachments: [
           expect.objectContaining({
             kind: "audio",
+            sourceMessageId: 501,
             fileId: "voice-file",
             fileName: "telegram-voice-501.ogg",
             mimeType: "audio/ogg"

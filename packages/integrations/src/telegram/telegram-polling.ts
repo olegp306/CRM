@@ -2,6 +2,7 @@ import type { TelegramLeadAttachment, TelegramLeadMessage } from "./openai-lead-
 
 export type TelegramPendingAttachment = Omit<TelegramLeadAttachment, "base64"> & {
   fileId: string;
+  sourceMessageId: number;
 };
 
 export type TelegramUpdate = {
@@ -212,6 +213,7 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
   if (largestPhoto) {
     attachments.push({
       kind: "photo",
+      sourceMessageId: message.message_id,
       fileId: largestPhoto.file_id,
       mimeType: "image/jpeg"
     });
@@ -224,6 +226,7 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
   if (document && (mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf"))) {
     attachments.push({
       kind: "pdf",
+      sourceMessageId: message.message_id,
       fileId: document.file_id,
       fileName,
       mimeType: "application/pdf"
@@ -233,6 +236,7 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
   if (message.voice) {
     attachments.push({
       kind: "audio",
+      sourceMessageId: message.message_id,
       fileId: message.voice.file_id,
       fileName: `telegram-voice-${message.message_id}.ogg`,
       mimeType: message.voice.mime_type ?? "audio/ogg"
@@ -242,6 +246,7 @@ function createTelegramPendingAttachments(message: NonNullable<TelegramUpdate["m
   if (message.audio) {
     attachments.push({
       kind: "audio",
+      sourceMessageId: message.message_id,
       fileId: message.audio.file_id,
       fileName: message.audio.file_name ?? `telegram-audio-${message.message_id}.ogg`,
       mimeType: message.audio.mime_type ?? "application/octet-stream"
