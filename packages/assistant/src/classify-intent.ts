@@ -36,7 +36,7 @@ export function classifyIntent(message: string): AssistantIntent {
   }
 
   if (
-    /(\b(what|where|when|status)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
+    /(\b(what|where|when|status|does|is)\b.*\b(lead|kp|project|commercial proposal)\b|\b(lead|kp|project|commercial proposal)\b.*\b(status|commercial proposal)\b)/.test(
       text,
     )
   ) {

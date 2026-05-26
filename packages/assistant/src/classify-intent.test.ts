@@ -37,6 +37,8 @@ describe("classifyIntent", () => {
     expect(classifyIntent("Why does lead L-2026-004 have no KP?")).toBe("support_request");
     expect(classifyIntent("How can I update this lead?")).toBe("support_request");
     expect(classifyIntent("What is the status of lead L-2026-004?")).toBe("support_request");
+    expect(classifyIntent("Does lead L-2026-004 have a KP?")).toBe("support_request");
+    expect(classifyIntent("Is lead L-2026-004 ready?")).toBe("support_request");
   });
 
   it("classifies product UI add requests as feature requests before support or CRM actions", () => {
@@ -60,5 +62,9 @@ describe("classifyIntent", () => {
     expect(classifyIntent("It would be nice to upload several lead photos in the web assistant")).toBe(
       "feature_request",
     );
+  });
+
+  it("classifies unmatched messages as other", () => {
+    expect(classifyIntent("Random lunch note")).toBe("other");
   });
 });
