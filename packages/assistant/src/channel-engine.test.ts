@@ -85,6 +85,19 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("I can create and update leads");
   });
 
+  it("answers new lead commands with source-material intake guidance", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "web",
+      content: "/newlead"
+    });
+
+    expect(result.intent).toBe("lead_intake");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([]);
+    expect(result.text).toContain("Send the client request");
+  });
+
   it("treats web source material with attachments as lead intake, not product feedback", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

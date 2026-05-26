@@ -69,16 +69,27 @@ export async function createOpenAIAssistantSubmissionResult(
     context: input.context,
     attachments: input.attachments ?? []
   };
+  const deterministicChannelResponse = createAssistantChannelResponse(channelMessage);
+
+  if (shouldUseChannelResponseBeforeOpenAI(deterministicChannelResponse)) {
+    return createAssistantSubmissionResultFromChannelResponse({
+      thread,
+      message,
+      channelResponse: deterministicChannelResponse,
+      context: input.context,
+      threadId: input.threadId,
+      messageId: input.messageId
+    });
+  }
+
   const plan = await requestOpenAIPlan(input, config);
 
   if (plan.action) {
     if (plan.action.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
-      const channelResponse = createAssistantChannelResponse(channelMessage);
-
       return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
-        channelResponse,
+        channelResponse: deterministicChannelResponse,
         context: input.context,
         threadId: input.threadId,
         messageId: input.messageId
@@ -126,24 +137,37 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  const channelResponse = createAssistantChannelResponse(channelMessage);
-
   return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
-    channelResponse,
+    channelResponse: deterministicChannelResponse,
     context: input.context,
     threadId: input.threadId,
     messageId: input.messageId
   });
 }
 
+function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof createAssistantChannelResponse>): boolean {
+  return (
+    channelResponse.intent === "help" ||
+    channelResponse.intent === "lead_intake" ||
+    channelResponse.intent === "support_request" ||
+    channelResponse.shouldPersistFeedback
+  );
+}
+
 async function requestOpenAIPlan(input: AssistantSubmissionInput, config: OpenAIAssistantConfig): Promise<OpenAIPlan> {
+  const apiKey = config.apiKey.trim();
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for the assistant runtime.");
+  }
+
   const fetcher = config.fetch ?? fetch;
   const response = await fetcher(config.endpoint ?? defaultEndpoint, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${config.apiKey}`,
+      authorization: `Bearer ${apiKey}`,
       "content-type": "application/json"
     },
     body: JSON.stringify({

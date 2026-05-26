@@ -55,7 +55,7 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
       attachments: input.attachments ?? []
     },
     {
-      apiKey: getRequiredOpenAiApiKey(),
+      apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
     }
   );
@@ -163,16 +163,6 @@ function createOnboardingTranslationResult({
     confirmationStatus: null,
     permissionBlocked: null
   };
-}
-
-function getRequiredOpenAiApiKey(): string {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for the assistant runtime.");
-  }
-
-  return apiKey;
 }
 
 export async function listAssistantWorkspaceMemoryAction(workspaceId: string) {

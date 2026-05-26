@@ -8,6 +8,7 @@ import { MessageSquareText, Mic, Paperclip, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { getAssistantExecutionButtons, getAssistantExecutionLabel, type AssistantExecutionButton } from "./assistant-execution-label";
+import { getAssistantSelectedRecordIds, shouldUseOnboardingAssistantAction } from "./assistant-route-context";
 import { useWorkspaceSession } from "./workspace-session-provider";
 
 export function AssistantDrawer() {
@@ -50,12 +51,19 @@ export function AssistantDrawer() {
       userId: session.userId,
       role: session.role,
       route: pathname,
-      module: getAssistantModuleFromRoute(pathname)
+      module: getAssistantModuleFromRoute(pathname),
+      selectedRecordIds: getAssistantSelectedRecordIds(pathname, new URLSearchParams(window.location.search))
     });
 
     const messageId = `message-${submittedAt}`;
     try {
-      const submitAction = history.length === 0 ? submitOnboardingAssistantMessageAction : submitAssistantMessageAction;
+      const submitAction = shouldUseOnboardingAssistantAction({
+        historyLength: history.length,
+        content: text,
+        attachmentCount: attachments.length
+      })
+        ? submitOnboardingAssistantMessageAction
+        : submitAssistantMessageAction;
       const response = await submitAction({
         context,
         content: text,

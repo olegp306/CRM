@@ -14,6 +14,16 @@ export function createAssistantChannelResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (isNewLeadCommand(message.content)) {
+    return {
+      intent: "lead_intake",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      text: "Send the client request, photos, PDFs, or raw source text. I will extract the lead fields and ask for confirmation before saving it in CRM."
+    };
+  }
+
   if (isPersistedFeedbackIntent(intent)) {
     return {
       intent,
@@ -71,6 +81,10 @@ function isHelpMessage(content: string, intent: string): boolean {
   }
 
   return intent === "support_request" && /(who are you|what can you do|кто ты|что умеешь)/i.test(content);
+}
+
+function isNewLeadCommand(content: string): boolean {
+  return /^\/(?:newlead|new_lead|lead)\b/i.test(content.trim()) || /^new lead$/i.test(content.trim());
 }
 
 function isPersistedFeedbackIntent(intent: string): intent is "feature_request" | "bug_report" | "ux_feedback" {
