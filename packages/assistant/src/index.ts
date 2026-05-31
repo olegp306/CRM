@@ -27,6 +27,7 @@ export * from "./lead-match-decision";
 export * from "./memory-repository";
 export * from "./openai-provider";
 export * from "./openai-client-material-analyzer";
+export * from "./openai-crm-orchestrator";
 export * from "./openai-lead-parser";
 export * from "./onboarding";
 export * from "./persistence";

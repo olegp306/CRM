@@ -1,9 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OpenAiLeadParserClient } from "./openai-lead-parser";
-import { createTelegramTestUpdateFromEnv, processTelegramUpdates, runTelegramWorkerLoop } from "./telegram-worker";
+import { createTelegramTestUpdateFromEnv, processTelegramUpdates, resolveTelegramAiSettings, runTelegramWorkerLoop } from "./telegram-worker";
 import { createMemoryTelegramLeadDraftSessionStore } from "./telegram-lead-draft-session";
 
 describe("telegram worker", () => {
+  it("loads both client material and CRM orchestrator AI settings for Telegram runtime", async () => {
+    const store = {
+      getClientMaterialAnalysis: vi.fn(async () => ({
+        workspaceId: "workspace-demo",
+        role: "client_material_analysis" as const,
+        model: "gpt-4.1",
+        prompt: "Analyze source materials.",
+        updatedAt: null
+      })),
+      upsertClientMaterialAnalysis: vi.fn(),
+      getCrmOrchestrator: vi.fn(async () => ({
+        workspaceId: "workspace-demo",
+        role: "crm_orchestrator" as const,
+        model: "gpt-5.2",
+        prompt: "Route CRM requests.",
+        updatedAt: null
+      })),
+      upsertCrmOrchestrator: vi.fn()
+    };
+
+    await expect(resolveTelegramAiSettings(store, "workspace-demo")).resolves.toEqual({
+      clientMaterialAnalysis: expect.objectContaining({
+        role: "client_material_analysis",
+        model: "gpt-4.1",
+        prompt: "Analyze source materials."
+      }),
+      crmOrchestrator: expect.objectContaining({
+        role: "crm_orchestrator",
+        model: "gpt-5.2",
+        prompt: "Route CRM requests."
+      })
+    });
+    expect(store.getClientMaterialAnalysis).toHaveBeenCalledWith("workspace-demo");
+    expect(store.getCrmOrchestrator).toHaveBeenCalledWith("workspace-demo");
+  });
+
   it("creates a synthetic Telegram update from local test env", () => {
     expect(
       createTelegramTestUpdateFromEnv({

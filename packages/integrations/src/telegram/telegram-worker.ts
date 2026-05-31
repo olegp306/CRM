@@ -8,6 +8,7 @@ import {
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
   createMessageReceivedEvent,
+  createOpenAiCrmOrchestrator,
   createReminderHistorySummary,
   decideIncomingLeadMatch,
   decideLeadFlow,
@@ -16,7 +17,8 @@ import {
   isReminderRequest,
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
-  type AssistantChannelMessage
+  type AssistantChannelMessage,
+  type CrmOrchestratorClient
 } from "@app/assistant";
 import { getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
@@ -26,6 +28,7 @@ import {
   createWorkspaceAiSettingPrismaStore,
   prisma as defaultPrisma
 } from "@app/db";
+import type { WorkspaceAiSettingRecord, WorkspaceAiSettingStore } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
@@ -145,6 +148,7 @@ export type TelegramWorkerConfig = {
   saveAuditEvent?: (event: AssistantAuditEventDraft) => void | Promise<void>;
   saveSourceAttachment?: (input: TelegramSourceAttachmentInput) => Promise<TelegramSourceAttachmentRecord>;
   audioTranscriber?: TelegramAudioTranscriber;
+  crmOrchestrator?: CrmOrchestratorClient;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -994,9 +998,8 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
   }
 
   const workspaceId = env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo";
-  const clientMaterialAnalysisSetting = await createWorkspaceAiSettingPrismaStore(
-    defaultPrisma as never
-  ).getClientMaterialAnalysis(workspaceId);
+  const aiSettings = await resolveTelegramAiSettings(createWorkspaceAiSettingPrismaStore(defaultPrisma as never), workspaceId);
+  const clientMaterialAnalysisSetting = aiSettings.clientMaterialAnalysis;
   const config = {
     allowedChatIds: parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS),
     botToken,
@@ -1013,6 +1016,11 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       apiKey,
       model: env.OPENAI_AUDIO_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe"
     }),
+    crmOrchestrator: createOpenAiCrmOrchestrator({
+      apiKey,
+      model: aiSettings.crmOrchestrator.model || env.OPENAI_MODEL || "gpt-4o-mini",
+      prompt: aiSettings.crmOrchestrator.prompt
+    }),
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: clientMaterialAnalysisSetting.model || env.OPENAI_MODEL || "gpt-4o-mini",
@@ -1026,6 +1034,18 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
   }
 
   return runTelegramWorkerOnce(config);
+}
+
+export async function resolveTelegramAiSettings(store: WorkspaceAiSettingStore, workspaceId: string): Promise<{
+  clientMaterialAnalysis: WorkspaceAiSettingRecord;
+  crmOrchestrator: WorkspaceAiSettingRecord;
+}> {
+  const [clientMaterialAnalysis, crmOrchestrator] = await Promise.all([
+    store.getClientMaterialAnalysis(workspaceId),
+    store.getCrmOrchestrator(workspaceId)
+  ]);
+
+  return { clientMaterialAnalysis, crmOrchestrator };
 }
 
 export async function runTelegramWorkerLoop({
