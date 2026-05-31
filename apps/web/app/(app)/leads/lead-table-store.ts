@@ -235,6 +235,7 @@ export function createLeadSummaryInfo(rawInput: string): LeadSummaryInfoItem[] {
 
   const lines = sourceText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const transcriptByNumber = createAudioTranscriptMap(lines);
+  const materialAnalysis = parseLeadMaterialAnalysis(lines);
   const items: LeadSummaryInfoItem[] = [];
 
   for (const line of lines) {
@@ -255,16 +256,24 @@ export function createLeadSummaryInfo(rawInput: string): LeadSummaryInfoItem[] {
 
     const attachment = parseTelegramAttachmentSummaryLine(line);
     if (attachment) {
+      const analyzedDescription = materialAnalysis.documentSummaryByFileName.get(attachment.fileName.toLowerCase());
       items.push({
         title: attachment.fileName,
         kind: attachment.kind,
-        description: createAttachmentDescription(attachment, transcriptByNumber.get(attachment.number)),
+        description: truncateLeadSummaryDescription(
+          analyzedDescription ?? createAttachmentDescription(attachment, transcriptByNumber.get(attachment.number))
+        ),
         url: attachment.savedAttachmentId ? `/documents/attachments/${encodeURIComponent(attachment.savedAttachmentId)}?download=1` : null
       });
       continue;
     }
 
-    const summary = /^Summary:\s*(.+)$/i.exec(line)?.[1]?.trim();
+    const legacySummary = /^Summary:\s*(.+)$/i.exec(line)?.[1]?.trim();
+    if (legacySummary && materialAnalysis.leadSummary) {
+      continue;
+    }
+
+    const summary = /^(?:Lead summary|Summary):\s*(.+)$/i.exec(line)?.[1]?.trim();
     if (summary) {
       items.push({
         title: "Lead summary",
@@ -275,7 +284,57 @@ export function createLeadSummaryInfo(rawInput: string): LeadSummaryInfoItem[] {
     }
   }
 
+  if (materialAnalysis.leadSummary && !items.some((item) => item.title === "Lead summary")) {
+    items.push({
+      title: "Lead summary",
+      kind: "summary",
+      description: materialAnalysis.leadSummary,
+      url: null
+    });
+  }
+
   return items;
+}
+
+function parseLeadMaterialAnalysis(lines: string[]): {
+  leadSummary: string | null;
+  documentSummaryByFileName: Map<string, string>;
+} {
+  const documentSummaryByFileName = new Map<string, string>();
+  let isDocumentSummaryBlock = false;
+  let leadSummary: string | null = null;
+
+  for (const line of lines) {
+    const summary = /^Lead summary:\s*(.+)$/i.exec(line)?.[1]?.trim();
+    if (summary) {
+      leadSummary = summary;
+      isDocumentSummaryBlock = false;
+      continue;
+    }
+
+    if (/^Source material summaries:\s*$/i.test(line)) {
+      isDocumentSummaryBlock = true;
+      continue;
+    }
+
+    if (isDocumentSummaryBlock) {
+      const documentSummary = /^-\s*([^:]+):\s*(.+)$/i.exec(line);
+      if (documentSummary) {
+        documentSummaryByFileName.set(documentSummary[1].trim().toLowerCase(), stripTranscriptFromMaterialSummary(documentSummary[2].trim()));
+        continue;
+      }
+
+      if (isLeadSummaryControlLine(line)) {
+        isDocumentSummaryBlock = false;
+      }
+    }
+  }
+
+  return { leadSummary, documentSummaryByFileName };
+}
+
+function stripTranscriptFromMaterialSummary(summary: string): string {
+  return summary.replace(/\s+Transcript:\s+.*$/i, "").trim();
 }
 
 function createAudioTranscriptMap(lines: string[]): Map<number, string> {
@@ -297,7 +356,7 @@ function createAudioTranscriptMap(lines: string[]): Map<number, string> {
 }
 
 function isLeadSummaryControlLine(line: string): boolean {
-  return /^(Telegram sources?:|Telegram attachment \d+:|\[Telegram .+ attachment:|Audio transcript \d+|Summary:|Suggested reply:)/i.test(line);
+  return /^(Telegram sources?:|Telegram attachment \d+:|\[Telegram .+ attachment:|Audio transcript \d+|Summary:|Lead summary:|Source material summaries:|Suggested reply:)/i.test(line);
 }
 
 function parseTelegramAttachmentSummaryLine(line: string): {

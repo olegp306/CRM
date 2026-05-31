@@ -175,6 +175,66 @@ describe("lead table model", () => {
     ]);
   });
 
+  it("shows AI material analysis summary and per-file descriptions from raw input", () => {
+    expect(
+      createLeadSummaryInfo(
+        [
+          "Need EFH offer",
+          "Telegram sources: telegram:-100777:42",
+          "Telegram attachment 1: audio (client-brief.mp3, source audio-document, saved attachment-audio-1)",
+          "Telegram attachment 2: PDF (grundriss.pdf, saved attachment-pdf-1)",
+          "Lead summary: Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+          "Source material summaries:",
+          "- client-brief.mp3: Voice message contains budget, start date, and move-in timing. Transcript: Wir brauchen ein Angebot fuer Gartenweg 9.",
+          "- grundriss.pdf: PDF shows the floor plan and confirms BGF 195 m2."
+        ].join("\n")
+      )
+    ).toEqual([
+      {
+        title: "Telegram message",
+        kind: "message",
+        description: "telegram:-100777:42",
+        url: "https://t.me/c/777/42"
+      },
+      {
+        title: "client-brief.mp3",
+        kind: "audio",
+        description: "Voice message contains budget, start date, and move-in timing.",
+        url: "/documents/attachments/attachment-audio-1?download=1"
+      },
+      {
+        title: "grundriss.pdf",
+        kind: "pdf",
+        description: "PDF shows the floor plan and confirms BGF 195 m2.",
+        url: "/documents/attachments/attachment-pdf-1?download=1"
+      },
+      {
+        title: "Lead summary",
+        kind: "summary",
+        description: "Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+        url: null
+      }
+    ]);
+  });
+
+  it("prefers the material-analysis lead summary over the older parser summary", () => {
+    expect(
+      createLeadSummaryInfo(
+        [
+          "Summary: Short parser summary",
+          "Lead summary: Detailed client-material analysis summary for the proposal workflow."
+        ].join("\n")
+      )
+    ).toEqual([
+      {
+        title: "Lead summary",
+        kind: "summary",
+        description: "Detailed client-material analysis summary for the proposal workflow.",
+        url: null
+      }
+    ]);
+  });
+
   it("keeps file descriptions concise in lead summary info", () => {
     const [photo, audio] = createLeadSummaryInfo(
       [

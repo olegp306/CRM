@@ -517,6 +517,17 @@ describe("telegram worker", () => {
         phone: "+49 170 123456",
         missingData: [],
         summary: input.text,
+        leadSummary: "Voice message contains a complete EFH request for Gartenweg 9.",
+        documentSummaries: [
+          {
+            fileName: "telegram-voice-501.ogg",
+            kind: "audio" as const,
+            summary: "Audio confirms address, BGF, and budget for the commercial proposal.",
+            transcript: "Nuzhen proekt doma Gartenweg 9, BGF 190, budget 32000 EUR.",
+            storageKey: "workspaces/workspace-demo/telegram-source/12345/501-voice-file-telegram-voice-501.ogg",
+            sourceUrl: null
+          }
+        ],
         suggestedReply: "Ready."
       }))
     };
@@ -604,6 +615,22 @@ describe("telegram worker", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           rawInput: expect.stringContaining("Telegram attachment 1: audio (telegram-voice-501.ogg, source voice-file, saved attachment-voice-source-501)")
+        })
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("Lead summary: Voice message contains a complete EFH request for Gartenweg 9.")
+        })
+      })
+    );
+    expect(created[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining(
+            "Source material summaries:\n- telegram-voice-501.ogg: Audio confirms address, BGF, and budget for the commercial proposal."
+          )
         })
       })
     );
