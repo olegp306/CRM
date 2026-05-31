@@ -255,9 +255,13 @@ describe("telegram worker", () => {
       "https://api.telegram.org/bottelegram-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("Lead Search Agent")
+        body: expect.stringContaining("Telegram actions are limited right now.")
       })
     );
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("I can only create a lead or update an existing lead.");
+    expect(body.text).not.toContain("Lead Search Agent");
   });
 
   it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {
@@ -325,9 +329,13 @@ describe("telegram worker", () => {
       "https://api.telegram.org/bottelegram-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("Lead Search Agent")
+        body: expect.stringContaining("Telegram actions are limited right now.")
       })
     );
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("I can only create a lead or update an existing lead.");
+    expect(body.text).not.toContain("Lead Search Agent");
   });
 
   it("asks the CRM orchestrator clarification instead of creating a lead", async () => {

@@ -173,18 +173,33 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
   }
 
   if (decision.intent === "SEARCH_LEAD") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
+    return createTelegramLimitedCrmActionsResponse();
   }
 
   if (decision.intent === "CREATE_REMINDER") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
+    return createTelegramLimitedCrmActionsResponse();
   }
 
   if (decision.intent === "ATTACH_FILE") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
+    return createTelegramLimitedCrmActionsResponse();
   }
 
   return null;
+}
+
+function createTelegramLimitedCrmActionsResponse(): AssistantChannelResponse {
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: [
+      "Telegram actions are limited right now.",
+      "For now I can only create a lead or update an existing lead.",
+      "Reply to a lead card with new source material or missing fields."
+    ].join("\n")
+  };
 }
 
 export function createCrmOrchestratorRoutedButPausedResponse(decision: CrmOrchestratorDecision, detail: string): AssistantChannelResponse {

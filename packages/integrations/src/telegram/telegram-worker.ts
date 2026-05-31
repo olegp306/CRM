@@ -7,7 +7,6 @@ import {
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
-  createCrmOrchestratorRoutedButPausedResponse,
   createMessageReceivedEvent,
   createOpenAiCrmOrchestrator,
   createReminderHistorySummary,
@@ -1537,18 +1536,29 @@ async function createTelegramCrmOrchestratorFallbackResponse(
   }
 
   if (decision.intent === "SEARCH_LEAD") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
+    return createTelegramLimitedActionsResponse();
   }
 
   if (decision.intent === "CREATE_REMINDER") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
+    return createTelegramLimitedActionsResponse();
   }
 
   if (decision.intent === "ATTACH_FILE") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
+    return createTelegramLimitedActionsResponse();
   }
 
   return null;
+}
+
+function createTelegramLimitedActionsResponse() {
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: createTelegramLimitedActionsText()
+  };
 }
 
 function shouldUseCrmOrchestratorFallback(
