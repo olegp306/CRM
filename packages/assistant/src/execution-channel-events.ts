@@ -37,7 +37,7 @@ export function createExecutionChannelEvents({
         channel,
         threadId,
         leadId: execution.leadId,
-        fieldsChanged: ["rawInput"],
+        fieldsChanged: execution.fieldsChanged,
         missingData: []
       })
     ];

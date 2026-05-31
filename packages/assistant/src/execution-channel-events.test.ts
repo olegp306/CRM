@@ -61,7 +61,8 @@ describe("execution channel events", () => {
           status: "executed",
           actionType: "update_lead",
           leadId: "L-2026-004",
-          recordId: "lead-record-4"
+          recordId: "lead-record-4",
+          fieldsChanged: ["rawInput", "bgfM2", "email", "missingData"]
         }
       })
     ).toEqual([
@@ -70,7 +71,7 @@ describe("execution channel events", () => {
         channel: "web",
         threadId: "thread-1",
         leadId: "L-2026-004",
-        fieldsChanged: ["rawInput"],
+        fieldsChanged: ["rawInput", "bgfM2", "email", "missingData"],
         missingData: []
       }
     ]);

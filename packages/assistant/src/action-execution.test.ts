@@ -496,7 +496,19 @@ describe("executeAssistantAction", () => {
       status: "executed",
       actionType: "update_lead",
       leadId: "L-2026-004",
-      recordId: "lead-record-4"
+      recordId: "lead-record-4",
+      fieldsChanged: [
+        "rawInput",
+        "clientName",
+        "requestType",
+        "projectAddress",
+        "bgfM2",
+        "email",
+        "phone",
+        "missingData",
+        "isStandard",
+        "temperature"
+      ]
     });
     expect(updatedLeads).toEqual([
       {

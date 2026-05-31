@@ -148,6 +148,7 @@ export type ExecuteAssistantActionResult =
       actionType: "update_lead";
       leadId: string;
       recordId: string;
+      fieldsChanged: string[];
     }
   | {
       status: Extract<ActionConfirmationStatus, "executed">;
@@ -248,7 +249,19 @@ export async function executeAssistantAction({
       status: executedStatus,
       actionType: "update_lead",
       leadId: updatedLead.leadId,
-      recordId: updatedLead.id
+      recordId: updatedLead.id,
+      fieldsChanged: getPreviewChangedLeadFields(action, [
+        "lead.sourceText",
+        "lead.clientName",
+        "lead.requestType",
+        "lead.projectAddress",
+        "lead.bgfM2",
+        "lead.email",
+        "lead.phone",
+        "lead.missingData",
+        "lead.isStandard",
+        "lead.temperature"
+      ])
     };
   }
 
@@ -536,6 +549,12 @@ function getPreviewChangeValue(action: AssistantActionWriteDraft, field: string)
   }
 
   return change.to.trim();
+}
+
+function getPreviewChangedLeadFields(action: AssistantActionWriteDraft, fields: string[]): string[] {
+  return fields
+    .filter((field) => action.preview.changes.some((change) => change.field === field))
+    .map((field) => (field === "lead.sourceText" ? "rawInput" : field.replace(/^lead\./, "")));
 }
 
 function getOptionalPreviewString(action: AssistantActionWriteDraft, field: string): string | null {
