@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_MODEL,
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT,
+  CRM_ORCHESTRATOR_DEFAULT_MODEL,
+  CRM_ORCHESTRATOR_DEFAULT_PROMPT,
   createWorkspaceAiSettingPrismaStore
 } from "./workspace-ai-setting-prisma-store";
 
@@ -75,5 +77,73 @@ describe("workspace ai setting prisma store", () => {
     });
     expect(setting.model).toBe("gpt-4.1");
     expect(setting.prompt).toContain("architecture bureau");
+  });
+
+  it("returns the built-in CRM orchestrator defaults when no row exists", async () => {
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn()
+      }
+    });
+
+    const setting = await store.getCrmOrchestrator("workspace-demo");
+
+    expect(setting).toEqual({
+      workspaceId: "workspace-demo",
+      role: "crm_orchestrator",
+      model: CRM_ORCHESTRATOR_DEFAULT_MODEL,
+      prompt: CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+      updatedAt: null
+    });
+    expect(setting.prompt).toContain("CRM Orchestrator Agent");
+    expect(setting.prompt).toContain("Lead Creation Agent");
+    expect(setting.prompt).toContain("Lead Update Agent");
+    expect(setting.prompt).toContain("OUTPUT FORMAT");
+  });
+
+  it("upserts the CRM orchestrator prompt and model for one workspace", async () => {
+    const upsert = vi.fn(async (args: unknown) => ({
+      id: "setting-2",
+      workspaceId: "workspace-demo",
+      role: "crm_orchestrator",
+      model: "gpt-5.2",
+      prompt: "Route natural language CRM requests to specialized agents.",
+      createdAt: new Date("2026-05-31T08:00:00.000Z"),
+      updatedAt: new Date("2026-05-31T08:05:00.000Z")
+    }));
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(),
+        upsert
+      }
+    });
+
+    const setting = await store.upsertCrmOrchestrator({
+      workspaceId: "workspace-demo",
+      model: "gpt-5.2",
+      prompt: "Route natural language CRM requests to specialized agents."
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: {
+        workspaceId_role: {
+          workspaceId: "workspace-demo",
+          role: "crm_orchestrator"
+        }
+      },
+      create: {
+        workspaceId: "workspace-demo",
+        role: "crm_orchestrator",
+        model: "gpt-5.2",
+        prompt: "Route natural language CRM requests to specialized agents."
+      },
+      update: {
+        model: "gpt-5.2",
+        prompt: "Route natural language CRM requests to specialized agents."
+      }
+    });
+    expect(setting.model).toBe("gpt-5.2");
+    expect(setting.prompt).toContain("specialized agents");
   });
 });

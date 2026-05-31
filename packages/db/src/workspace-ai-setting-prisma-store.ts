@@ -1,3 +1,7 @@
+import { CRM_ORCHESTRATOR_DEFAULT_PROMPT } from "@app/assistant";
+
+export { CRM_ORCHESTRATOR_DEFAULT_PROMPT } from "@app/assistant";
+
 export const CLIENT_MATERIAL_ANALYSIS_ROLE = "client_material_analysis" as const;
 export const CLIENT_MATERIAL_ANALYSIS_DEFAULT_MODEL = "gpt-4.1-mini";
 export const CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT = [
@@ -53,8 +57,10 @@ export const CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT = [
   "Do not invent missing fields.",
   "Use exactly these top-level JSON keys: clientName, requestType, urgency, temperature, bgfM2, projectAddress, email, phone, budgetEur, desiredStart, desiredMoveIn, isStandard, missingData, leadSummary, documentSummaries, suggestedReply, confidence."
 ].join("\n");
+export const CRM_ORCHESTRATOR_ROLE = "crm_orchestrator" as const;
+export const CRM_ORCHESTRATOR_DEFAULT_MODEL = "gpt-4.1-mini";
 
-export type WorkspaceAiSettingRole = typeof CLIENT_MATERIAL_ANALYSIS_ROLE;
+export type WorkspaceAiSettingRole = typeof CLIENT_MATERIAL_ANALYSIS_ROLE | typeof CRM_ORCHESTRATOR_ROLE;
 
 type WorkspaceAiSettingRow = {
   id: string;
@@ -80,6 +86,12 @@ export type UpsertClientMaterialAnalysisSettingInput = {
   prompt: string;
 };
 
+export type UpsertCrmOrchestratorSettingInput = {
+  workspaceId: string;
+  model: string;
+  prompt: string;
+};
+
 export type WorkspaceAiSettingPrismaClientLike = {
   workspaceAiSetting: {
     findUnique(args: unknown): Promise<WorkspaceAiSettingRow | null>;
@@ -90,6 +102,8 @@ export type WorkspaceAiSettingPrismaClientLike = {
 export type WorkspaceAiSettingStore = {
   getClientMaterialAnalysis(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
   upsertClientMaterialAnalysis(input: UpsertClientMaterialAnalysisSettingInput): Promise<WorkspaceAiSettingRecord>;
+  getCrmOrchestrator(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
+  upsertCrmOrchestrator(input: UpsertCrmOrchestratorSettingInput): Promise<WorkspaceAiSettingRecord>;
 };
 
 export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPrismaClientLike): WorkspaceAiSettingStore {
@@ -128,6 +142,42 @@ export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPr
       });
 
       return toWorkspaceAiSettingRecord(row);
+    },
+
+    async getCrmOrchestrator(workspaceId) {
+      const row = await client.workspaceAiSetting.findUnique({
+        where: {
+          workspaceId_role: {
+            workspaceId,
+            role: CRM_ORCHESTRATOR_ROLE
+          }
+        }
+      });
+
+      return row ? toWorkspaceAiSettingRecord(row) : createDefaultCrmOrchestratorSetting(workspaceId);
+    },
+
+    async upsertCrmOrchestrator(input) {
+      const row = await client.workspaceAiSetting.upsert({
+        where: {
+          workspaceId_role: {
+            workspaceId: input.workspaceId,
+            role: CRM_ORCHESTRATOR_ROLE
+          }
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          role: CRM_ORCHESTRATOR_ROLE,
+          model: input.model,
+          prompt: input.prompt
+        },
+        update: {
+          model: input.model,
+          prompt: input.prompt
+        }
+      });
+
+      return toWorkspaceAiSettingRecord(row);
     }
   };
 }
@@ -142,10 +192,20 @@ export function createDefaultClientMaterialAnalysisSetting(workspaceId: string):
   };
 }
 
+export function createDefaultCrmOrchestratorSetting(workspaceId: string): WorkspaceAiSettingRecord {
+  return {
+    workspaceId,
+    role: CRM_ORCHESTRATOR_ROLE,
+    model: CRM_ORCHESTRATOR_DEFAULT_MODEL,
+    prompt: CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+    updatedAt: null
+  };
+}
+
 function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSettingRecord {
   return {
     workspaceId: row.workspaceId,
-    role: CLIENT_MATERIAL_ANALYSIS_ROLE,
+    role: row.role === CRM_ORCHESTRATOR_ROLE ? CRM_ORCHESTRATOR_ROLE : CLIENT_MATERIAL_ANALYSIS_ROLE,
     model: row.model,
     prompt: row.prompt,
     updatedAt: row.updatedAt
