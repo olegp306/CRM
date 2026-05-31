@@ -339,11 +339,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: isExplicitNote
-          ? `Saved this note to lead <b>${escapeHtml(repliedLead.leadId)}</b> history.`
-          : isReminder
-            ? `Saved this reminder to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`
-            : `Saved this client context to lead <b>${escapeHtml(repliedLead.leadId)}</b> history: ${escapeHtml(summary)}`,
+        text: createTelegramLeadHistoryUpdatedMessage(repliedLead.leadId, summary),
         parseMode: "HTML",
         replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
@@ -945,6 +941,10 @@ function createTelegramInteractionSummary(messageText: string, changedFields: st
   }
 
   return "Telegram interaction saved.";
+}
+
+function createTelegramLeadHistoryUpdatedMessage(leadId: string, summary: string): string {
+  return [`<b>${escapeHtml(leadId)}</b> updated in CRM.`, "", `History note: <b>${escapeHtml(summary)}</b>`].join("\n");
 }
 
 function createTelegramExistingLeadClarificationMessage(leadId: string, matchedFields: string[]): string {
@@ -1830,7 +1830,7 @@ function createTelegramLeadUpdateData(
 }
 
 function addUpdateValue(update: Record<string, unknown>, key: string, value: string | number | null | undefined): void {
-  if (typeof value === "number" ? Number.isFinite(value) : Boolean(value?.trim())) {
+  if (isMeaningfulTelegramFieldValue(value)) {
     update[key] = value;
   }
 }
@@ -1862,7 +1862,7 @@ function mergeLeadMissingData(
     phone: draft.phone ?? getLeadPhone(lead)
   };
   for (const field of ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone"]) {
-    if (fieldValues[field] !== null && fieldValues[field] !== undefined && String(fieldValues[field]).trim().length > 0) {
+    if (isMeaningfulTelegramFieldValue(fieldValues[field])) {
       unresolved.delete(field);
     }
   }
@@ -1891,13 +1891,24 @@ function createTelegramLeadUpdatedMessage(
     ["BGF m2", draft.bgfM2 === null || draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
     ["Email", draft.email],
     ["Phone", draft.phone]
-  ].filter(([, value]) => String(value ?? "").trim() !== "");
+  ].filter(([, value]) => isMeaningfulTelegramFieldValue(value));
 
   return [
     `<b>${escapeHtml(leadId)}</b> updated in CRM.`,
     "",
     ...fields.map(([label, value]) => `${escapeHtml(String(label))}: <b>${escapeHtml(String(value))}</b>`)
   ].join("\n");
+}
+
+function isMeaningfulTelegramFieldValue(value: unknown): boolean {
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return Boolean(normalized) && !["unknown", "no data", "null", "undefined", "n/a", "na"].includes(normalized);
 }
 
 function filterMissingDataForKpRequiredFields(missingData: string[], requiredFields: KpRequiredField[] | undefined): string[] {

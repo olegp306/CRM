@@ -2153,11 +2153,89 @@ describe("telegram worker", () => {
     expect(sendBody.parse_mode).toBe("HTML");
     expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
     expect(sendBody.text).toContain("Email: <b>katya@example.com</b>");
+    expect(sendBody.text).not.toContain("Client: <b>unknown</b>");
     expect(sendBody.text).not.toContain("mark KP sent");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
+  });
+
+  it("does not show unknown placeholder values in Telegram lead update cards", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Initial lead\nTelegram lead card: telegram-bot:12345:900",
+                missingData: ["email"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "unknown",
+        requestType: "unknown",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: undefined,
+        bgfM2: undefined,
+        email: "katya@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Email update",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 211,
+          message: {
+            message_id: 311,
+            date: 1779297000,
+            chat: { id: 12345 },
+            reply_to_message: { message_id: 900 },
+            text: "email katya@example.com"
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        parser,
+        prisma: client,
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("Email: <b>katya@example.com</b>");
+    expect(sendBody.text).not.toContain("Client: <b>unknown</b>");
+    expect(sendBody.text).not.toContain("Request type: <b>unknown</b>");
   });
 
   it("updates an existing lead when replying to a lead card text that contains the lead id", async () => {
@@ -2333,6 +2411,7 @@ describe("telegram worker", () => {
       )
     ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 41 });
 
+    expect(parser.parseLead).not.toHaveBeenCalled();
     expect(auditEvents).toContainEqual(
       expect.objectContaining({
         action: "assistant.channel.event",
@@ -2345,6 +2424,11 @@ describe("telegram worker", () => {
         })
       })
     );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("History note: <b>");
+    expect(sendBody.text).not.toContain("Saved this note");
   });
 
   it("records an explicit replied lead note without parsing it as a lead update", async () => {
@@ -2422,6 +2506,11 @@ describe("telegram worker", () => {
         })
       })
     );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("History note: <b>we sent the client a birthday gift.</b>");
+    expect(sendBody.text).not.toContain("Saved this note");
   });
 
   it("records a replied make-a-note command as lead history and returns a CRM button", async () => {
@@ -2502,7 +2591,9 @@ describe("telegram worker", () => {
     );
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
-    expect(sendBody.text).toContain("Saved this note to lead <b>L-2026-002</b> history.");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("History note: <b>");
+    expect(sendBody.text).not.toContain("Saved this note");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
@@ -2588,7 +2679,9 @@ describe("telegram worker", () => {
     );
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
-    expect(sendBody.text).toContain("Saved this reminder to lead <b>L-2026-002</b> history");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("History note: <b>Reminder requested:");
+    expect(sendBody.text).not.toContain("Saved this reminder");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
@@ -2675,7 +2768,9 @@ describe("telegram worker", () => {
     );
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
-    expect(sendBody.text).toContain("Saved this client context to lead <b>L-2026-002</b> history");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("History note: <b>Client context:");
+    expect(sendBody.text).not.toContain("Saved this client context");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"

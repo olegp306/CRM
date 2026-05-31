@@ -300,10 +300,14 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
     channel === "web"
       ? "In the web app, you can also attach files and photos here. On mobile, use your keyboard microphone for voice dictation."
       : "In Telegram, you can send text, photos, PDFs, voice messages, and audio files. Reply to a lead card to update that exact lead.";
+  const capabilityText =
+    channel === "telegram"
+      ? "I can create and update leads. Right now in Telegram I only create leads and update existing leads; other CRM actions are paused while we unify the workflow."
+      : "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.";
 
   return [
     "Hi, I am Oleg's CRM assistant.",
-    "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.",
+    capabilityText,
     uploadHint,
     "I only save feature requests when the message is clearly product feedback."
   ].join("\n\n");

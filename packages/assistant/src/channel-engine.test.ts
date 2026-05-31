@@ -71,6 +71,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
+    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).not.toContain("mark KP as sent");
   });
 
   it("answers Telegram start command with shared help", () => {
@@ -83,6 +85,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
+    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).not.toContain("mark KP as sent");
   });
 
   it("answers new lead commands with source-material intake guidance", () => {
