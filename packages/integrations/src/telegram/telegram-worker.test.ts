@@ -487,7 +487,7 @@ describe("telegram worker", () => {
     ]);
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("<b>Missing data</b>: budget");
+    expect(sendBody.text).toContain("<b>Missing for KP</b>: budget");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
@@ -1041,11 +1041,16 @@ describe("telegram worker", () => {
     expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("New lead draft started");
   });
 
-  it("stores an incomplete document intake as a draft instead of creating a CRM lead", async () => {
+  it("creates a CRM lead immediately for incomplete document intake and asks for KP fields", async () => {
+    const created: unknown[] = [];
     const client = {
       lead: {
         findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
-        create: vi.fn()
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-incomplete", leadId: "L-2026-002", status: "needs_data" };
+        }),
+        update: vi.fn()
       }
     };
     const parser: OpenAiLeadParserClient = {
@@ -1096,26 +1101,42 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           telegramDraftStore,
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
-    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 13 });
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 13 });
 
     await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toMatchObject({
+      leadId: "L-2026-002",
       draft: {
         clientName: "Katya",
         requestType: "new_build",
         missingData: ["projectAddress", "bgfM2"]
       }
     });
-    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(created).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          leadId: "L-2026-002",
+          status: "needs_data",
+          rawInput: expect.stringContaining("lead.pdf"),
+          requestType: "new_build",
+          missingData: ["projectAddress", "bgfM2"]
+        })
+      })
+    ]);
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("Lead draft");
-    expect(sendBody.text).toContain("Missing for KP: projectAddress, bgfM2");
+    expect(sendBody.text).toContain("Done, I created a lead in CRM.");
+    expect(sendBody.text).toContain("L-2026-002");
+    expect(sendBody.text).toContain("<b>Missing for KP</b>: projectAddress, bgfM2");
+    expect(sendBody.reply_markup).toEqual({
+      inline_keyboard: [[{ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" }]]
+    });
   });
 
   it("creates a lead when current template required fields are ready even if static KP fields are missing", async () => {
@@ -1206,11 +1227,16 @@ describe("telegram worker", () => {
 
   it("enriches an active draft and creates a CRM lead when KP fields become complete", async () => {
     const created: unknown[] = [];
+    const updates: unknown[] = [];
     const client = {
       lead: {
         findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
         create: vi.fn(async (args: unknown) => {
           created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "needs_data" };
+        }),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
           return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
         })
       }
@@ -1299,18 +1325,27 @@ describe("telegram worker", () => {
       {
         data: expect.objectContaining({
           leadId: "L-2026-002",
-          status: "new",
           requestType: "new_build",
-          projectAddress: "Chiemseeufer 7",
-          bgfM2: 180,
-          missingData: []
+          status: "needs_data",
+          missingData: ["projectAddress", "bgfM2"]
         })
       }
+    ]);
+    expect(updates).toEqual([
+      expect.objectContaining({
+        where: { workspaceId_leadId: { workspaceId: "workspace-demo", leadId: "L-2026-002" } },
+        data: expect.objectContaining({
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          missingData: [],
+          status: "new"
+        })
+      })
     ]);
     await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("KP fields ready");
+    expect(sendBody.text).toContain("Updated lead <b>L-2026-002</b>.");
     expect(sendBody.reply_markup.inline_keyboard[0][0].url).toBe("https://crm.example.com/leads?leadId=L-2026-002");
   });
 
@@ -1912,11 +1947,16 @@ describe("telegram worker", () => {
 
   it("treats a reply to the bot draft message as an explicit update to that draft", async () => {
     const created: unknown[] = [];
+    const updates: unknown[] = [];
     const client = {
       lead: {
         findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
         create: vi.fn(async (args: unknown) => {
           created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "needs_data" };
+        }),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
           return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
         })
       }
@@ -2007,10 +2047,21 @@ describe("telegram worker", () => {
         data: expect.objectContaining({
           leadId: "L-2026-002",
           projectAddress: "Chiemseeufer 7",
-          bgfM2: 180
+          missingData: ["bgfM2"]
         })
       }
     ]);
+    expect(updates.at(-1)).toEqual(
+      expect.objectContaining({
+        where: { workspaceId_leadId: { workspaceId: "workspace-demo", leadId: "L-2026-002" } },
+        data: expect.objectContaining({
+          projectAddress: "Chiemseeufer 7",
+          bgfM2: 180,
+          missingData: [],
+          status: "new"
+        })
+      })
+    );
   });
 
   it("updates an existing lead when replying to the bot lead card", async () => {
