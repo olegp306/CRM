@@ -806,15 +806,104 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         });
     const kpStatus = getKpRequiredFieldStatus(session.draft, config.kpRequiredFields);
 
-    if (!kpStatus.ready) {
+    if (activeSession?.leadId) {
+      const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+      const updated = client.lead.update
+        ? await client.lead.update({
+            where: {
+              workspaceId_leadId: {
+                workspaceId: config.workspaceId,
+                leadId: activeSession.leadId
+              }
+            },
+            data: {
+              ...createTelegramLeadUpdateData(
+                { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
+                { ...session.draft, missingData: templateAwareMissingData },
+                message
+              ),
+              rawInput: session.draft.rawInput
+            }
+          })
+        : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
       const sent = await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramLeadDraftMessage(session),
+        text: createTelegramLeadUpdatedMessage(updated.leadId, { ...session.draft, missingData: templateAwareMissingData }),
+        parseMode: "HTML",
+        replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, updated.leadId, {
+          email: session.draft.email,
+          missingFields: templateAwareMissingData
+        }),
         fetchImpl
       });
-      await telegramDraftStore.save({ ...session, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
-      skipped += message.sourceMessageIds.length;
+      if (templateAwareMissingData.length > 0) {
+        await telegramDraftStore.save({ ...session, leadId: activeSession.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
+      } else {
+        await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
+      }
+      processed += 1;
+      continue;
+    }
+
+    if (!kpStatus.ready) {
+      const leadId = getNextBusinessId({
+        kind: "lead",
+        now: new Date(hydratedMessage.receivedAt),
+        existingIds: existingIds.map((lead) => lead.leadId)
+      });
+      const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+      const created = await client.lead.create({
+        data: {
+          workspaceId: config.workspaceId,
+          leadId,
+          status: "needs_data",
+          rawInput: session.draft.rawInput,
+          requestType: session.draft.requestType,
+          projectAddress: session.draft.projectAddress,
+          bgfM2: session.draft.bgfM2,
+          isStandard: session.draft.isStandard,
+          missingData: templateAwareMissingData,
+          temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
+        }
+      });
+      await saveTelegramChannelEvent(
+        config,
+        message,
+        createLeadCreatedEvent({
+          type: "lead_created",
+          channel: "telegram",
+          threadId: createTelegramThreadId(message.chatId),
+          leadId: created.leadId,
+          fieldsCreated: createDetectedTelegramLeadFields(session.draft),
+          missingData: templateAwareMissingData
+        })
+      );
+      const sent = await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramLeadConfirmation({
+          leadId: created.leadId,
+          status: created.status,
+          draft: { ...session.draft, missingData: templateAwareMissingData }
+        }),
+        parseMode: "HTML",
+        replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
+          email: session.draft.email,
+          missingFields: templateAwareMissingData
+        }),
+        fetchImpl
+      });
+      if (client.lead.update && created.id && sent.messageId) {
+        await client.lead.update({
+          where: { id: created.id },
+          data: {
+            rawInput: appendTelegramBotLeadMessageMarker(session.draft.rawInput, message.chatId, sent.messageId)
+          }
+        });
+      }
+      await telegramDraftStore.save({ ...session, leadId: created.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
+      processed += 1;
       continue;
     }
 
@@ -923,7 +1012,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
         email: session.draft.email,
         pdfUrl: generatedDocumentPdfUrl,
-        docxUrl: generatedDocumentDocxUrl
+        docxUrl: generatedDocumentDocxUrl,
+        missingFields: templateAwareMissingData
       }),
       fetchImpl
     });
@@ -1526,10 +1616,12 @@ function createTelegramLeadConfirmation({
   generatedDocumentDelivered?: boolean;
   generatedDocumentError?: string;
 }): string {
+  const missingData = Array.isArray(draft.missingData) ? draft.missingData : [];
+  const kpReady = missingData.length === 0;
   const fields = [
     ["Lead", leadId],
     ["Status", status],
-    ["KP fields ready", "yes"],
+    ["KP fields ready", kpReady ? "yes" : "no"],
     ["Pricing branch", createTelegramPricingBranchLabel(draft)],
     ["KP document", generatedDocumentId],
     ["KP file", generatedDocumentId ? (generatedDocumentDelivered ? "sent to Telegram" : "saved in CRM") : ""],
@@ -1537,9 +1629,9 @@ function createTelegramLeadConfirmation({
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
     ["Project address", draft.projectAddress],
-    ["BGF m2", draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
+    ["BGF m2", draft.bgfM2 === null || draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
     ["Standard", draft.isStandard === undefined ? "" : draft.isStandard ? "yes" : "no"],
-    ["Missing data", Array.isArray(draft.missingData) && draft.missingData.length > 0 ? draft.missingData.join(", ") : ""]
+    ["Missing for KP", missingData.length > 0 ? missingData.join(", ") : ""]
   ].filter(([, value]) => String(value ?? "").trim() !== "");
 
   return [
@@ -2019,7 +2111,7 @@ function toOptionalNumber(value: unknown): number | null {
 function createTelegramCrmReplyMarkup(
   crmBaseUrl: string | undefined,
   leadId: string,
-  kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string }
+  kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string; missingFields?: string[] }
 ): unknown | undefined {
   if (!crmBaseUrl?.trim()) {
     return undefined;
@@ -2028,7 +2120,8 @@ function createTelegramCrmReplyMarkup(
   const actions = createLeadChatActions(
     {
       leadId,
-      kpReady: true,
+      kpReady: (kpMail?.missingFields ?? []).length === 0,
+      missingFields: kpMail?.missingFields,
       pdfUrl: isTelegramHttpUrl(kpMail?.pdfUrl) ? kpMail.pdfUrl : undefined,
       docxUrl: isTelegramHttpUrl(kpMail?.docxUrl) ? kpMail.docxUrl : undefined,
       canSendKp: Boolean(kpMail?.email?.trim()),

@@ -16,6 +16,7 @@ export type TelegramLeadDraftSession = {
   updatedAt: string;
   sourceMessageIds: number[];
   telegramDraftMessageId?: number;
+  leadId?: string;
   draft: TelegramLeadIntakeDraft;
 };
 
