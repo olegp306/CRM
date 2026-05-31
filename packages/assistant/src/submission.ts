@@ -86,6 +86,33 @@ export function createAssistantSubmissionResult({
   if (message.intent === "crm_action") {
     const actionPreview = createCrmActionPreview(trimmedContent, context);
 
+    if (!actionPreview) {
+      const leadContextResponse = channelResponse.intent === "business_process_note" ? channelResponse : null;
+
+      if (leadContextResponse) {
+        return createAssistantSubmissionResultFromChannelResponse({
+          thread,
+          message,
+          channelResponse: leadContextResponse,
+          context,
+          threadId,
+          messageId,
+          attachments: attachments ?? []
+        });
+      }
+
+      return {
+        thread,
+        message,
+        response: createCreateUpdateOnlyResponse(),
+        feedback: null,
+        actionPreview: null,
+        responseButtons: [],
+        confirmationStatus: null,
+        permissionBlocked: null
+      };
+    }
+
     if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
       return createAssistantSubmissionResultFromChannelResponse({
         thread,
@@ -338,49 +365,9 @@ function createConfirmationResponseButtons(): AssistantChannelResponseButton[] {
   ];
 }
 
-function createCrmActionPreview(content: string, context?: AssistantContext): ActionPreview {
-  if (isKpGenerationRequest(content)) {
-    return createActionPreview({
-      actionType: "generate_kp",
-      summary: "Generate KP document from assistant request",
-      changes: [
-        { field: "document.type", from: null, to: "kp" },
-        { field: "document.selectedRecordIds", from: null, to: context?.selectedRecordIds ?? [] },
-        { field: "document.sourceText", from: null, to: content }
-      ]
-    });
-  }
-
-  if (isMarkKpSentRequest(content)) {
-    const actionType = isUndoKpSentRequest(content) ? "undo_kp_sent" : "mark_kp_sent";
-
-    return createActionPreview({
-      actionType,
-      summary: actionType === "undo_kp_sent" ? "Undo KP sent from assistant request" : "Mark KP as sent from assistant request",
-      changes: [
-        { field: "lead.selectedRecordIds", from: null, to: context?.selectedRecordIds ?? [] },
-        { field: "lead.sourceText", from: null, to: content }
-      ]
-    });
-  }
-
-  if (isProjectTaskUpdateRequest(content)) {
-    return createActionPreview({
-      actionType: "update_project_task",
-      summary: "Update project task from assistant request",
-      changes: [
-        { field: "project.selectedRecordIds", from: null, to: context?.selectedRecordIds ?? [] },
-        { field: "task.sourceText", from: null, to: content }
-      ]
-    });
-  }
-
-  if (isScheduleFollowupRequest(content)) {
-    return createActionPreview({
-      actionType: "schedule_followup",
-      summary: "Schedule follow-up from assistant request",
-      changes: [{ field: "followup.sourceText", from: null, to: content }]
-    });
+function createCrmActionPreview(content: string, context?: AssistantContext): ActionPreview | null {
+  if (isKpGenerationRequest(content) || isMarkKpSentRequest(content) || isProjectTaskUpdateRequest(content) || isScheduleFollowupRequest(content)) {
+    return null;
   }
 
   return createActionPreview({
@@ -424,6 +411,10 @@ function isScheduleFollowupRequest(content: string): boolean {
     /\b(follow[-\s]?up|remind|reminder|schedule)\b/i.test(content) ||
     /(напомни|напомин|запланируй|поставь).{0,48}(лид|кп|follow-up|фоллоу|завтра|недел|день)/i.test(content)
   );
+}
+
+function createCreateUpdateOnlyResponse(): string {
+  return "Right now I can create or update leads. Send client source material to create a lead, or open/reply to a lead and send new details to update it.";
 }
 
 function getActionPreviewLabel(actionType: string): string {
