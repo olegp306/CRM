@@ -309,6 +309,26 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("L-2026-004");
   });
 
+  it("keeps Telegram lead status answers inside the current create/update-only scope", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "What is the status of this lead?",
+      replyTo: {
+        sourceChannel: "telegram",
+        sourceMessageId: "900",
+        leadId: "L-2026-004"
+      }
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("L-2026-004");
+    expect(result.text).toContain("create or update leads");
+    expect(result.text).not.toContain("follow-ups");
+    expect(result.text).not.toContain("KP documents");
+  });
+
   it("keeps lead status questions with screenshots as support requests", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

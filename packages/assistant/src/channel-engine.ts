@@ -85,9 +85,7 @@ export function createAssistantChannelResponse(
       feedbackType: undefined,
       buttons: createLeadCrmButtons(leadId),
       normalizedActions: leadId ? ["open_crm"] : [],
-      text: leadId
-        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
-        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      text: createSupportResponseText(message.channel, leadId)
     };
   }
 
@@ -100,9 +98,7 @@ export function createAssistantChannelResponse(
       feedbackType: undefined,
       buttons: createLeadCrmButtons(leadId),
       normalizedActions: leadId ? ["open_crm"] : [],
-      text: leadId
-        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
-        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      text: createSupportResponseText(message.channel, leadId)
     };
   }
 
@@ -138,6 +134,18 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
   };
+}
+
+function createSupportResponseText(channel: AssistantChannelMessage["channel"], leadId: string | null): string {
+  if (channel === "telegram") {
+    return leadId
+      ? `I can help with lead ${leadId}. Right now in Telegram I create or update leads and can open this lead in CRM.`
+      : "Right now in Telegram I create or update leads. Reply to a lead card or send client source material.";
+  }
+
+  return leadId
+    ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
+    : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material.";
 }
 
 function createLeadNaturalContextNoteResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
