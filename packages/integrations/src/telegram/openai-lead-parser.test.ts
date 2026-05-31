@@ -15,6 +15,17 @@ describe("openai lead parser", () => {
         phone: "+49 170 123456",
         missingData: [],
         summary: "Standard EFH lead",
+        leadSummary: "Client sent a standard EFH request with address and BGF.",
+        documentSummaries: [
+          {
+            fileName: "lead.pdf",
+            kind: "pdf" as const,
+            summary: "PDF contains the project brief.",
+            transcript: null,
+            storageKey: null,
+            sourceUrl: null
+          }
+        ],
         suggestedReply: "Danke, wir pruefen das."
       }))
     };
@@ -39,7 +50,7 @@ describe("openai lead parser", () => {
       projectAddress: "Chiemseeufer 7",
       bgfM2: 160,
       rawInput:
-        "Need EFH offer\nTelegram sources: telegram:123:8\nTelegram attachment 1: PDF (lead.pdf)\nSummary: Standard EFH lead\nSuggested reply: Danke, wir pruefen das.",
+        "Need EFH offer\nTelegram sources: telegram:123:8\nTelegram attachment 1: PDF (lead.pdf)\nSummary: Standard EFH lead\nLead summary: Client sent a standard EFH request with address and BGF.\nSource material summaries:\n- lead.pdf: PDF contains the project brief.\nSuggested reply: Danke, wir pruefen das.",
       missingData: [],
       isStandard: true
     });
@@ -58,8 +69,23 @@ describe("openai lead parser", () => {
           projectAddress: "Planweg 1",
           email: null,
           phone: null,
+          budgetEur: null,
+          desiredStart: null,
+          desiredMoveIn: null,
+          isStandard: true,
           missingData: [],
           summary: "Attachment parsed",
+          leadSummary: "Attachment parsed into a lead.",
+          documentSummaries: [
+            {
+              fileName: "lead.pdf",
+              kind: "pdf",
+              summary: "PDF contains lead data.",
+              transcript: null,
+              storageKey: null,
+              sourceUrl: null
+            }
+          ],
           suggestedReply: "We will review."
         })
       })

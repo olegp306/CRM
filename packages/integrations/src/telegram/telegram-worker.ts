@@ -22,7 +22,12 @@ import {
 } from "@app/assistant";
 import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
-import { createAssistantGeneratedDocumentPrismaStore, createAssistantPrismaRepository, prisma as defaultPrisma } from "@app/db";
+import {
+  createAssistantGeneratedDocumentPrismaStore,
+  createAssistantPrismaRepository,
+  createWorkspaceAiSettingPrismaStore,
+  prisma as defaultPrisma
+} from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
@@ -1012,10 +1017,14 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     throw new Error("OPENAI_API_KEY is required");
   }
 
+  const workspaceId = env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo";
+  const clientMaterialAnalysisSetting = await createWorkspaceAiSettingPrismaStore(
+    defaultPrisma as never
+  ).getClientMaterialAnalysis(workspaceId);
   const config = {
     allowedChatIds: parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS),
     botToken,
-    workspaceId: env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo",
+    workspaceId,
     crmBaseUrl: env.TELEGRAM_CRM_BASE_URL ?? env.NEXT_PUBLIC_APP_URL,
     generateKpDocument: createAssistantGeneratedDocumentPrismaStore(defaultPrisma, {
       objectStorage: createObjectStorageFromEnv(),
@@ -1023,14 +1032,15 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
     }).create,
     saveAuditEvent: createAssistantPrismaRepository(defaultPrisma).saveAuditEvent,
     saveSourceAttachment: createTelegramSourceAttachmentStore(defaultPrisma, createObjectStorageFromEnv()).save,
-    kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo"),
+    kpRequiredFields: await resolveCurrentKpRequiredFields(defaultPrisma as TelegramTemplatePrismaLike, workspaceId),
     audioTranscriber: createOpenAiAudioTranscriber({
       apiKey,
       model: env.OPENAI_AUDIO_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe"
     }),
     parser: createOpenAiLeadParserClient({
       apiKey,
-      model: env.OPENAI_MODEL ?? "gpt-4o-mini"
+      model: clientMaterialAnalysisSetting.model || env.OPENAI_MODEL || "gpt-4o-mini",
+      prompt: clientMaterialAnalysisSetting.prompt
     })
   };
   const testUpdate = createTelegramTestUpdateFromEnv(env);

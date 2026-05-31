@@ -79,6 +79,7 @@ model Workspace {
   assistantActions   AssistantAction[]
   feedbackItems      FeedbackItem[]
   integrationAccounts IntegrationAccount[]
+  aiSettings         WorkspaceAiSetting[]
 
   @@index([createdAt])
 }
@@ -601,4 +602,19 @@ model IntegrationAccount {
   workspace         Workspace @relation(fields: [workspaceId], references: [id])
 
   @@unique([workspaceId, provider])
+}
+
+model WorkspaceAiSetting {
+  id          String   @id @default(cuid())
+  workspaceId String
+  role        String
+  model       String
+  prompt      String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, role])
+  @@index([workspaceId])
 }

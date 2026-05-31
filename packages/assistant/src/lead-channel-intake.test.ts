@@ -33,6 +33,17 @@ describe("lead channel intake", () => {
         phone: null,
         missingData: ["email"],
         summary: "New EFH lead",
+        leadSummary: "Client wants a commercial proposal for a new EFH in Bad Aibling.",
+        documentSummaries: [
+          {
+            fileName: "house.jpg",
+            kind: "photo" as const,
+            summary: "Photo shows the existing house facade.",
+            transcript: null,
+            storageKey: "source/house.jpg",
+            sourceUrl: null
+          }
+        ],
         suggestedReply: "Please send email."
       }))
     };
@@ -52,6 +63,9 @@ describe("lead channel intake", () => {
     expect(draft.rawInput).toContain("web sources: web:thread-1:message-1");
     expect(draft.rawInput).toContain("Attachment 1: photo (house.jpg)");
     expect(draft.rawInput).toContain("Summary: New EFH lead");
+    expect(draft.rawInput).toContain("Lead summary: Client wants a commercial proposal for a new EFH in Bad Aibling.");
+    expect(draft.rawInput).toContain("Source material summaries:");
+    expect(draft.rawInput).toContain("house.jpg: Photo shows the existing house facade.");
     expect(draft.rawInput).toContain("Suggested reply: Please send email.");
     expect(draft.missingData).toContain("email");
   });

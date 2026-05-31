@@ -1,5 +1,6 @@
 import { createLeadIntakeDraft, type LeadIntakeDraft } from "@app/core";
 import type { AssistantChannelAttachment, AssistantChannelMessage } from "./channel-message";
+import type { ClientMaterialDocumentSummary } from "./client-material-analysis";
 
 export type ParsedAssistantLeadInput = {
   clientName: string;
@@ -12,6 +13,8 @@ export type ParsedAssistantLeadInput = {
   phone?: string | null;
   missingData: string[];
   summary: string;
+  leadSummary?: string;
+  documentSummaries?: ClientMaterialDocumentSummary[];
   suggestedReply: string;
 };
 
@@ -44,6 +47,8 @@ export async function createLeadDraftFromAssistantChannelMessage(
     `${message.channel} sources: ${sourceExternalIds.join(", ")}`,
     createChannelAttachmentSummary(message.attachments),
     `Summary: ${parsed.summary}`,
+    parsed.leadSummary ? `Lead summary: ${parsed.leadSummary}` : "",
+    createDocumentSummaryBlock(parsed.documentSummaries),
     `Suggested reply: ${parsed.suggestedReply}`
   ]
     .filter(Boolean)
@@ -72,4 +77,18 @@ function createChannelAttachmentSummary(attachments: AssistantChannelAttachment[
   return attachments
     .map((attachment, index) => `Attachment ${index + 1}: ${attachment.kind} (${attachment.fileName})`)
     .join("\n");
+}
+
+function createDocumentSummaryBlock(summaries: ClientMaterialDocumentSummary[] | undefined): string {
+  if (!summaries || summaries.length === 0) {
+    return "";
+  }
+
+  return [
+    "Source material summaries:",
+    ...summaries.map((summary) => {
+      const transcript = summary.transcript ? ` Transcript: ${summary.transcript}` : "";
+      return `- ${summary.fileName}: ${summary.summary}${transcript}`;
+    })
+  ].join("\n");
 }

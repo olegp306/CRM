@@ -34,7 +34,18 @@ export type ParsedTelegramLeadInput = {
   phone?: string | null;
   missingData: string[];
   summary: string;
+  leadSummary?: string;
+  documentSummaries?: TelegramLeadDocumentSummary[];
   suggestedReply: string;
+};
+
+export type TelegramLeadDocumentSummary = {
+  fileName: string;
+  kind: TelegramLeadAttachment["kind"] | "docx" | "text" | "other";
+  summary: string;
+  transcript?: string | null;
+  storageKey?: string | null;
+  sourceUrl?: string | null;
 };
 
 type OpenAiParsedTelegramLeadInput = Omit<ParsedTelegramLeadInput, "bgfM2" | "projectAddress"> & {
@@ -84,6 +95,8 @@ export async function createLeadDraftFromTelegramMessage(
     `Telegram sources: ${telegramSourceExternalIds.join(", ")}`,
     createTelegramAttachmentSummary(message.attachments),
     `Summary: ${parsed.summary}`,
+    parsed.leadSummary ? `Lead summary: ${parsed.leadSummary}` : "",
+    createTelegramDocumentSummaryBlock(parsed.documentSummaries),
     `Suggested reply: ${parsed.suggestedReply}`
   ].filter(Boolean).join("\n");
 
@@ -134,7 +147,26 @@ function createTelegramAttachmentSummary(attachments: TelegramLeadAttachment[] |
     .join("\n");
 }
 
-export function createOpenAiLeadParserClient(config: { apiKey: string; model: string; fetchImpl?: typeof fetch }): OpenAiLeadParserClient {
+function createTelegramDocumentSummaryBlock(summaries: TelegramLeadDocumentSummary[] | undefined): string {
+  if (!summaries || summaries.length === 0) {
+    return "";
+  }
+
+  return [
+    "Source material summaries:",
+    ...summaries.map((summary) => {
+      const transcript = summary.transcript ? ` Transcript: ${summary.transcript}` : "";
+      return `- ${summary.fileName}: ${summary.summary}${transcript}`;
+    })
+  ].join("\n");
+}
+
+export function createOpenAiLeadParserClient(config: {
+  apiKey: string;
+  model: string;
+  prompt?: string;
+  fetchImpl?: typeof fetch;
+}): OpenAiLeadParserClient {
   const fetchImpl = config.fetchImpl ?? fetch;
 
   return {
@@ -150,8 +182,12 @@ export function createOpenAiLeadParserClient(config: { apiKey: string; model: st
           input: [
             {
               role: "system",
-              content:
-                "Extract an architecture CRM lead from Telegram. Return only JSON with clientName, requestType, urgency, temperature, bgfM2, projectAddress, email, phone, missingData, summary, suggestedReply. Keep actions review-first."
+              content: [
+                config.prompt ?? "Extract an architecture CRM lead from Telegram source material.",
+                "Analyze text, PDFs, photos, and audio transcripts as an architecture bureau assistant.",
+                "Return only JSON with clientName, requestType, urgency, temperature, bgfM2, projectAddress, email, phone, budgetEur, desiredStart, desiredMoveIn, isStandard, missingData, summary, leadSummary, documentSummaries, suggestedReply.",
+                "Keep actions review-first and do not invent missing data."
+              ].join("\n")
             },
             {
               role: "user",
@@ -174,8 +210,14 @@ export function createOpenAiLeadParserClient(config: { apiKey: string; model: st
                   "projectAddress",
                   "email",
                   "phone",
+                  "budgetEur",
+                  "desiredStart",
+                  "desiredMoveIn",
+                  "isStandard",
                   "missingData",
                   "summary",
+                  "leadSummary",
+                  "documentSummaries",
                   "suggestedReply"
                 ],
                 properties: {
@@ -187,8 +229,29 @@ export function createOpenAiLeadParserClient(config: { apiKey: string; model: st
                   projectAddress: { type: ["string", "null"] },
                   email: { type: ["string", "null"] },
                   phone: { type: ["string", "null"] },
+                  budgetEur: { type: ["number", "null"] },
+                  desiredStart: { type: ["string", "null"] },
+                  desiredMoveIn: { type: ["string", "null"] },
+                  isStandard: { type: ["boolean", "null"] },
                   missingData: { type: "array", items: { type: "string" } },
                   summary: { type: "string" },
+                  leadSummary: { type: "string" },
+                  documentSummaries: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["fileName", "kind", "summary", "transcript", "storageKey", "sourceUrl"],
+                      properties: {
+                        fileName: { type: "string" },
+                        kind: { type: "string", enum: ["photo", "pdf", "audio", "docx", "text", "other"] },
+                        summary: { type: "string" },
+                        transcript: { type: ["string", "null"] },
+                        storageKey: { type: ["string", "null"] },
+                        sourceUrl: { type: ["string", "null"] }
+                      }
+                    }
+                  },
                   suggestedReply: { type: "string" }
                 }
               }

@@ -26,6 +26,10 @@ export default function SettingsPage() {
           <h2 className="text-base font-semibold">Templates</h2>
           <p className="mt-2 text-sm text-muted-foreground">DOCX placeholder validation and document template versions.</p>
         </a>
+        <a href="/settings/ai-intake" className="rounded-lg border border-border bg-white p-4 transition hover:bg-muted">
+          <h2 className="text-base font-semibold">AI intake</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Metaprompt and model for client material analysis.</p>
+        </a>
       </div>
     </section>
   );
