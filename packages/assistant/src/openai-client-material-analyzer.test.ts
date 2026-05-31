@@ -71,7 +71,7 @@ describe("openai client material analyzer", () => {
       expect.objectContaining({
         type: "input_file",
         filename: "brief.pdf",
-        file_data: "abcd"
+        file_data: "data:application/pdf;base64,abcd"
       })
     );
   });

@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.1`
+Current stable version: `0.3.2`
 
 Stable tag format:
 
@@ -17,6 +17,7 @@ v0.2.3
 v0.2.4
 v0.3.0
 v0.3.1
+v0.3.2
 ```
 
 ## Branch Workflow

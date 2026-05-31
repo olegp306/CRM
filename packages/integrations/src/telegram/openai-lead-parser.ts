@@ -306,7 +306,7 @@ function createOpenAiUserContent(input: { text: string; receivedAt: string; atta
       return [{
         type: "input_file",
         filename: attachment.fileName ?? "telegram-lead.pdf",
-        file_data: attachment.base64
+        file_data: `data:${attachment.mimeType};base64,${attachment.base64}`
       }];
     })
   ];

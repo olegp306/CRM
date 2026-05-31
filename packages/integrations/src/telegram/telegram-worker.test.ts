@@ -2948,6 +2948,55 @@ describe("telegram worker", () => {
     );
   });
 
+  it("answers Telegram when lead parsing fails instead of crashing the worker loop", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => {
+        throw new Error("OpenAI request failed: 400 Bad Request");
+      })
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 77,
+            message: {
+              message_id: 707,
+              date: 1780254616,
+              chat: { id: 12345 },
+              text: "Text plus attachments"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 77 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("I could not parse this lead yet");
+  });
+
   it("runs worker iterations in loop mode with injectable sleep", async () => {
     const runs: number[] = [];
     const sleeps: number[] = [];
