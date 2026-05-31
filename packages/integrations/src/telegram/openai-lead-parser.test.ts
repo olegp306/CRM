@@ -110,7 +110,7 @@ describe("openai lead parser", () => {
     expect(body.input[1].content).toEqual([
       { type: "input_text", text: "Received at 2026-05-20T17:00:00.000Z\n\nSee attached" },
       { type: "input_image", image_url: "data:image/jpeg;base64,AQID", detail: "high" },
-      { type: "input_file", filename: "lead.pdf", file_data: "BAUG" }
+      { type: "input_file", filename: "lead.pdf", file_data: "data:application/pdf;base64,BAUG" }
     ]);
   });
 });

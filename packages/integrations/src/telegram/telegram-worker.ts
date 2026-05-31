@@ -605,7 +605,20 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         }
       }
     });
-    const draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
+    let draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+    try {
+      draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : error);
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramLeadParseFailureMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
 
     if (!repliedLead && shouldAskClarifyingQuestionForAudio(draft, hydratedMessage)) {
       await sendTelegramMessage({
@@ -1331,6 +1344,13 @@ function createTelegramAudioTranscriptionFailureMessage(): string {
   return [
     "I received the audio, but I could not transcribe it.",
     "Please resend the voice message, send a text summary, or add photos/PDFs with the missing details."
+  ].join("\n");
+}
+
+function createTelegramLeadParseFailureMessage(): string {
+  return [
+    "I could not parse this lead yet.",
+    "Please resend the text summary, or send the PDF/photo/audio in smaller separate messages. I will try again on the next message."
   ].join("\n");
 }
 

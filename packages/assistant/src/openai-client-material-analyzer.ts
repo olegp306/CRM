@@ -115,7 +115,7 @@ function createOpenAiAttachmentContent(attachment: AssistantChannelAttachment): 
       {
         type: "input_file",
         filename: attachment.fileName,
-        file_data: attachment.base64
+        file_data: `data:${attachment.mimeType};base64,${attachment.base64}`
       }
     ];
   }
