@@ -173,21 +173,21 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
   }
 
   if (decision.intent === "SEARCH_LEAD") {
-    return createTelegramRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
   }
 
   if (decision.intent === "CREATE_REMINDER") {
-    return createTelegramRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
   }
 
   if (decision.intent === "ATTACH_FILE") {
-    return createTelegramRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
   }
 
   return null;
 }
 
-function createTelegramRoutedButPausedResponse(decision: CrmOrchestratorDecision, detail: string): AssistantChannelResponse {
+export function createCrmOrchestratorRoutedButPausedResponse(decision: CrmOrchestratorDecision, detail: string): AssistantChannelResponse {
   return {
     intent: "support_request",
     shouldPersistFeedback: false,

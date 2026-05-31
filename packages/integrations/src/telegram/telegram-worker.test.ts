@@ -260,6 +260,202 @@ describe("telegram worker", () => {
     );
   });
 
+  it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SEARCH_LEAD" as const,
+        reasoning: "The user asks to find existing CRM information.",
+        action: "Lead Search Agent" as const,
+        status: "ready" as const,
+        message: "I will search for that lead."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 15,
+            message: {
+              message_id: 9,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Can you pull up what we know about the person from yesterday?"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          crmOrchestrator,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 15 });
+
+    expect(crmOrchestrator.route).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "telegram",
+        content: "Can you pull up what we know about the person from yesterday?"
+      })
+    );
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Lead Search Agent")
+      })
+    );
+  });
+
+  it("asks the CRM orchestrator clarification instead of creating a lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "CLARIFICATION_REQUIRED" as const,
+        reasoning: "The requested action is unclear.",
+        action: "clarification" as const,
+        status: "need_clarification" as const,
+        message: "Do you want me to create a new lead or update an existing one?"
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 16,
+            message: {
+              message_id: 10,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Let's do that thing for the client"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          crmOrchestrator,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 16 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottelegram-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Do you want me to create a new lead or update an existing one?")
+      })
+    );
+  });
+
+  it("keeps obvious Telegram lead creation on the parser path without CRM orchestrator fallback", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async () => ({ id: "lead-record-17", leadId: "L-2026-017", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 195,
+        projectAddress: "Bad Aibling, Gartenweg 9",
+        email: "irina.schneider@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        summary: "EFH lead",
+        suggestedReply: "Lead created."
+      }))
+    };
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 17,
+          message: {
+            message_id: 11,
+            date: 1779296400,
+            chat: { id: 12345 },
+            text: "Здравствуйте, меня зовут Ирина Шнайдер, контакт irina.schneider@example.com, +49 160 4442211. Нужен Neubau EFH в Bad Aibling, Gartenweg 9, BGF 195 м2."
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        crmBaseUrl: "https://crm.example.com",
+        parser,
+        crmOrchestrator,
+        prisma: client,
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(parser.parseLead).toHaveBeenCalled();
+    expect(client.lead.create).toHaveBeenCalled();
+  });
+
   it("answers duplicate Telegram source messages with the existing CRM lead link", async () => {
     const client = {
       lead: {

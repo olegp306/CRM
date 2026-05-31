@@ -7,6 +7,7 @@ import {
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
+  createCrmOrchestratorRoutedButPausedResponse,
   createMessageReceivedEvent,
   createOpenAiCrmOrchestrator,
   createReminderHistorySummary,
@@ -18,6 +19,7 @@ import {
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
   type AssistantChannelMessage,
+  type CrmOrchestratorDecision,
   type CrmOrchestratorClient
 } from "@app/assistant";
 import { getNextBusinessId } from "@app/core";
@@ -367,6 +369,23 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: responseText,
         replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons, config.crmBaseUrl),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
+    const crmOrchestratorFallbackResponse = await createTelegramCrmOrchestratorFallbackResponse(
+      config,
+      message,
+      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId) } : undefined
+    );
+    if (crmOrchestratorFallbackResponse) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: crmOrchestratorFallbackResponse.text,
+        replyMarkup: createTelegramResponseReplyMarkup(crmOrchestratorFallbackResponse.buttons, config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -1479,6 +1498,88 @@ function createTelegramGeneralAssistantResponse(
   }
 
   return null;
+}
+
+async function createTelegramCrmOrchestratorFallbackResponse(
+  config: Pick<TelegramWorkerConfig, "crmOrchestrator" | "workspaceId">,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments">,
+  replyTo?: { leadId: string; sourceMessageId: string }
+) {
+  if (!config.crmOrchestrator || !shouldUseCrmOrchestratorFallback(message, replyTo)) {
+    return null;
+  }
+
+  let decision: CrmOrchestratorDecision;
+  try {
+    decision = await config.crmOrchestrator.route(createTelegramAssistantChannelMessage(config.workspaceId, message, replyTo));
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return null;
+  }
+
+  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
+  if (decision.intent === "ATTACH_FILE" && replyTo?.leadId) {
+    return null;
+  }
+
+  if (decision.status === "need_clarification" || decision.intent === "CLARIFICATION_REQUIRED") {
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
+  }
+
+  if (decision.intent === "SEARCH_LEAD") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "CREATE_REMINDER") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "ATTACH_FILE") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
+  }
+
+  return null;
+}
+
+function shouldUseCrmOrchestratorFallback(
+  message: Pick<AllowedTelegramMessageBatch, "text" | "attachments">,
+  replyTo?: { leadId: string; sourceMessageId: string }
+): boolean {
+  if (replyTo) {
+    return false;
+  }
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  return !looksLikeTelegramLeadSourceMaterial(message.text);
+}
+
+function looksLikeTelegramLeadSourceMaterial(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text) ||
+    /\+?\d[\d\s().-]{6,}\d/.test(text) ||
+    /\b(bgf|m2|m²|wohnfl|wohnfl[aä]che|budget|eur|euro|angebot|kp|commercial proposal|offer|project address|project type)\b/i.test(text) ||
+    /\b(neubau|umbau|efh|haus|villa|architektur|planung|baugenehmigung|baulantrag)\b/i.test(text) ||
+    /\b(strasse|straße|weg|platz|allee|gasse|ufer|ring)\b/i.test(text) ||
+    /(нужн|коммерческ|предложен|кп|адрес|площад|бюджет|дом|проект|архитектур|строительств)/i.test(text)
+  );
 }
 
 function createTelegramAssistantChannelMessage(
