@@ -2694,6 +2694,55 @@ describe("telegram worker", () => {
     });
   });
 
+  it("does not advertise standalone reminder actions in Telegram without a lead reply", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 46,
+            message: {
+              message_id: 906,
+              date: 1779297400,
+              chat: { id: 12345 },
+              text: "Напомни завтра посмотреть LinkedIn у него"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 46 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("For now I can only create a lead or update an existing lead.");
+    expect(sendBody.text).toContain("Reply to a lead card");
+    expect(sendBody.text).not.toContain("I can create a follow-up reminder");
+  });
+
   it("records natural replied client context as lead history without parsing a new lead", async () => {
     const auditEvents: unknown[] = [];
     const client = {

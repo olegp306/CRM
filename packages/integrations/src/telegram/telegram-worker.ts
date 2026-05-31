@@ -354,10 +354,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId) } : undefined
     );
     if (generalAssistantResponse) {
+      const responseText =
+        !repliedLead && generalAssistantResponse.intent === "crm_action" && isReminderRequest(message.text)
+          ? createTelegramLimitedActionsText()
+          : generalAssistantResponse.text;
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: generalAssistantResponse.text,
+        text: responseText,
         replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons, config.crmBaseUrl),
         fetchImpl
       });
@@ -1227,7 +1231,7 @@ function createTelegramLimitedActionsText(leadId?: string): string {
   return [
     leadId ? `Lead <b>${escapeHtml(leadId)}</b> found.` : "Telegram actions are limited right now.",
     "For now I can only create a lead or update an existing lead.",
-    "Reply to the lead card with new source material or missing fields."
+    "Reply to a lead card with new source material or missing fields."
   ].join("\n");
 }
 
