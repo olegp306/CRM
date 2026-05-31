@@ -1,6 +1,7 @@
 import { classifyIntent } from "./classify-intent";
 import { createCapabilityResponse } from "./capability-registry";
 import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
+import { routeCrmOrchestratorRequest, type CrmOrchestratorDecision } from "./crm-orchestrator-agent";
 import {
   createLeadChatOrchestratorResponse,
   type LeadChatSnapshot,
@@ -65,6 +66,11 @@ export function createAssistantChannelResponse(
       normalizedActions: [],
       text: "I saved this as product feedback for review."
     };
+  }
+
+  const telegramOrchestratorResponse = createTelegramCrmOrchestratorResponse(message);
+  if (telegramOrchestratorResponse) {
+    return telegramOrchestratorResponse;
   }
 
   const leadChatResponse = createLeadChatOrchestratorResponse({ message, lead: options.lead });
@@ -133,6 +139,62 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
+  };
+}
+
+function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  if (message.channel !== "telegram") {
+    return null;
+  }
+
+  const decision = routeCrmOrchestratorRequest(message);
+
+  if (decision.intent === "CLARIFICATION_REQUIRED") {
+    return null;
+  }
+
+  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
+  if (decision.intent === "ATTACH_FILE" && getReferencedLeadId(message)) {
+    return null;
+  }
+
+  if (decision.status === "need_clarification") {
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
+  }
+
+  if (decision.intent === "SEARCH_LEAD") {
+    return createTelegramRoutedButPausedResponse(decision, "Search is recognized, but Telegram search is not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "CREATE_REMINDER") {
+    return createTelegramRoutedButPausedResponse(decision, "Reminder creation is recognized, but Telegram reminders are not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "ATTACH_FILE") {
+    return createTelegramRoutedButPausedResponse(decision, "File attachment is recognized, but Telegram file-only attachment is not enabled in this cut yet.");
+  }
+
+  return null;
+}
+
+function createTelegramRoutedButPausedResponse(decision: CrmOrchestratorDecision, detail: string): AssistantChannelResponse {
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: `${detail}\nRoute: ${decision.action}.\nFor now I can create a lead or update an existing lead in Telegram.`
   };
 }
 

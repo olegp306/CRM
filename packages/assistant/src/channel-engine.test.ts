@@ -329,6 +329,32 @@ describe("assistant channel engine", () => {
     expect(result.text).not.toContain("KP documents");
   });
 
+  it("routes Telegram lead search requests through the CRM orchestrator instead of lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "Find the client by phone +49 160 4442211"
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toContain("Lead Search Agent");
+    expect(result.text).toContain("Search is recognized");
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("asks one Telegram clarification before attaching a file without lead context", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "Attach this PDF to the CRM record",
+      attachments: [{ id: "pdf-1", kind: "pdf", fileName: "brief.pdf", mimeType: "application/pdf" }]
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toBe("Which lead should I attach this file to?");
+    expect(result.buttons).toEqual([]);
+  });
+
   it("keeps lead status questions with screenshots as support requests", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

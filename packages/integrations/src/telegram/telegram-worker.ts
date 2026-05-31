@@ -1449,7 +1449,12 @@ function createTelegramGeneralAssistantResponse(
 ) {
   const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message, replyTo));
 
-  if (response.intent === "capability_request" || response.shouldPersistFeedback || (response.intent === "crm_action" && isReminderRequest(message.text))) {
+  if (
+    response.intent === "capability_request" ||
+    response.shouldPersistFeedback ||
+    response.intent === "support_request" ||
+    (response.intent === "crm_action" && isReminderRequest(message.text))
+  ) {
     return response;
   }
 
