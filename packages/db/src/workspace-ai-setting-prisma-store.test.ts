@@ -23,6 +23,13 @@ describe("workspace ai setting prisma store", () => {
       prompt: CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT,
       updatedAt: null
     });
+    expect(setting.prompt).toContain("Reyzbikh Architekten");
+    expect(setting.prompt).toContain("clientName");
+    expect(setting.prompt).toContain("projectAddress");
+    expect(setting.prompt).toContain("bgfM2");
+    expect(setting.prompt).toContain("documentSummaries");
+    expect(setting.prompt).toContain("Return strictly valid JSON");
+    expect(setting.prompt).toContain("Do not invent missing fields");
   });
 
   it("upserts the client material analysis prompt and model for one workspace", async () => {
