@@ -34,7 +34,7 @@ describe("feedback item creation", () => {
       priority: "normal",
       moduleContext: "documents",
       role: "manager",
-      appVersion: "0.2.4"
+      appVersion: "0.3.0"
     });
   });
 });

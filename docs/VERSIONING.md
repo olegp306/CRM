@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.2.4`
+Current stable version: `0.3.0`
 
 Stable tag format:
 
@@ -15,6 +15,7 @@ v0.2.1
 v0.2.2
 v0.2.3
 v0.2.4
+v0.3.0
 ```
 
 ## Branch Workflow
@@ -141,6 +142,15 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.3.0
+
+Client material analysis release:
+
+- Settings now include an AI intake page where admins can edit the client-material analysis metaprompt and choose the parsing model.
+- Telegram and Web Assistant lead intake pass source materials through the workspace prompt before creating or updating lead data.
+- Lead cards show overall lead summary info plus concise per-file summaries for saved PDFs, photos, and audio source materials.
+- The default prompt is adapted for Reyzbikh Architekten KP fields and returns strict JSON without inventing missing data.
 
 ## 0.2.4
 
