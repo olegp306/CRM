@@ -17,6 +17,7 @@ import {
   createInboundMessageChannelEvents,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
+  createOpenAiCrmOrchestrator,
   createExecutionChannelEvents,
   enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
@@ -48,7 +49,7 @@ import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
-import { getClientMaterialAnalysisSetting } from "../settings/ai-intake/ai-intake-store";
+import { getClientMaterialAnalysisSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
 
 export type SubmitAssistantMessageInput = {
   context: AssistantContext;
@@ -68,7 +69,11 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
     ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
     : [[], []];
   const selectedLead = selectedLeadId ? createSelectedLeadChatSnapshot(selectedLeadId, leads, generatedDocuments) : null;
-  const clientMaterialAnalysisSetting = await getClientMaterialAnalysisSetting(input.context.workspaceId);
+  const [clientMaterialAnalysisSetting, crmOrchestratorSetting] = await Promise.all([
+    getClientMaterialAnalysisSetting(input.context.workspaceId),
+    getCrmOrchestratorSetting(input.context.workspaceId)
+  ]);
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
   const assistantInput = {
     ...input,
     attachments: input.attachments ?? [],
@@ -77,16 +82,23 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   const initialResult = await createOpenAIAssistantSubmissionResult(
     assistantInput,
     {
-      apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
-      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
+      apiKey: openAiApiKey,
+      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+      crmOrchestrator: openAiApiKey
+        ? createOpenAiCrmOrchestrator({
+            apiKey: openAiApiKey,
+            model: crmOrchestratorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+            prompt: crmOrchestratorSetting.prompt
+          })
+        : undefined
     }
   );
-  const result = process.env.OPENAI_API_KEY?.trim()
+  const result = openAiApiKey
     ? await enrichLeadIntakeSubmissionResult(
         initialResult,
         assistantInput,
         createOpenAiAssistantLeadParserClient({
-          apiKey: process.env.OPENAI_API_KEY.trim(),
+          apiKey: openAiApiKey,
           model: clientMaterialAnalysisSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
           prompt: clientMaterialAnalysisSetting.prompt
         })

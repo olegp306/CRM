@@ -324,6 +324,115 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.responseButtons.map((button) => button.label)).toEqual(["CRM", "PDF", "DOC", "Send KP", "Mark KP sent"]);
   });
 
+  it("uses the CRM orchestrator client for ambiguous web CRM routing before the generic OpenAI planner", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SEARCH_LEAD" as const,
+        reasoning: "The user asks to pull up an existing person.",
+        action: "Lead Search Agent" as const,
+        status: "ready" as const,
+        message: "I will search for that lead."
+      }))
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Can you pull up what we know about the person from yesterday?",
+        threadId: "thread-web-crm-orchestrator",
+        messageId: "message-web-crm-orchestrator"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "web",
+        content: "Can you pull up what we know about the person from yesterday?"
+      })
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("Lead Search Agent");
+    expect(result.actionPreview).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
+  it("uses CRM orchestrator clarification for ambiguous web requests instead of the generic OpenAI planner", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "CLARIFICATION_REQUIRED" as const,
+        reasoning: "The target CRM action is unclear.",
+        action: "clarification" as const,
+        status: "need_clarification" as const,
+        message: "Do you want me to create a new lead or update an existing one?"
+      }))
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Let's do that thing for the client",
+        threadId: "thread-web-crm-clarification",
+        messageId: "message-web-crm-clarification"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toBe("Do you want me to create a new lead or update an existing one?");
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps web source-material uploads on lead intake without CRM orchestrator routing", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Please review this source material and create a lead if the data is sufficient.",
+        threadId: "thread-web-source-material",
+        messageId: "message-web-source-material",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "pdf",
+            fileName: "brief.pdf",
+            mimeType: "application/pdf",
+            base64: "JVBERi0x"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material"
+    });
+  });
+
   it("accepts source-material uploads without persisting feature feedback when OpenAI returns no action", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(

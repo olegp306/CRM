@@ -1,8 +1,10 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
-import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import { createAssistantChannelResponse, createCrmOrchestratorRoutedButPausedResponse, isLeadSourceMaterial } from "./channel-engine";
 import type { AssistantChannelMessage } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
+import type { CrmOrchestratorDecision } from "./crm-orchestrator-agent";
+import type { CrmOrchestratorClient } from "./openai-crm-orchestrator";
 import { createFeedbackItemFromMessage } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
 import {
@@ -19,6 +21,7 @@ export type OpenAIAssistantConfig = {
   model: string;
   endpoint?: string;
   fetch?: OpenAIAssistantFetch;
+  crmOrchestrator?: CrmOrchestratorClient;
 };
 
 type OpenAIPlan = {
@@ -83,6 +86,19 @@ export async function createOpenAIAssistantSubmissionResult(
       thread,
       message,
       channelResponse: deterministicChannelResponse,
+      context: input.context,
+      threadId: input.threadId,
+      messageId: input.messageId,
+      attachments: input.attachments ?? []
+    });
+  }
+
+  const crmOrchestratorResponse = await createWebCrmOrchestratorFallbackResponse(config.crmOrchestrator, channelMessage);
+  if (crmOrchestratorResponse) {
+    return createAssistantSubmissionResultFromChannelResponse({
+      thread,
+      message,
+      channelResponse: crmOrchestratorResponse,
       context: input.context,
       threadId: input.threadId,
       messageId: input.messageId,
@@ -155,6 +171,59 @@ export async function createOpenAIAssistantSubmissionResult(
     messageId: input.messageId,
     attachments: input.attachments ?? []
   });
+}
+
+async function createWebCrmOrchestratorFallbackResponse(
+  crmOrchestrator: CrmOrchestratorClient | undefined,
+  message: AssistantChannelMessage
+) {
+  if (!crmOrchestrator || !shouldUseWebCrmOrchestratorFallback(message)) {
+    return null;
+  }
+
+  let decision: CrmOrchestratorDecision;
+  try {
+    decision = await crmOrchestrator.route(message);
+  } catch {
+    return null;
+  }
+
+  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
+  if (decision.status === "need_clarification" || decision.intent === "CLARIFICATION_REQUIRED") {
+    return {
+      intent: "support_request" as const,
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
+  }
+
+  if (decision.intent === "SEARCH_LEAD") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but web assistant search is not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "CREATE_REMINDER") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but web assistant reminders are not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "ATTACH_FILE") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but web assistant file-only attachment is not enabled in this cut yet.");
+  }
+
+  return null;
+}
+
+function shouldUseWebCrmOrchestratorFallback(message: AssistantChannelMessage): boolean {
+  if (message.attachments.length > 0) {
+    return false;
+  }
+
+  return !isLeadSourceMaterial(message);
 }
 
 function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof createAssistantChannelResponse>): boolean {
