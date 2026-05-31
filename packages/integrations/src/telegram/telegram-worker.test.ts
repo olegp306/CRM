@@ -96,13 +96,19 @@ describe("telegram worker", () => {
         })
       }
     ]);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottelegram-token/sendMessage",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("Done, I created a lead in CRM.")
-      })
-    );
+    const sendCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendMessage")) as unknown as [
+      string,
+      { body?: unknown }
+    ];
+    const sendBody = JSON.parse(String(sendCall[1]?.body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> created in CRM.");
+    expect(sendBody.text).toContain("Pricing: <b>standard</b>");
+    expect(sendBody.text).toContain("Lead: <b>L-2026-002</b>");
+    expect(sendBody.text).toContain("Request type: <b>new_build</b>");
+    expect(sendBody.text).toContain("Summary: <b>Standard EFH lead</b>");
+    expect(sendBody.text).not.toContain("Done, I created a lead in CRM.");
+    expect(sendBody.text).not.toContain("<b>KP document</b>");
+    expect(sendBody.reply_markup.inline_keyboard[0]).toEqual([{ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" }]);
   });
 
   it("answers theme capability questions without parsing them as leads", async () => {
@@ -314,7 +320,7 @@ describe("telegram worker", () => {
       "https://api.telegram.org/bottelegram-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining("Updated lead <b>L-2026-035</b>")
+        body: expect.stringContaining("<b>L-2026-035</b> updated in CRM.")
       })
     );
   });
@@ -487,7 +493,7 @@ describe("telegram worker", () => {
     ]);
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("<b>Missing for KP</b>: budget");
+    expect(sendBody.text).toContain("Missing for KP: <b>budget</b>");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
@@ -1131,9 +1137,9 @@ describe("telegram worker", () => {
     ]);
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("Done, I created a lead in CRM.");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> created in CRM.");
     expect(sendBody.text).toContain("L-2026-002");
-    expect(sendBody.text).toContain("<b>Missing for KP</b>: projectAddress, bgfM2");
+    expect(sendBody.text).toContain("Missing for KP: <b>projectAddress, bgfM2</b>");
     expect(sendBody.reply_markup).toEqual({
       inline_keyboard: [[{ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" }]]
     });
@@ -1345,7 +1351,9 @@ describe("telegram worker", () => {
     await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
-    expect(sendBody.text).toContain("Updated lead <b>L-2026-002</b>.");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("Project address: <b>Chiemseeufer 7</b>");
+    expect(sendBody.text).not.toContain("mark KP sent");
     expect(sendBody.reply_markup.inline_keyboard[0][0].url).toBe("https://crm.example.com/leads?leadId=L-2026-002");
   });
 
@@ -1463,22 +1471,20 @@ describe("telegram worker", () => {
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
     expect(finalMessageBody.parse_mode).toBe("HTML");
-    expect(finalMessageBody.text).toContain("<b>Standard pricing branch</b>");
-    expect(finalMessageBody.text).toContain("<b>Pricing branch</b>: standard");
-    expect(finalMessageBody.text).toContain("<b>KP document</b>: D-telegram-12345-13");
+    expect(finalMessageBody.text).toContain("<b>L-2026-002</b> created in CRM.");
+    expect(finalMessageBody.text).toContain("Pricing: <b>standard</b>");
+    expect(finalMessageBody.text).not.toContain("<b>KP document</b>: D-telegram-12345-13");
     expect(finalMessageBody.reply_markup.inline_keyboard[0]).toEqual([
       { text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" },
-      { text: "PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
-      { text: "DOC", url: "https://files.example.com/kp.docx" },
-      { text: "Send KP", url: "mailto:katya@example.com?subject=KP%20L-2026-002" },
-      { text: "Mark KP sent", callback_data: "lead_action:mark_kp_sent:L-2026-002" }
+      { text: "KP PDF", url: "https://crm.example.com/documents/attachments/attachment-pdf-1" },
+      { text: "KP DOC", url: "https://files.example.com/kp.docx" }
     ]);
     expect(finalMessageBody.reply_markup.inline_keyboard[0].map((button: { url?: string }) => button.url).filter(Boolean)).toSatisfy((urls: string[]) =>
       urls.every((url) => /^(?:https?:\/\/|mailto:)/.test(url))
     );
   });
 
-  it("marks and undoes KP sent from Telegram inline action callbacks", async () => {
+  it("does not run KP sent actions from Telegram inline callbacks", async () => {
     const updates: unknown[] = [];
     const client = {
       lead: {
@@ -1550,26 +1556,10 @@ describe("telegram worker", () => {
     );
 
     expect(parser.parseLead).not.toHaveBeenCalled();
-    expect(updates[0]).toEqual({
-      where: { id: "lead-record-2" },
-      data: expect.objectContaining({
-        status: "kp_sent",
-        kpSentDate: new Date("2026-05-20T17:11:00.000Z"),
-        followupStatus: "planned"
-      })
-    });
-    expect(updates[1]).toEqual({
-      where: { id: "lead-record-2" },
-      data: {
-        kpSentDate: null,
-        followup1Date: null,
-        followupStatus: null,
-        status: "new"
-      }
-    });
+    expect(updates).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.telegram.org/bottelegram-token/answerCallbackQuery",
-      expect.objectContaining({ method: "POST", body: expect.stringContaining("callback-mark") })
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("For now I can only create a lead or update an existing lead.") })
     );
   });
 
@@ -1739,8 +1729,8 @@ describe("telegram worker", () => {
       document: "https://crm.example.com/documents/attachments/attachment-docx-1?download=1"
     });
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
-    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("<b>KP document</b>: D-telegram-12345-14");
-    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("<b>KP file</b>: sent to Telegram");
+    expect(JSON.parse(String(finalMessageCall[1].body)).text).toContain("Summary: <b>Ready KP lead</b>");
+    expect(JSON.parse(String(finalMessageCall[1].body)).text).not.toContain("<b>KP document</b>");
   });
 
   it("still confirms the lead when Telegram document delivery fails", async () => {
@@ -1810,8 +1800,8 @@ describe("telegram worker", () => {
 
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
-    expect(finalMessageBody.text).toContain("<b>KP document</b>: D-telegram-12345-15");
-    expect(finalMessageBody.text).toContain("<b>KP file</b>: saved in CRM");
+    expect(finalMessageBody.text).toContain("Summary: <b>Ready KP lead</b>");
+    expect(finalMessageBody.text).not.toContain("<b>KP document</b>");
   });
 
   it("confirms the lead with a clear KP error when template generation fails", async () => {
@@ -1875,8 +1865,8 @@ describe("telegram worker", () => {
 
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
-    expect(finalMessageBody.text).toContain("<b>Lead</b>: L-2026-002");
-    expect(finalMessageBody.text).toContain("<b>KP generation</b>: lead created, but KP was not generated because the current KP template is missing");
+    expect(finalMessageBody.text).toContain("Lead: <b>L-2026-002</b>");
+    expect(finalMessageBody.text).toContain("KP generation: <b>lead created, but KP was not generated because the current KP template is missing");
   });
 
   it("does not report a missing template when PDF export is unavailable", async () => {
@@ -1941,7 +1931,7 @@ describe("telegram worker", () => {
     const finalMessageCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const finalMessageBody = JSON.parse(String(finalMessageCall[1].body));
     expect(finalMessageBody.text).toContain(
-      "<b>KP generation</b>: lead created, but KP was not generated because PDF export is not configured or failed."
+      "KP generation: <b>lead created, but KP was not generated because PDF export is not configured or failed.</b>"
     );
   });
 
@@ -2161,11 +2151,112 @@ describe("telegram worker", () => {
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
     expect(sendBody.parse_mode).toBe("HTML");
-    expect(sendBody.text).toContain("Updated lead <b>L-2026-002</b>");
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("Email: <b>katya@example.com</b>");
+    expect(sendBody.text).not.toContain("mark KP sent");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
+  });
+
+  it("updates an existing lead when replying to a lead card text that contains the lead id", async () => {
+    const updates: unknown[] = [];
+    const findManyCalls: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          findManyCalls.push(args);
+          const where = (args as { where?: { rawInput?: { contains?: string }; leadId?: string } }).where;
+          if (where?.leadId === "L-2026-048") {
+            return [
+              {
+                id: "lead-record-48",
+                leadId: "L-2026-048",
+                status: "needs_data",
+                rawInput: "Initial lead",
+                client: { name: "Katya", email: null, phone: null },
+                requestType: "bungalow planning",
+                projectAddress: "St.-Georg-Straße 17",
+                bgfM2: 86.4,
+                missingData: ["email"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-48", leadId: "L-2026-048", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: undefined,
+        bgfM2: undefined,
+        email: "katya@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Email update",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 210,
+            message: {
+              message_id: 310,
+              date: 1779297000,
+              chat: { id: 12345 },
+              reply_to_message: {
+                message_id: 900,
+                text: "L-2026-048 created in CRM.\nPricing: not standard - missing email."
+              },
+              text: "email katya@example.com"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 210 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(findManyCalls).toEqual(expect.arrayContaining([expect.objectContaining({ where: expect.objectContaining({ leadId: "L-2026-048" }) })]));
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        where: { id: "lead-record-48" },
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("telegram lead update"),
+          missingData: [],
+          status: "new"
+        })
+      })
+    );
   });
 
   it("persists a Telegram interaction note when replying to a lead card with a human note", async () => {
@@ -2655,7 +2746,7 @@ describe("telegram worker", () => {
     expect(sendBody.text).toContain("L-2026-002");
   });
 
-  it("marks and undoes KP sent from replies to the bot lead card", async () => {
+  it("does not run KP sent actions from replies to the bot lead card", async () => {
     const updates: unknown[] = [];
     const client = {
       lead: {
@@ -2731,23 +2822,9 @@ describe("telegram worker", () => {
     );
 
     expect(parser.parseLead).not.toHaveBeenCalled();
-    expect(updates[0]).toEqual({
-      where: { id: "lead-record-2" },
-      data: expect.objectContaining({
-        status: "kp_sent",
-        kpSentDate: new Date("2026-05-20T17:11:00.000Z"),
-        followupStatus: "planned"
-      })
-    });
-    expect(updates[1]).toEqual({
-      where: { id: "lead-record-2" },
-      data: {
-        kpSentDate: null,
-        followup1Date: null,
-        followupStatus: null,
-        status: "new"
-      }
-    });
+    expect(updates).toEqual([]);
+    const lastBody = JSON.parse(String((fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }])[1].body));
+    expect(lastBody.text).toContain("For now I can only create a lead or update an existing lead.");
   });
 
   it("answers capability questions without creating a lead", async () => {

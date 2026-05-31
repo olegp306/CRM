@@ -45,6 +45,8 @@ export type TelegramUpdate = {
     };
     reply_to_message?: {
       message_id: number;
+      text?: string;
+      caption?: string;
     };
   };
   callback_query?: {
@@ -63,6 +65,7 @@ export type TelegramUpdate = {
 export type AllowedTelegramMessage = Omit<TelegramLeadMessage, "attachments"> & {
   updateId: number;
   replyToMessageId?: number;
+  replyToText?: string;
   attachments?: TelegramPendingAttachment[];
 };
 
@@ -96,6 +99,7 @@ export function createAllowedTelegramMessages(updates: TelegramUpdate[], allowed
         updateId: update.update_id,
         messageId: message.message_id,
         replyToMessageId: message.reply_to_message?.message_id,
+        replyToText: message.reply_to_message?.text ?? message.reply_to_message?.caption,
         chatId,
         text,
         receivedAt: new Date(message.date * 1000).toISOString(),

@@ -1,8 +1,6 @@
 import {
   createAssistantChannelResponse,
   createKpGeneratedEvent,
-  createKpSentMarkedEvent,
-  createKpSentUndoneEvent,
   createLeadChatActions,
   createLeadCreatedEvent,
   createLeadDraftUpdatedEvent,
@@ -20,7 +18,7 @@ import {
   type AssistantChannelEvent,
   type AssistantChannelMessage
 } from "@app/assistant";
-import { createKpSentLeadUpdate, getNextBusinessId } from "@app/core";
+import { getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
 import {
   createAssistantGeneratedDocumentPrismaStore,
@@ -241,83 +239,13 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   let skipped = 0;
 
   for (const callback of allowedCallbacks) {
-    const lead = await findLeadForTelegramActionCallback(client, config.workspaceId, callback);
-    if (!lead || !lead.id || !client.lead.update) {
-      await answerTelegramCallbackQuery({
-        botToken: config.botToken,
-        callbackQueryId: callback.callbackQueryId,
-        text: "I could not update this lead.",
-        fetchImpl
-      });
-      skipped += 1;
-      continue;
-    }
-
-    if (callback.action === "mark_kp_sent") {
-      await client.lead.update({
-        where: { id: lead.id },
-        data: createKpSentLeadUpdate(new Date(callback.receivedAt))
-      });
-      await answerTelegramCallbackQuery({
-        botToken: config.botToken,
-        callbackQueryId: callback.callbackQueryId,
-        text: "KP marked as sent.",
-        fetchImpl
-      });
-      await sendTelegramMessage({
-        botToken: config.botToken,
-        chatId: callback.chatId,
-        text: `Lead <b>${escapeHtml(lead.leadId)}</b>: KP marked as sent. Follow-up planned in 7 days.`,
-        parseMode: "HTML",
-        fetchImpl
-      });
-      await saveTelegramChannelEvent(
-        config,
-        callback,
-        createKpSentMarkedEvent({
-          type: "kp_sent_marked",
-          channel: "telegram",
-          threadId: createTelegramThreadId(callback.chatId),
-          leadId: lead.leadId
-        })
-      );
-      processed += 1;
-      continue;
-    }
-
-    await client.lead.update({
-      where: { id: lead.id },
-      data: {
-        kpSentDate: null,
-        followup1Date: null,
-        followupStatus: null,
-        status: "new"
-      }
-    });
     await answerTelegramCallbackQuery({
       botToken: config.botToken,
       callbackQueryId: callback.callbackQueryId,
-      text: "KP sent mark undone.",
+      text: createTelegramLimitedActionsText(),
       fetchImpl
     });
-    await sendTelegramMessage({
-      botToken: config.botToken,
-      chatId: callback.chatId,
-      text: `Lead <b>${escapeHtml(lead.leadId)}</b>: KP sent mark was undone. We are back before sending KP.`,
-      parseMode: "HTML",
-      fetchImpl
-    });
-    await saveTelegramChannelEvent(
-      config,
-      callback,
-      createKpSentUndoneEvent({
-        type: "kp_sent_undone",
-        channel: "telegram",
-        threadId: createTelegramThreadId(callback.chatId),
-        leadId: lead.leadId
-      })
-    );
-    processed += 1;
+    skipped += 1;
   }
 
   for (const message of messageBatches) {
@@ -377,7 +305,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       })
     );
     const repliedLead = message.replyToMessageId
-      ? await findLeadByTelegramBotMessage(client, config.workspaceId, message.chatId, message.replyToMessageId)
+      ? await findLeadByTelegramReplyContext(client, config.workspaceId, message)
       : null;
     const replyLeadFlowDecision = repliedLead
       ? decideLeadFlow(
@@ -442,85 +370,26 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (repliedLead && isTelegramKpSentCommand(message) && !isTelegramKpSentUndoCommand(message)) {
-      if (!client.lead.update || !repliedLead.id) {
-        await sendTelegramMessage({
-          botToken: config.botToken,
-          chatId: message.chatId,
-          text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
-          parseMode: "HTML",
-          fetchImpl
-        });
-        skipped += message.sourceMessageIds.length;
-        continue;
-      }
-
-      await client.lead.update({
-        where: { id: repliedLead.id },
-        data: createKpSentLeadUpdate(new Date(message.receivedAt))
-      });
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP marked as sent. Follow-up planned in 7 days.`,
+        text: createTelegramLimitedActionsText(repliedLead.leadId),
         parseMode: "HTML",
-        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
       });
-      await saveTelegramChannelEvent(
-        config,
-        message,
-        createKpSentMarkedEvent({
-          type: "kp_sent_marked",
-          channel: "telegram",
-          threadId: createTelegramThreadId(message.chatId),
-          leadId: repliedLead.leadId
-        })
-      );
-      processed += 1;
+      skipped += message.sourceMessageIds.length;
       continue;
     }
 
     if (repliedLead && isTelegramKpSentUndoCommand(message)) {
-      if (!client.lead.update || !repliedLead.id) {
-        await sendTelegramMessage({
-          botToken: config.botToken,
-          chatId: message.chatId,
-          text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
-          parseMode: "HTML",
-          fetchImpl
-        });
-        skipped += message.sourceMessageIds.length;
-        continue;
-      }
-
-      await client.lead.update({
-        where: { id: repliedLead.id },
-        data: {
-          kpSentDate: null,
-          followup1Date: null,
-          followupStatus: null,
-          status: "new"
-        }
-      });
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: `Lead <b>${escapeHtml(repliedLead.leadId)}</b>: KP sent mark was undone. We are back before sending KP.`,
+        text: createTelegramLimitedActionsText(repliedLead.leadId),
         parseMode: "HTML",
-        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
       });
-      await saveTelegramChannelEvent(
-        config,
-        message,
-        createKpSentUndoneEvent({
-          type: "kp_sent_undone",
-          channel: "telegram",
-          threadId: createTelegramThreadId(message.chatId),
-          leadId: repliedLead.leadId
-        })
-      );
-      processed += 1;
+      skipped += message.sourceMessageIds.length;
       continue;
     }
 
@@ -1354,6 +1223,14 @@ function createTelegramLeadParseFailureMessage(): string {
   ].join("\n");
 }
 
+function createTelegramLimitedActionsText(leadId?: string): string {
+  return [
+    leadId ? `Lead <b>${escapeHtml(leadId)}</b> found.` : "Telegram actions are limited right now.",
+    "For now I can only create a lead or update an existing lead.",
+    "Reply to the lead card with new source material or missing fields."
+  ].join("\n");
+}
+
 function createTelegramSourceAttachmentStore(client: TelegramSourceAttachmentPrismaLike, objectStorage: ObjectStorage) {
   return {
     async save(input: TelegramSourceAttachmentInput): Promise<TelegramSourceAttachmentRecord> {
@@ -1642,9 +1519,7 @@ function createTelegramLeadConfirmation({
     ["Lead", leadId],
     ["Status", status],
     ["KP fields ready", kpReady ? "yes" : "no"],
-    ["Pricing branch", createTelegramPricingBranchLabel(draft)],
-    ["KP document", generatedDocumentId],
-    ["KP file", generatedDocumentId ? (generatedDocumentDelivered ? "sent to Telegram" : "saved in CRM") : ""],
+    ["Summary", createTelegramLeadSummary(draft, generatedDocumentId, generatedDocumentDelivered)],
     ["KP generation", generatedDocumentError],
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
@@ -1655,13 +1530,34 @@ function createTelegramLeadConfirmation({
   ].filter(([, value]) => String(value ?? "").trim() !== "");
 
   return [
-    "Done, I created a lead in CRM.",
+    `<b>${escapeHtml(leadId)}</b> created in CRM.`,
     "",
-    `<b>${escapeHtml(createTelegramPricingBranchHeadline(draft))}</b>`,
-    escapeHtml(createTelegramPricingBranchReason(draft)),
+    `Pricing: <b>${escapeHtml(createTelegramPricingBranchShortLabel(draft))}</b>${createTelegramPricingBranchShortReason(draft, missingData)}`,
     "",
-    ...fields.map(([label, value]) => `<b>${escapeHtml(String(label))}</b>: ${escapeHtml(String(value))}`)
+    ...fields.map(([label, value]) => `${escapeHtml(String(label))}: <b>${escapeHtml(String(value))}</b>`)
   ].join("\n");
+}
+
+function createTelegramLeadSummary(
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  generatedDocumentId: string | undefined,
+  generatedDocumentDelivered: boolean | undefined
+): string {
+  const summary = extractTelegramRawInputValue(draft.rawInput, "Lead summary") ?? extractTelegramRawInputValue(draft.rawInput, "Summary");
+  if (summary) {
+    return summary;
+  }
+
+  if (generatedDocumentId) {
+    return generatedDocumentDelivered ? "KP file was generated and sent to Telegram." : "KP file was generated and saved in CRM.";
+  }
+
+  return "Lead source material saved in CRM.";
+}
+
+function extractTelegramRawInputValue(rawInput: string, label: "Lead summary" | "Summary"): string | null {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escapedLabel}:\\s*(.+)$`, "im").exec(rawInput)?.[1]?.trim() ?? null;
 }
 
 function createTelegramKpGenerationErrorMessage(error: unknown): string {
@@ -1843,34 +1739,47 @@ async function findLeadByTelegramBotMessage(
   return leads.find((lead) => lead.rawInput?.includes(marker)) ?? null;
 }
 
-async function findLeadForTelegramActionCallback(
+async function findLeadByTelegramReplyContext(
   client: TelegramWorkerPrismaLike,
   workspaceId: string,
-  callback: AllowedTelegramLeadActionCallback
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "replyToMessageId" | "replyToText">
 ): Promise<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null> {
-  if (callback.messageId !== undefined) {
-    const byBotMessage = await findLeadByTelegramBotMessage(client, workspaceId, callback.chatId, callback.messageId);
-    if (byBotMessage?.leadId === callback.leadId) {
+  if (message.replyToMessageId !== undefined) {
+    const byBotMessage = await findLeadByTelegramBotMessage(client, workspaceId, message.chatId, message.replyToMessageId);
+    if (byBotMessage) {
       return byBotMessage;
     }
+  }
+
+  const leadId = extractLeadIdFromTelegramText(message.replyToText);
+  if (!leadId) {
+    return null;
   }
 
   const leads = await client.lead.findMany({
     where: {
       workspaceId,
-      leadId: callback.leadId
+      leadId
     },
     select: {
       id: true,
       leadId: true,
       status: true,
       rawInput: true,
+      client: { select: { name: true, email: true, phone: true } },
+      requestType: true,
+      projectAddress: true,
+      bgfM2: true,
       missingData: true,
       kpSentDate: true
     }
   });
 
-  return leads.find((lead) => lead.leadId === callback.leadId) ?? null;
+  return leads.find((lead) => lead.leadId === leadId) ?? null;
+}
+
+function extractLeadIdFromTelegramText(text: string | undefined): string | null {
+  return /\b(L-\d{4}-\d+)\b/i.exec(text ?? "")?.[1]?.toUpperCase() ?? null;
 }
 
 function createTelegramLeadSessionFromExistingLead(
@@ -1985,11 +1894,9 @@ function createTelegramLeadUpdatedMessage(
   ].filter(([, value]) => String(value ?? "").trim() !== "");
 
   return [
-    `Updated lead <b>${escapeHtml(leadId)}</b>.`,
+    `<b>${escapeHtml(leadId)}</b> updated in CRM.`,
     "",
-    ...fields.map(([label, value]) => `<b>${escapeHtml(String(label))}</b>: ${escapeHtml(String(value))}`),
-    "",
-    "Reply to the lead card again if you want to add more data, mark KP sent, or undo KP sent."
+    ...fields.map(([label, value]) => `${escapeHtml(String(label))}: <b>${escapeHtml(String(value))}</b>`)
   ].join("\n");
 }
 
@@ -2088,20 +1995,17 @@ function createEmptyTelegramLeadDraft(message: AllowedTelegramMessageBatch): Awa
   };
 }
 
-function createTelegramPricingBranchLabel(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
-  return draft.isStandard ? "standard" : "custom";
+function createTelegramPricingBranchShortLabel(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
+  return draft.isStandard ? "standard" : "not standard";
 }
 
-function createTelegramPricingBranchHeadline(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
-  return draft.isStandard ? "Standard pricing branch" : "Custom pricing branch";
-}
-
-function createTelegramPricingBranchReason(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string {
+function createTelegramPricingBranchShortReason(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>, missingData: string[]): string {
   if (draft.isStandard) {
-    return `Standard because the parser recognized a known ${draft.requestType ?? "project"} pattern with enough KP fields. Price is selected from the configured table when BGF matches.`;
+    return ".";
   }
 
-  return "Custom because the request does not fully match the standard pricing path or still needs manual pricing review.";
+  const reason = missingData.length > 0 ? ` - missing ${missingData.slice(0, 4).join(", ")}.` : " - needs manual pricing review.";
+  return escapeHtml(reason);
 }
 
 function appendTelegramBotLeadMessageMarker(rawInput: string, chatId: string, messageId: number): string {
@@ -2154,25 +2058,21 @@ function createTelegramCrmReplyMarkup(
       case "open_crm":
         return [{ text: "CRM", url: action.url }];
       case "open_pdf":
-        return [{ text: "PDF", url: action.url }];
+        return [{ text: "KP PDF", url: action.url }];
       case "download_doc":
-        return [{ text: "DOC", url: action.url }];
+        return [{ text: "KP DOC", url: action.url }];
       case "send_kp":
-        return [{ text: "Send KP", url: action.mailtoUrl }];
+        return [];
       case "mark_kp_sent":
-        return [{ text: "Mark KP sent", callback_data: createTelegramLeadActionCallbackData("mark_kp_sent", action.leadId) }];
+        return [];
       case "undo_kp_sent":
-        return [{ text: "Undo KP sent", callback_data: createTelegramLeadActionCallbackData("undo_kp_sent", action.leadId) }];
+        return [];
     }
   });
 
   return {
     inline_keyboard: [row]
   };
-}
-
-function createTelegramLeadActionCallbackData(action: "mark_kp_sent" | "undo_kp_sent", leadId: string): string {
-  return `lead_action:${action}:${leadId}`;
 }
 
 function parseTelegramLeadActionCallbackData(data: string | undefined): { action: "mark_kp_sent" | "undo_kp_sent"; leadId: string } | null {
