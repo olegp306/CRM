@@ -163,6 +163,11 @@ describe("telegram worker", () => {
         body: expect.stringContaining("Nocturne")
       })
     );
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.reply_markup.inline_keyboard[0]).toEqual([
+      { text: "Settings", url: "https://crm.example.com/settings/branding" }
+    ]);
   });
 
   it("answers duplicate Telegram source messages with the existing CRM lead link", async () => {
@@ -2152,6 +2157,7 @@ describe("telegram worker", () => {
     const sendBody = JSON.parse(String(sendCall[1].body));
     expect(sendBody.parse_mode).toBe("HTML");
     expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("Summary: <b>BGF and email update</b>");
     expect(sendBody.text).toContain("Email: <b>katya@example.com</b>");
     expect(sendBody.text).not.toContain("Client: <b>unknown</b>");
     expect(sendBody.text).not.toContain("mark KP sent");

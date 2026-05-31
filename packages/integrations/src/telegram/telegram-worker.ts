@@ -358,7 +358,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         botToken: config.botToken,
         chatId: message.chatId,
         text: generalAssistantResponse.text,
-        replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons),
+        replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons, config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -400,7 +400,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         botToken: config.botToken,
         chatId: message.chatId,
         text: response.text,
-        replyMarkup: createTelegramResponseReplyMarkup(response.buttons),
+        replyMarkup: createTelegramResponseReplyMarkup(response.buttons, config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -1487,8 +1487,13 @@ function normalizeTelegramAssistantContent(content: string): string {
   return content.trim().replace(/^\/([a-z_]+)@\w+/i, "/$1");
 }
 
-function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?: string }> = []) {
-  const linkButtons = buttons.filter((button): button is { label: string; url: string } => Boolean(button.url));
+function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?: string }> = [], crmBaseUrl?: string) {
+  const linkButtons = buttons
+    .map((button) => {
+      const url = createTelegramAbsoluteButtonUrl(button.url, crmBaseUrl);
+      return url ? { label: button.label, url } : null;
+    })
+    .filter((button): button is { label: string; url: string } => Boolean(button));
 
   if (linkButtons.length === 0) {
     return undefined;
@@ -1497,6 +1502,23 @@ function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?:
   return {
     inline_keyboard: [linkButtons.map((button) => ({ text: button.label, url: button.url }))]
   };
+}
+
+function createTelegramAbsoluteButtonUrl(url: string | undefined, crmBaseUrl: string | undefined): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("/") && crmBaseUrl?.trim()) {
+    return `${crmBaseUrl.replace(/\/+$/, "")}${trimmed}`;
+  }
+
+  return null;
 }
 function createTelegramLeadConfirmation({
   leadId,
@@ -1885,6 +1907,7 @@ function createTelegramLeadUpdatedMessage(
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
 ): string {
   const fields = [
+    ["Summary", createTelegramLeadSummary(draft, undefined, undefined)],
     ["Client", draft.clientName],
     ["Request type", draft.requestType],
     ["Project address", draft.projectAddress],
