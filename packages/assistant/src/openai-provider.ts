@@ -46,12 +46,7 @@ type OpenAIAttachmentSummary = {
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
 const allowedActionTypes = new Set<AssistantActionType>([
   "create_lead",
-  "update_lead",
-  "generate_kp",
-  "schedule_followup",
-  "update_project_task",
-  "mark_kp_sent",
-  "undo_kp_sent"
+  "update_lead"
 ]);
 const maxAttachmentTextPreviewLength = 500;
 
@@ -446,14 +441,10 @@ function canUseAssistantActionMode(role: string): boolean {
 function createSystemPrompt(): string {
   return [
     "You are the CRM assistant runtime for an architecture studio SaaS.",
-    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"update_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
+    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"update_lead\", \"summary\": string, \"sourceText\": string}}.",
     "Use create_lead when the user asks to add, create, capture, or register a lead/client opportunity.",
     "Use update_lead when the user wants to add, merge, correct, or attach source information to an existing selected lead.",
-    "Use schedule_followup for reminders or follow-up scheduling.",
-    "Use update_project_task for project/task status changes.",
-    "Use generate_kp for KP, offer, proposal, or document generation.",
-    "Use mark_kp_sent when the user says an existing KP, offer, or proposal was sent.",
-    "Use undo_kp_sent when the user asks to undo, revert, clear, or remove a KP sent status.",
+    "For reminders, KP generation, KP sent status, project tasks, search, or file-only attachment requests, explain briefly that this cut only creates or updates leads and set action to null.",
     "If no operational action is needed, set action to null."
   ].join("\n");
 }

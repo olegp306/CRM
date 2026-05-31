@@ -203,6 +203,48 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(result.confirmationStatus).toBe("awaiting_confirmation");
   });
 
+  it("keeps the generic OpenAI planner focused on create and update lead actions", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can answer that without a write action.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    await createOpenAIAssistantSubmissionResult(
+      {
+        context: baseContext,
+        content: "Create lead Anna Beispiel, BGF 150",
+        threadId: "thread-openai-action-scope",
+        messageId: "message-openai-action-scope"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const systemPrompt = request.messages[0].content;
+    expect(systemPrompt).toContain('"create_lead" | "update_lead"');
+    expect(systemPrompt).not.toContain("schedule_followup");
+    expect(systemPrompt).not.toContain("generate_kp");
+    expect(systemPrompt).not.toContain("mark_kp_sent");
+    expect(systemPrompt).not.toContain("undo_kp_sent");
+  });
+
   it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(
