@@ -148,6 +148,61 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     ]);
   });
 
+  it("uses OpenAI to produce an update lead preview for selected web leads", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I prepared a lead update preview for L-2026-004.",
+                  action: {
+                    actionType: "update_lead",
+                    summary: "Update selected lead with new BGF",
+                    sourceText: "Client sent updated BGF 210 m2."
+                  }
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, selectedRecordIds: ["L-2026-004"] },
+        content: "Update this lead with BGF 210 m2",
+        threadId: "thread-update-lead-plan",
+        messageId: "message-update-lead-plan"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/chat/completions",
+      expect.objectContaining({
+        body: expect.stringContaining("update_lead")
+      })
+    );
+    expect(result.response).toBe("I prepared a lead update preview for L-2026-004.");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead with new BGF",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        { field: "lead.sourceText", from: null, to: "Client sent updated BGF 210 m2." }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+  });
+
   it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(

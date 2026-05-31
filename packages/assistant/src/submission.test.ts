@@ -221,6 +221,50 @@ describe("assistant submission orchestration", () => {
     );
   });
 
+  it("enriches web lead-update previews with parsed fields before confirmation", async () => {
+    const input = {
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+      content: "Add this to the selected lead: updated BGF 210 m2 and email irina@example.com.",
+      threadId: "thread-update-enrich",
+      messageId: "message-update-enrich"
+    } satisfies Parameters<typeof createAssistantSubmissionResult>[0];
+    const result = createAssistantSubmissionResult(input);
+
+    const enriched = await enrichLeadIntakeSubmissionResult(result, input, {
+      parseLead: async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "medium",
+        temperature: "warm",
+        bgfM2: 210,
+        projectAddress: "Bad Aibling",
+        email: "irina@example.com",
+        phone: null,
+        missingData: ["projectAddress"],
+        summary: "Updated lead fields",
+        suggestedReply: "Updated."
+      })
+    });
+
+    expect(enriched.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead from assistant source material",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        { field: "lead.sourceText", from: null, to: expect.stringContaining("Summary: Updated lead fields") },
+        { field: "lead.clientName", from: null, to: "Irina Schneider" },
+        { field: "lead.requestType", from: null, to: "new_build" },
+        { field: "lead.projectAddress", from: null, to: "Bad Aibling" },
+        { field: "lead.bgfM2", from: null, to: 210 },
+        { field: "lead.email", from: null, to: "irina@example.com" },
+        { field: "lead.phone", from: null, to: null },
+        { field: "lead.missingData", from: null, to: ["projectAddress"] },
+        { field: "lead.isStandard", from: null, to: true },
+        { field: "lead.temperature", from: null, to: "warm" }
+      ]
+    });
+  });
+
   it("previews schedule follow-up actions when the request asks for a reminder", () => {
     const result = createAssistantSubmissionResult({
       context: baseContext,

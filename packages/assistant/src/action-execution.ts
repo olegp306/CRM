@@ -29,6 +29,15 @@ export type UpdateLeadFromAssistantInput = {
   leadId: string;
   rawInput: string;
   requestedByUserId: string;
+  clientName?: string | null;
+  requestType?: string | null;
+  projectAddress?: string | null;
+  bgfM2?: number | null;
+  email?: string | null;
+  phone?: string | null;
+  missingData?: LeadMissingField[];
+  isStandard?: boolean;
+  temperature?: "cold" | "warm" | "hot" | "unknown";
 };
 
 export type UpdatedLeadRecord = UpdateLeadFromAssistantInput & {
@@ -218,7 +227,16 @@ export async function executeAssistantAction({
       workspaceId: action.workspaceId,
       leadId,
       rawInput,
-      requestedByUserId: action.requestedByUserId
+      requestedByUserId: action.requestedByUserId,
+      clientName: getOptionalPreviewString(action, "lead.clientName"),
+      requestType: getOptionalPreviewString(action, "lead.requestType"),
+      projectAddress: getOptionalPreviewString(action, "lead.projectAddress"),
+      bgfM2: getOptionalPreviewNumber(action, "lead.bgfM2"),
+      email: getOptionalPreviewString(action, "lead.email"),
+      phone: getOptionalPreviewString(action, "lead.phone"),
+      missingData: getOptionalPreviewLeadMissingFields(action, "lead.missingData") ?? undefined,
+      isStandard: getOptionalPreviewBoolean(action, "lead.isStandard") ?? undefined,
+      temperature: getOptionalPreviewTemperature(action, "lead.temperature") ?? undefined
     });
     const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
 

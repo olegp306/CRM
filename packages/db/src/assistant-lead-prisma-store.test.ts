@@ -211,7 +211,11 @@ describe("assistant lead Prisma store", () => {
       workspaceId: "workspace-1",
       leadId: "L-2026-001",
       rawInput: "Client sent updated BGF 210 m2 and budget 42000 EUR.",
-      requestedByUserId: "user-1"
+      requestedByUserId: "user-1",
+      bgfM2: 210,
+      email: "irina@example.com",
+      missingData: ["projectAddress"],
+      temperature: "warm"
     });
 
     expect(lead).toEqual({
@@ -242,7 +246,11 @@ describe("assistant lead Prisma store", () => {
           }
         },
         data: {
-          rawInput: "Existing lead\n\nAssistant update from user-1:\nClient sent updated BGF 210 m2 and budget 42000 EUR."
+          rawInput: "Existing lead\n\nAssistant update from user-1:\nClient sent updated BGF 210 m2 and budget 42000 EUR.",
+          bgfM2: 210,
+          email: "irina@example.com",
+          missingData: ["projectAddress"],
+          temperature: "warm"
         }
       }
     });

@@ -68,6 +68,15 @@ function getAssistantLeadStore(): AssistantLeadStore {
       lead.rawInput = [lead.rawInput?.trim(), `Assistant update from ${input.requestedByUserId}:\n${input.rawInput.trim()}`]
         .filter(Boolean)
         .join("\n\n");
+      lead.clientName = input.clientName ?? lead.clientName;
+      lead.requestType = input.requestType ?? lead.requestType;
+      lead.projectAddress = input.projectAddress ?? lead.projectAddress;
+      lead.bgfM2 = input.bgfM2 ?? lead.bgfM2;
+      lead.email = input.email ?? lead.email;
+      lead.phone = input.phone ?? lead.phone;
+      lead.missingData = input.missingData ?? lead.missingData;
+      lead.isStandard = input.isStandard ?? lead.isStandard;
+      lead.temperature = input.temperature ?? lead.temperature;
 
       const result: UpdatedLeadRecord = {
         id: lead.id,

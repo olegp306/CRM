@@ -402,6 +402,17 @@ function createPreviewFromPlan(plan: OpenAIPlan, fallbackSourceText: string, con
     });
   }
 
+  if (plan.action.actionType === "update_lead") {
+    return createActionPreview({
+      actionType: "update_lead",
+      summary: plan.action.summary,
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: context.selectedRecordIds ?? [] },
+        { field: "lead.sourceText", from: null, to: sourceText }
+      ]
+    });
+  }
+
   if (plan.action.actionType === "update_project_task") {
     return createActionPreview({
       actionType: "update_project_task",
@@ -435,8 +446,9 @@ function canUseAssistantActionMode(role: string): boolean {
 function createSystemPrompt(): string {
   return [
     "You are the CRM assistant runtime for an architecture studio SaaS.",
-    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
+    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"update_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
     "Use create_lead when the user asks to add, create, capture, or register a lead/client opportunity.",
+    "Use update_lead when the user wants to add, merge, correct, or attach source information to an existing selected lead.",
     "Use schedule_followup for reminders or follow-up scheduling.",
     "Use update_project_task for project/task status changes.",
     "Use generate_kp for KP, offer, proposal, or document generation.",

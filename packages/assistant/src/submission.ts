@@ -69,13 +69,24 @@ export function createAssistantSubmissionResult({
     context,
     attachments: attachments ?? []
   };
+  const channelResponse = createAssistantChannelResponse(channelMessage, { lead });
+
+  if (channelResponse.intent === "lead_update") {
+    return createAssistantSubmissionResultFromChannelResponse({
+      thread,
+      message,
+      channelResponse,
+      context,
+      threadId,
+      messageId,
+      attachments: attachments ?? []
+    });
+  }
 
   if (message.intent === "crm_action") {
     const actionPreview = createCrmActionPreview(trimmedContent, context);
 
     if (actionPreview.actionType === "create_lead" && isLeadSourceMaterial(channelMessage)) {
-      const channelResponse = createAssistantChannelResponse(channelMessage, { lead });
-
       return createAssistantSubmissionResultFromChannelResponse({
         thread,
         message,
@@ -126,8 +137,6 @@ export function createAssistantSubmissionResult({
       };
   }
 
-  const channelResponse = createAssistantChannelResponse(channelMessage, { lead });
-
   return createAssistantSubmissionResultFromChannelResponse({
     thread,
     message,
@@ -144,7 +153,17 @@ export async function enrichLeadIntakeSubmissionResult(
   input: AssistantSubmissionInput,
   parser: AssistantLeadParserClient
 ): Promise<AssistantSubmissionResult> {
-  if (result.actionPreview?.actionType !== "create_lead" || result.actionPreview.summary !== "Create lead from assistant source material") {
+  if (
+    result.actionPreview?.actionType !== "create_lead" &&
+    result.actionPreview?.actionType !== "update_lead"
+  ) {
+    return result;
+  }
+
+  if (
+    result.actionPreview.actionType === "create_lead" &&
+    result.actionPreview.summary !== "Create lead from assistant source material"
+  ) {
     return result;
   }
 
@@ -163,9 +182,10 @@ export async function enrichLeadIntakeSubmissionResult(
   return {
     ...result,
     actionPreview: createActionPreview({
-      actionType: "create_lead",
+      actionType: result.actionPreview.actionType,
       summary: result.actionPreview.summary,
       changes: [
+        ...result.actionPreview.changes.filter((change) => change.field === "lead.selectedRecordIds"),
         { field: "lead.sourceText", from: null, to: draft.rawInput },
         { field: "lead.clientName", from: null, to: draft.clientName },
         { field: "lead.requestType", from: null, to: draft.requestType },

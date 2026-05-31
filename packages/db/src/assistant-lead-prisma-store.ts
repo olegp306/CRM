@@ -71,6 +71,7 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
         take: 1
       });
       const rawInput = appendAssistantLeadUpdate(existing?.rawInput, input.requestedByUserId, input.rawInput);
+      const data = createLeadUpdateData(input, rawInput);
       const row = await client.lead.update({
         where: {
           workspaceId_leadId: {
@@ -78,9 +79,7 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
             leadId: input.leadId
           }
         },
-        data: {
-          rawInput
-        }
+        data
       });
 
       return {
@@ -147,6 +146,22 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
       };
     }
   };
+}
+
+function createLeadUpdateData(input: UpdateLeadFromAssistantInput, rawInput: string): Record<string, unknown> {
+  const data: Record<string, unknown> = { rawInput };
+  const optionalFields: Array<keyof Pick<
+    UpdateLeadFromAssistantInput,
+    "clientName" | "requestType" | "projectAddress" | "bgfM2" | "email" | "phone" | "missingData" | "isStandard" | "temperature"
+  >> = ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone", "missingData", "isStandard", "temperature"];
+
+  for (const field of optionalFields) {
+    if (input[field] !== undefined) {
+      data[field] = input[field];
+    }
+  }
+
+  return data;
 }
 
 function appendAssistantLeadUpdate(existingRawInput: string | null | undefined, requestedByUserId: string, rawInput: string): string {

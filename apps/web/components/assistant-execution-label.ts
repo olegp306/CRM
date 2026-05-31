@@ -18,6 +18,10 @@ export function getAssistantExecutionLabel(execution: ExecuteAssistantActionResu
     return `Duplicate lead ${execution.leadId}`;
   }
 
+  if ("actionType" in execution && execution.actionType === "update_lead") {
+    return `Updated lead ${execution.leadId}`;
+  }
+
   if ("leadId" in execution) {
     return execution.leadId;
   }
