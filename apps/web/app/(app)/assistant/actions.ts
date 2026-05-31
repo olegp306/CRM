@@ -45,7 +45,13 @@ import {
 } from "@app/assistant";
 import { generateAssistantKpDocument, listAssistantGeneratedDocuments } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
-import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent, undoAssistantLeadKpSent } from "./lead-execution-store";
+import {
+  createAssistantLead,
+  listAssistantCreatedLeads,
+  markAssistantLeadKpSent,
+  undoAssistantLeadKpSent,
+  updateAssistantLead
+} from "./lead-execution-store";
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
@@ -413,6 +419,7 @@ export async function confirmAssistantActionAction({
     existingLeadIds: existingLeads.map((lead) => lead.leadId),
     existingLeads,
     createLead: createAssistantLead,
+    updateLead: updateAssistantLead,
     scheduleFollowup: createAssistantFollowup,
     updateProjectTask: updateAssistantProjectTask,
     generateKpDocument: generateAssistantKpDocument,

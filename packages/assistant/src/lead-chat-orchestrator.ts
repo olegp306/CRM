@@ -40,7 +40,10 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
       intent: "lead_update",
       shouldPersistFeedback: false,
       feedbackType: undefined,
-      buttons: createLeadCrmButtons(referencedLeadId),
+      buttons:
+        message.channel === "web"
+          ? [...createLeadCrmButtons(referencedLeadId), { label: "Update lead", action: "confirm" }]
+          : createLeadCrmButtons(referencedLeadId),
       normalizedActions: ["open_crm"],
       text: `I can update this lead ${referencedLeadId} from your message. I will merge new source material, fill missing KP fields when possible, and ask if the content looks like a different client.`
     };

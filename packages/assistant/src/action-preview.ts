@@ -1,5 +1,6 @@
 export type AssistantActionType =
   | "create_lead"
+  | "update_lead"
   | "generate_kp"
   | "schedule_followup"
   | "update_project_task"

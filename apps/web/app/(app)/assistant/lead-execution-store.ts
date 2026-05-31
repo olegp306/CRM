@@ -3,6 +3,8 @@ import type {
   CreatedLeadRecord,
   MarkKpSentFromAssistantInput,
   MarkedKpSentLeadRecord,
+  UpdateLeadFromAssistantInput,
+  UpdatedLeadRecord,
   UndoKpSentFromAssistantInput,
   UndoneKpSentLeadRecord
 } from "@app/assistant";
@@ -55,6 +57,28 @@ function getAssistantLeadStore(): AssistantLeadStore {
 
       getStore().push(lead);
       return lead;
+    },
+    async update(input) {
+      const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId);
+
+      if (!lead) {
+        throw new Error(`Lead ${input.leadId} was not found`);
+      }
+
+      lead.rawInput = [lead.rawInput?.trim(), `Assistant update from ${input.requestedByUserId}:\n${input.rawInput.trim()}`]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const result: UpdatedLeadRecord = {
+        id: lead.id,
+        workspaceId: input.workspaceId,
+        leadId: input.leadId,
+        status: lead.status,
+        rawInput: lead.rawInput,
+        requestedByUserId: input.requestedByUserId
+      };
+
+      return result;
     },
     async markKpSent(input) {
       const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId);
@@ -116,6 +140,10 @@ export async function listAssistantCreatedLeads(workspaceId: string): Promise<Cr
 
 export async function createAssistantLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord> {
   return getAssistantLeadStore().create(input);
+}
+
+export async function updateAssistantLead(input: UpdateLeadFromAssistantInput): Promise<UpdatedLeadRecord> {
+  return getAssistantLeadStore().update(input);
 }
 
 export async function markAssistantLeadKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord> {

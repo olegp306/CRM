@@ -51,4 +51,28 @@ describe("execution channel events", () => {
       }
     ]);
   });
+
+  it("creates a lead update event for assistant lead updates", () => {
+    expect(
+      createExecutionChannelEvents({
+        channel: "web",
+        threadId: "thread-1",
+        execution: {
+          status: "executed",
+          actionType: "update_lead",
+          leadId: "L-2026-004",
+          recordId: "lead-record-4"
+        }
+      })
+    ).toEqual([
+      {
+        type: "lead_draft_updated",
+        channel: "web",
+        threadId: "thread-1",
+        leadId: "L-2026-004",
+        fieldsChanged: ["rawInput"],
+        missingData: []
+      }
+    ]);
+  });
 });

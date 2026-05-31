@@ -46,7 +46,7 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.3.0"
+      appVersion: "0.3.2"
     });
     expect(result.response).toBe("I saved this as product feedback for review.");
   });
@@ -512,6 +512,34 @@ describe("assistant submission orchestration", () => {
       { label: "DOC", action: "download_doc", url: "/documents/attachments/docx-1?download=1" },
       { label: "Send KP", action: "send_kp", url: "mailto:?subject=KP%20L-2026-004" },
       { label: "Mark KP sent", action: "mark_kp_sent" }
+    ]);
+  });
+
+  it("previews selected lead updates from web source material", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+      content: "Add this to the selected lead: client sent updated BGF 210 m2 and budget 42000 EUR.",
+      threadId: "thread-selected-lead-update",
+      messageId: "message-selected-lead-update"
+    });
+
+    expect(result.response).toContain("I can update this lead L-2026-004");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead from assistant source material",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Add this to the selected lead: client sent updated BGF 210 m2 and budget 42000 EUR."
+        }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "CRM", action: "open_crm", url: "/leads?leadId=L-2026-004" },
+      { label: "Update lead", action: "confirm" }
     ]);
   });
 

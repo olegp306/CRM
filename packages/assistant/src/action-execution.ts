@@ -24,6 +24,18 @@ export type CreatedLeadRecord = Omit<CreateLeadFromAssistantInput, "status"> & {
   status: string;
 };
 
+export type UpdateLeadFromAssistantInput = {
+  workspaceId: string;
+  leadId: string;
+  rawInput: string;
+  requestedByUserId: string;
+};
+
+export type UpdatedLeadRecord = UpdateLeadFromAssistantInput & {
+  id: string;
+  status: string;
+};
+
 export type ScheduleFollowupFromAssistantInput = {
   workspaceId: string;
   followupId: string;
@@ -104,6 +116,7 @@ export type ExecuteAssistantActionInput = {
   existingLeadIds: string[];
   existingLeads?: CreatedLeadRecord[];
   createLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord>;
+  updateLead?(input: UpdateLeadFromAssistantInput): Promise<UpdatedLeadRecord>;
   scheduleFollowup?(input: ScheduleFollowupFromAssistantInput): Promise<CreatedFollowupRecord>;
   updateProjectTask?(input: UpdateProjectTaskFromAssistantInput): Promise<UpdatedProjectTaskRecord>;
   generateKpDocument?(input: GenerateKpDocumentFromAssistantInput): Promise<GeneratedKpDocumentRecord>;
@@ -120,6 +133,12 @@ export type ExecuteAssistantActionResult =
       pdfAttachmentId?: string;
       docxAttachmentId?: string;
       documentError?: string;
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "update_lead";
+      leadId: string;
+      recordId: string;
     }
   | {
       status: Extract<ActionConfirmationStatus, "executed">;
@@ -179,6 +198,7 @@ export async function executeAssistantAction({
   existingLeadIds,
   existingLeads = [],
   createLead,
+  updateLead,
   scheduleFollowup,
   updateProjectTask,
   generateKpDocument,
@@ -186,6 +206,33 @@ export async function executeAssistantAction({
   undoKpSent
 }: ExecuteAssistantActionInput): Promise<ExecuteAssistantActionResult> {
   const confirmedStatus = advanceActionConfirmation(action.status, "confirm");
+
+  if (action.actionType === "update_lead") {
+    if (!updateLead) {
+      throw new Error("Assistant action update_lead is missing an execution port");
+    }
+
+    const leadId = getSinglePreviewRecordId(action, "lead.selectedRecordIds");
+    const rawInput = getPreviewChangeValue(action, "lead.sourceText");
+    const updatedLead = await updateLead({
+      workspaceId: action.workspaceId,
+      leadId,
+      rawInput,
+      requestedByUserId: action.requestedByUserId
+    });
+    const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+    if (executedStatus !== "executed") {
+      throw new Error(`Assistant action ${action.messageId} did not execute`);
+    }
+
+    return {
+      status: executedStatus,
+      actionType: "update_lead",
+      leadId: updatedLead.leadId,
+      recordId: updatedLead.id
+    };
+  }
 
   if (action.actionType === "create_lead") {
     const rawInput = getPreviewChangeValue(action, "lead.sourceText");

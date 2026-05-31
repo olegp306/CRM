@@ -261,6 +261,21 @@ function createChannelActionPreview(
 
   const hasConfirmButton = channelResponse.buttons.some((button) => button.action === "confirm");
 
+  if (channelResponse.intent === "lead_update" && hasConfirmButton) {
+    const leadId = extractLeadIdFromButtons(channelResponse.buttons);
+
+    if (leadId) {
+      return createActionPreview({
+        actionType: "update_lead",
+        summary: "Update selected lead from assistant source material",
+        changes: [
+          { field: "lead.selectedRecordIds", from: null, to: [leadId] },
+          { field: "lead.sourceText", from: null, to: appendAttachmentSummary(sourceText, attachments) }
+        ]
+      });
+    }
+  }
+
   if (channelResponse.intent !== "lead_intake" || !hasConfirmButton) {
     return null;
   }

@@ -46,6 +46,7 @@ type OpenAIAttachmentSummary = {
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
 const allowedActionTypes = new Set<AssistantActionType>([
   "create_lead",
+  "update_lead",
   "generate_kp",
   "schedule_followup",
   "update_project_task",

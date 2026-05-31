@@ -455,6 +455,50 @@ describe("executeAssistantAction", () => {
     ]);
   });
 
+  it("updates an existing lead from assistant source material through the update port", async () => {
+    const updatedLeads: unknown[] = [];
+    const updateLeadAction: AssistantActionWriteDraft = {
+      ...action,
+      actionType: "update_lead",
+      messageId: "message-update-lead",
+      preview: {
+        ...action.preview,
+        actionType: "update_lead",
+        summary: "Update selected lead from assistant source material",
+        changes: [
+          { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+          { field: "lead.sourceText", from: null, to: "Client sent updated BGF 210 m2 and budget 42000 EUR." }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: updateLeadAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-004"],
+      createLead: async (lead) => ({ id: "unused", ...lead }),
+      updateLead: async (lead) => {
+        updatedLeads.push(lead);
+        return { id: "lead-record-4", status: "needs_data", ...lead };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "update_lead",
+      leadId: "L-2026-004",
+      recordId: "lead-record-4"
+    });
+    expect(updatedLeads).toEqual([
+      {
+        workspaceId: "workspace-1",
+        leadId: "L-2026-004",
+        rawInput: "Client sent updated BGF 210 m2 and budget 42000 EUR.",
+        requestedByUserId: "user-1"
+      }
+    ]);
+  });
+
   it("still returns the created lead when KP document generation fails", async () => {
     const result = await executeAssistantAction({
       action,
