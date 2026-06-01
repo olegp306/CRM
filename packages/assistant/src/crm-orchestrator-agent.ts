@@ -6,7 +6,7 @@ export type CrmOrchestratorIntent =
   | "UPDATE_LEAD"
   | "SEARCH_LEAD"
   | "CREATE_REMINDER"
-  | "ATTACH_FILE"
+  | "SUPPORT_REQUEST"
   | "CLARIFICATION_REQUIRED";
 
 export type CrmOrchestratorStatus = "ready" | "need_clarification";
@@ -14,7 +14,7 @@ export type CrmOrchestratorStatus = "ready" | "need_clarification";
 export type CrmOrchestratorDecision = {
   intent: CrmOrchestratorIntent;
   reasoning: string;
-  action: "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "File Attachment Agent" | "clarification";
+  action: "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "Support Agent" | "clarification";
   status: CrmOrchestratorStatus;
   message: string;
 };
@@ -57,11 +57,13 @@ Creates tasks and reminders.
 
 Use when the user asks to call back, create a task, create a follow-up, schedule a meeting, or set a reminder.
 
-### File Attachment Agent
+### Support Agent
 
-Attaches files to CRM entities.
+Answers product, capability, help, support, and unclear non-CRM-action questions.
 
-Use when the user wants to add a document, attach a contract, upload an invoice, attach a PDF, or add an image.
+Use when the user asks what the CRM can do, whether a feature exists, how to use something, or reports a support issue.
+
+Product feature requests, UX feedback, and capability questions are not CRM actions. Route them to Support Agent unless the message clearly asks to create, update, search, or schedule something.
 
 ## WORKFLOW
 
@@ -90,10 +92,10 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
 
   if (isAttachFileRequest(text) || (hasAttachment && Boolean(leadId))) {
     if (!leadId && !hasSpecificTargetEntitySignal(text)) {
-      return clarification("ATTACH_FILE", "File attachment needs a target CRM entity.", "Which lead should I attach this file to?");
+      return clarification("UPDATE_LEAD", "File material updates an existing lead but needs a target lead.", "Which lead should I update with this material?");
     }
 
-    return ready("ATTACH_FILE", "User wants to attach source material or a file.", "File Attachment Agent", "Passing the file to the attachment agent.");
+    return ready("UPDATE_LEAD", "User wants to add source material or a file to an existing CRM record.", "Lead Update Agent", "Passing the material to the lead update agent.");
   }
 
   if (isReminderRequestText(text)) {
@@ -126,6 +128,10 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
     }
 
     return ready("UPDATE_LEAD", "User wants to update an existing lead.", "Lead Update Agent", "Passing the request to the lead update agent.");
+  }
+
+  if (isSupportRequest(text)) {
+    return ready("SUPPORT_REQUEST", "User asks a product/support/capability question, not a CRM data action.", "Support Agent", "I can help with that support question.");
   }
 
   return clarification("CLARIFICATION_REQUIRED", "The request is ambiguous.", "Do you want me to create a new lead or update an existing lead?");
@@ -183,6 +189,15 @@ function isSearchLeadRequest(text: string): boolean {
     ) ||
     /\b(csv|excel|xlsx|spreadsheet|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
     /(покажи|найди|выведи|дай|скинь|экспорт|экспортируй|фильтр|отфильтруй).*(лид|лиды|клиент|клиенты|заявк)/i.test(text)
+  );
+}
+
+function isSupportRequest(text: string): boolean {
+  return (
+    /\b(help|support|who are you|what can you do|how do i|how can i|do we have|is there|can i|can we|feature|feedback|request|theme|dark mode|color scheme|appearance|settings|problem|issue|please add|would be nice|later)\b/i.test(
+      text
+    ) ||
+    /(помоги|поддержк|кто ты|что умеешь|как|есть ли|можно ли|фича|фидбек|обратн\w*\s+связ|тема|темн\w*|цветов\w*\s+схем|оформлен|настройк|проблем|вопрос)/i.test(text)
   );
 }
 

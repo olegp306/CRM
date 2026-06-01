@@ -366,7 +366,7 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toContain("Telegram actions are limited right now.");
+    expect(result.text).toContain("Right now in Telegram I create or update leads");
     expect(result.text).not.toContain("Nocturne");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.buttons).toEqual([]);
@@ -394,7 +394,7 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toBe("Which lead should I attach this file to?");
+    expect(result.text).toBe("Which lead should I update with this material?");
     expect(result.buttons).toEqual([]);
   });
 

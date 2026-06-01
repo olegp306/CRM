@@ -184,11 +184,7 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     return null;
   }
 
-  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
-    return null;
-  }
-
-  if (decision.intent === "ATTACH_FILE" && getReferencedLeadId(message)) {
+  if (decision.intent === "CREATE_LEAD") {
     return null;
   }
 
@@ -203,6 +199,10 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
   if (decision.intent === "SEARCH_LEAD") {
     return createTelegramLimitedCrmActionsResponse();
   }
@@ -211,8 +211,17 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     return createTelegramLimitedCrmActionsResponse();
   }
 
-  if (decision.intent === "ATTACH_FILE") {
-    return createTelegramLimitedCrmActionsResponse();
+  if (decision.intent === "SUPPORT_REQUEST") {
+    const leadId = getReferencedLeadId(message);
+
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: createLeadCrmButtons(leadId),
+      normalizedActions: leadId ? ["open_crm"] : [],
+      text: createSupportResponseText(message.channel, leadId)
+    };
   }
 
   return null;

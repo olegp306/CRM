@@ -1622,11 +1622,7 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     return createTelegramLimitedActionsResponse();
   }
 
-  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
-    return null;
-  }
-
-  if (decision.intent === "ATTACH_FILE" && replyTo?.leadId) {
+  if (decision.intent === "CREATE_LEAD") {
     return null;
   }
 
@@ -1641,6 +1637,10 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     };
   }
 
+  if (decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
   if (decision.intent === "SEARCH_LEAD") {
     return createTelegramLimitedActionsResponse();
   }
@@ -1649,8 +1649,15 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     return createTelegramLimitedActionsResponse();
   }
 
-  if (decision.intent === "ATTACH_FILE") {
-    return createTelegramLimitedActionsResponse();
+  if (decision.intent === "SUPPORT_REQUEST") {
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: "I can help with CRM questions here. Right now Telegram actions are limited to creating leads and updating existing leads."
+    };
   }
 
   return null;

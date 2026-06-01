@@ -138,7 +138,7 @@ describe("CRM orchestrator agent", () => {
     });
   });
 
-  it("asks for target entity before attaching a file without lead context", () => {
+  it("treats file-only attachment requests as lead update clarifications, not a separate file agent", () => {
     const result = routeCrmOrchestratorRequest({
       ...baseMessage,
       content: "Attach this PDF to the CRM record",
@@ -146,10 +146,36 @@ describe("CRM orchestrator agent", () => {
     });
 
     expect(result).toMatchObject({
-      intent: "ATTACH_FILE",
+      intent: "UPDATE_LEAD",
       action: "clarification",
       status: "need_clarification",
-      message: "Which lead should I attach this file to?"
+      message: "Which lead should I update with this material?"
+    });
+  });
+
+  it("routes product capability questions to support instead of capability or feature handling", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Do we have a dark theme for evening work?"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SUPPORT_REQUEST",
+      action: "Support Agent",
+      status: "ready"
+    });
+  });
+
+  it("routes broad product feedback wording to support instead of feature request handling", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Please add a nicer onboarding screen later"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SUPPORT_REQUEST",
+      action: "Support Agent",
+      status: "ready"
     });
   });
 });

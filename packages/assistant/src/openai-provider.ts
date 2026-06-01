@@ -212,8 +212,15 @@ async function createWebCrmOrchestratorFallbackResponse(
     return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but web assistant reminders are not enabled in this cut yet.");
   }
 
-  if (decision.intent === "ATTACH_FILE") {
-    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but web assistant file-only attachment is not enabled in this cut yet.");
+  if (decision.intent === "SUPPORT_REQUEST") {
+    return {
+      intent: "support_request" as const,
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
   }
 
   return null;
