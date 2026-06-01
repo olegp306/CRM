@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.2`
+Current stable version: `0.3.5`
 
 Stable tag format:
 
@@ -18,6 +18,8 @@ v0.2.4
 v0.3.0
 v0.3.1
 v0.3.2
+v0.3.4
+v0.3.5
 ```
 
 ## Branch Workflow
@@ -144,6 +146,16 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.3.5
+
+Lead summary card polish release:
+
+- Lead cards opened from Telegram CRM links now show a cleaner Lead Summary Info block before History.
+- Telegram text is shown as readable message content without Telegram ids, source links, or download controls.
+- Long text and audio summaries stay compact with an option to expand the full text.
+- Saved photos, PDFs, and audio materials use concise descriptions and view links.
+- Fullscreen lead cards stay inside the mobile viewport, keeping Close and accordion rows usable.
 
 ## 0.3.0
 

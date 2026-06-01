@@ -1,6 +1,6 @@
 {
   "name": "crm-saas-v1",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
