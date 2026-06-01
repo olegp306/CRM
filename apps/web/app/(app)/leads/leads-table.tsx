@@ -382,7 +382,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
       </section>
 
       {selectedLead ? (
-        <div className="fixed inset-0 z-50 bg-white">
+        <div className="fixed inset-0 z-50 w-screen overflow-hidden bg-white">
           <LeadEditor
             lead={selectedLead}
             actionPlan={createLeadActionPlan(selectedLead)}
@@ -564,10 +564,10 @@ function LeadEditor({
       key={lead.id}
       onSubmit={onSubmit}
       data-variant={variant}
-      className="h-screen max-h-screen overflow-auto p-4 pb-32 scroll-pb-32"
+      className="box-border h-screen max-h-screen w-full max-w-full overflow-y-auto overflow-x-hidden p-4 pb-32 scroll-pb-32"
     >
       <input type="hidden" name="id" value={lead.id} />
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 flex justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur">
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 flex w-[calc(100%+2rem)] justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur">
         <button
           type="button"
           onClick={onClose}
