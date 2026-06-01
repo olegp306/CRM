@@ -279,10 +279,33 @@ describe("telegram worker", () => {
     expect(body.text).not.toContain("Nocturne");
   });
 
-  it("does not expose table export as an early Telegram assistant action", async () => {
+  it("routes Telegram table export requests through the lead search/filter agent", async () => {
     const client = {
       lead: {
-        findMany: vi.fn(async () => []),
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-1",
+            leadId: "L-2026-001",
+            createdDate: new Date("2026-05-15T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "EFH Neubau",
+            projectAddress: "Munich",
+            client: { name: "Anna Meyer" },
+            rawInput: "old"
+          },
+          {
+            id: "lead-record-2",
+            leadId: "L-2026-002",
+            createdDate: new Date("2026-06-01T10:00:00.000Z"),
+            status: "new",
+            temperature: "hot",
+            requestType: "Office",
+            projectAddress: "Berlin",
+            client: { name: "Buro GmbH" },
+            rawInput: "old"
+          }
+        ]),
         create: vi.fn()
       }
     };
@@ -306,7 +329,7 @@ describe("telegram worker", () => {
               message_id: 13,
               date: 1779296520,
               chat: { id: 12345 },
-              text: "Send me CSV export of leads"
+              text: "Send me CSV export of warm leads from last month"
             }
           }
         ],
@@ -326,9 +349,12 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("For now I can only create a lead or update an existing lead");
-    expect(body.text).not.toContain("CSV export");
-    expect(body.reply_markup).toBeUndefined();
+    expect(body.text).toContain("Found 1 leads");
+    expect(body.text).toContain("L-2026-001");
+    expect(body.text).not.toContain("L-2026-002");
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [[{ text: "Download CSV", url: "https://crm.example.com/exports/leads?date=last_month&temperature=warm" }]]
+    });
   });
 
   it("asks which lead to update for standalone client context instead of creating a draft lead", async () => {
@@ -427,17 +453,11 @@ describe("telegram worker", () => {
 
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottelegram-token/sendMessage",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("Telegram actions are limited right now.")
-      })
-    );
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("I can only create a lead or update an existing lead.");
+    expect(body.text).toContain("No leads matched this filter.");
     expect(body.text).not.toContain("Lead Search Agent");
+    expect(body.reply_markup).toBeUndefined();
   });
 
   it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {
