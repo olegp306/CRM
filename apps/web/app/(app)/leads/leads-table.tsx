@@ -776,12 +776,15 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
     setTranslatingTo(targetLanguage);
     setTranslationError(null);
     try {
-      setTranslatedSummary(
-        await translateLeadSummaryAction({
-          text: summaryItem.fullText ?? summaryItem.description,
-          targetLanguage
-        })
-      );
+      const result = await translateLeadSummaryAction({
+        text: summaryItem.fullText ?? summaryItem.description,
+        targetLanguage
+      });
+      if (result.ok) {
+        setTranslatedSummary(result.text);
+      } else {
+        setTranslationError(result.error);
+      }
     } catch (error) {
       setTranslationError(error instanceof Error ? error.message : "Could not translate the lead summary.");
     } finally {
