@@ -1,11 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import {
-  clearLeadTableAction,
-  initialClearLeadTableActionState,
-  type ClearLeadTableActionState
-} from "./actions";
+import { clearLeadTableAction } from "./actions";
+import { initialClearLeadTableActionState, type ClearLeadTableActionState } from "./danger-zone-action-state";
 
 export function SettingsDangerZone() {
   const dialogRef = useRef<HTMLDialogElement>(null);

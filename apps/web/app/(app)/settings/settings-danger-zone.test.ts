@@ -21,4 +21,11 @@ describe("settings danger zone", () => {
     expect(actionsSource).toContain("revalidatePath(\"/leads\")");
     expect(actionsSource).toContain("revalidatePath(\"/settings\")");
   });
+
+  it("keeps the server action module free of non-async exports", () => {
+    expect(actionsSource).toContain("\"use server\"");
+    expect(actionsSource).not.toMatch(/export\s+const\s+\w+/);
+    expect(actionsSource).not.toMatch(/export\s+type\s+\w+/);
+    expect(actionsSource).toMatch(/export\s+async\s+function\s+clearLeadTableAction/);
+  });
 });
