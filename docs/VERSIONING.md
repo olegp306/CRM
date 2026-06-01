@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.5`
+Current stable version: `0.3.6`
 
 Stable tag format:
 
@@ -20,6 +20,7 @@ v0.3.1
 v0.3.2
 v0.3.4
 v0.3.5
+v0.3.6
 ```
 
 ## Branch Workflow
@@ -146,6 +147,15 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.3.6
+
+Protected lead reset release:
+
+- Settings now include a protected danger-zone action to clear lead rows for the current workspace.
+- The action requires the confirmation password before deleting lead data.
+- Lead reset deletes only lead records, leaving clients, projects, templates, files, and workspace settings intact.
+- Lead reset writes an audit log event with the number of deleted rows.
 
 ## 0.3.5
 
