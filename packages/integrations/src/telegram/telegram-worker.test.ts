@@ -453,6 +453,62 @@ describe("telegram worker", () => {
     );
   });
 
+  it("falls back safely when the CRM orchestrator returns no usable decision", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => undefined as never)
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 18,
+            message: {
+              message_id: 12,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Can you handle this CRM thing?"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          crmOrchestrator,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 18 });
+
+    expect(crmOrchestrator.route).toHaveBeenCalled();
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Telegram actions are limited right now.");
+    expect(body.text).toContain("For now I can only create a lead or update an existing lead.");
+  });
+
   it("keeps obvious Telegram lead creation on the parser path without CRM orchestrator fallback", async () => {
     const client = {
       lead: {

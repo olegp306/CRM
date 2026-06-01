@@ -1562,6 +1562,10 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     return null;
   }
 
+  if (!decision) {
+    return createTelegramLimitedActionsResponse();
+  }
+
   if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
     return null;
   }
