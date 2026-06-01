@@ -823,9 +823,11 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
         {summaryItem ? (
           <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Summary</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-foreground">
-              {translatedSummary ?? summaryItem.description}
-            </p>
+            <ExpandableLeadText
+              text={translatedSummary ?? (summaryItem.fullText ?? summaryItem.description)}
+              preview={translatedSummary ? undefined : summaryItem.description}
+              className="mt-1 text-sm font-medium text-foreground"
+            />
             {translationError ? <p className="mt-2 break-words text-xs text-rose-700">{translationError}</p> : null}
           </article>
         ) : null}
@@ -840,9 +842,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
 }
 
 function LeadSummaryInfoItemCard({ item }: { item: LeadSummaryInfoItem }) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const fullText = item.fullText ?? item.description;
-  const canExpand = fullText.trim() !== item.description.trim();
 
   return (
     <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
@@ -852,16 +852,7 @@ function LeadSummaryInfoItemCard({ item }: { item: LeadSummaryInfoItem }) {
           <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.kind}</p>
         </div>
         <div className="grid min-w-0 gap-1">
-          <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{isExpanded ? fullText : item.description}</p>
-          {canExpand ? (
-            <button
-              type="button"
-              onClick={() => setIsExpanded((current) => !current)}
-              className="w-fit text-xs font-semibold text-primary underline-offset-2 hover:underline"
-            >
-              {isExpanded ? "Hide full" : "Show full"}
-            </button>
-          ) : null}
+          <ExpandableLeadText text={fullText} preview={item.description} className="text-sm text-muted-foreground" />
         </div>
         {item.url ? (
           <a
@@ -877,6 +868,35 @@ function LeadSummaryInfoItemCard({ item }: { item: LeadSummaryInfoItem }) {
         )}
       </div>
     </article>
+  );
+}
+
+function ExpandableLeadText({
+  text,
+  preview,
+  className
+}: {
+  text: string;
+  preview?: string;
+  className: string;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const collapsedText = preview ?? text;
+  const canExpand = text.trim() !== collapsedText.trim();
+
+  return (
+    <div className="grid min-w-0 gap-1">
+      <p className={`min-w-0 whitespace-pre-wrap break-words ${className}`}>{isExpanded ? text : collapsedText}</p>
+      {canExpand ? (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((current) => !current)}
+          className="w-fit text-xs font-semibold text-primary underline-offset-2 hover:underline"
+        >
+          {isExpanded ? "Hide full" : "Show full"}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

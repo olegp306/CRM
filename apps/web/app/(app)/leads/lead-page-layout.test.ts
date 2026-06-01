@@ -46,6 +46,8 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Translate summary to German");
     expect(tableSource).toContain("Show full");
     expect(tableSource).toContain("View file");
+    expect(tableSource).toContain("function ExpandableLeadText");
+    expect(tableSource).toContain("summaryItem.fullText ?? summaryItem.description");
     expect(tableSource).not.toContain(">Download<");
     expect(tableSource).toContain("break-all");
     expect(tableSource).toContain("min-w-0 overflow-hidden");
