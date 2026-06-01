@@ -1,4 +1,5 @@
 import { getDictionary } from "@app/ui";
+import { SettingsDangerZone } from "./danger-zone";
 
 const dictionary = getDictionary("en");
 
@@ -35,6 +36,7 @@ export default function SettingsPage() {
           <p className="mt-2 text-sm text-muted-foreground">Routing prompt and model for Telegram and assistant requests.</p>
         </a>
       </div>
+      <SettingsDangerZone />
     </section>
   );
 }
