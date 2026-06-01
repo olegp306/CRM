@@ -158,15 +158,16 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  return createAssistantSubmissionResultFromChannelResponse({
+  return {
     thread,
     message,
-    channelResponse: deterministicChannelResponse,
-    context: input.context,
-    threadId: input.threadId,
-    messageId: input.messageId,
-    attachments: input.attachments ?? []
-  });
+    response: plan.response,
+    feedback: null,
+    actionPreview: null,
+    responseButtons: [],
+    confirmationStatus: null,
+    permissionBlocked: null
+  };
 }
 
 async function createWebCrmOrchestratorFallbackResponse(
@@ -181,6 +182,10 @@ async function createWebCrmOrchestratorFallbackResponse(
   try {
     decision = await crmOrchestrator.route(message);
   } catch {
+    return null;
+  }
+
+  if (!decision) {
     return null;
   }
 
@@ -227,6 +232,7 @@ function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof
     channelResponse.intent === "help" ||
     channelResponse.intent === "capability_request" ||
     channelResponse.intent === "lead_intake" ||
+    channelResponse.intent === "business_process_note" ||
     (channelResponse.intent === "crm_action" && Boolean(channelResponse.normalizedActions?.length)) ||
     channelResponse.intent === "support_request" ||
     channelResponse.shouldPersistFeedback
