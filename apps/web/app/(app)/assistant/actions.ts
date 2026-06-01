@@ -59,6 +59,7 @@ import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
 import { getClientMaterialAnalysisSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
+import { getAssistantLeadTargetId } from "./assistant-lead-target";
 
 export type SubmitAssistantMessageInput = {
   context: AssistantContext;
@@ -73,11 +74,11 @@ export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
 const assistantThemePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
 
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
-  const selectedLeadId = input.context.selectedRecordIds?.[0];
-  const [leads, generatedDocuments] = selectedLeadId
+  const targetLeadId = getAssistantLeadTargetId(input.content, input.context.selectedRecordIds);
+  const [leads, generatedDocuments] = targetLeadId
     ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
     : [[], []];
-  const selectedLead = selectedLeadId ? createSelectedLeadChatSnapshot(selectedLeadId, leads, generatedDocuments) : null;
+  const selectedLead = targetLeadId ? createSelectedLeadChatSnapshot(targetLeadId, leads, generatedDocuments) : null;
   const [clientMaterialAnalysisSetting, crmOrchestratorSetting] = await Promise.all([
     getClientMaterialAnalysisSetting(input.context.workspaceId),
     getCrmOrchestratorSetting(input.context.workspaceId)
@@ -125,7 +126,7 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
           channel: "web",
           threadId: input.threadId,
           messageId: input.messageId,
-          leadId: input.context.selectedRecordIds?.[0],
+          leadId: targetLeadId ?? undefined,
           content: input.content
         })
       ]
@@ -134,12 +135,12 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   const repository = getAssistantRepository();
 
   await repository.save(persistenceDraft);
-  if (selectedLeadId && isReminderRequest(input.content)) {
+  if (targetLeadId && isReminderRequest(input.content)) {
     const reminderDraft = createLeadReminderDraft(input.content);
     if (reminderDraft.dueAt) {
       await scheduleAssistantLeadReminder({
         workspaceId: input.context.workspaceId,
-        leadId: selectedLeadId,
+        leadId: targetLeadId,
         followup1Date: reminderDraft.dueAt,
         followupStatus: "planned"
       });

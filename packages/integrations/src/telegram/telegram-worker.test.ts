@@ -3047,6 +3047,182 @@ describe("telegram worker", () => {
     });
   });
 
+  it("records an explicit lead-id reminder without requiring a Telegram reply", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { leadId?: string } }).where;
+          if (where?.leadId === "L-2026-002") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Existing lead",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 45,
+            message: {
+              message_id: 905,
+              date: 1779297400,
+              chat: { id: 12345 },
+              text: "Напомни завтра позвонить лиду L-2026-002"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 45 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-2" },
+      data: {
+        followup1Date: new Date("2026-05-21T09:00:00.000Z"),
+        followupStatus: "planned"
+      }
+    });
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "905",
+          summary: expect.stringContaining("Reminder scheduled")
+        })
+      })
+    );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "CRM",
+      url: "https://crm.example.com/leads?leadId=L-2026-002"
+    });
+  });
+
+  it("records an explicit lead-id note without requiring a Telegram reply", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { leadId?: string } }).where;
+          if (where?.leadId === "L-2026-002") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Existing lead",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 47,
+            message: {
+              message_id: 907,
+              date: 1779297400,
+              chat: { id: 12345 },
+              text: "Запомни про лида L-2026-002: вчера встретились за кофе, клиент любит джаз."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 47 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "907",
+          summary: expect.stringContaining("вчера встретились за кофе")
+        })
+      })
+    );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "CRM",
+      url: "https://crm.example.com/leads?leadId=L-2026-002"
+    });
+  });
+
   it("does not advertise standalone reminder actions in Telegram without a lead reply", async () => {
     const client = {
       lead: {

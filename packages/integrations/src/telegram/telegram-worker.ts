@@ -311,14 +311,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         summary: message.text
       })
     );
-    const repliedLead = message.replyToMessageId
-      ? await findLeadByTelegramReplyContext(client, config.workspaceId, message)
-      : null;
+    const repliedLead =
+      (message.replyToMessageId ? await findLeadByTelegramReplyContext(client, config.workspaceId, message) : null) ??
+      (await findLeadByTelegramTextContext(client, config.workspaceId, message.text));
     const replyLeadFlowDecision = repliedLead
       ? decideLeadFlow(
           createTelegramAssistantChannelMessage(config.workspaceId, message, {
             leadId: repliedLead.leadId,
-            sourceMessageId: String(message.replyToMessageId)
+            sourceMessageId: String(message.replyToMessageId ?? message.messageId)
           })
         )
       : null;
@@ -393,7 +393,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     const generalAssistantResponse = createTelegramGeneralAssistantResponse(
       config.workspaceId,
       message,
-      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId) } : undefined
+      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
     );
     if (generalAssistantResponse) {
       const responseText =
@@ -414,7 +414,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     const crmOrchestratorFallbackResponse = await createTelegramCrmOrchestratorFallbackResponse(
       config,
       message,
-      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId) } : undefined
+      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
     );
     if (crmOrchestratorFallbackResponse) {
       await sendTelegramMessage({
@@ -456,7 +456,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       const response = createAssistantChannelResponse(
         createTelegramAssistantChannelMessage(config.workspaceId, message, {
           leadId: repliedLead.leadId,
-          sourceMessageId: String(message.replyToMessageId)
+          sourceMessageId: String(message.replyToMessageId ?? message.messageId)
         })
       );
       await sendTelegramMessage({
@@ -1964,6 +1964,27 @@ async function findLeadByTelegramReplyContext(
     return null;
   }
 
+  return findLeadByLeadId(client, workspaceId, leadId);
+}
+
+async function findLeadByTelegramTextContext(
+  client: TelegramWorkerPrismaLike,
+  workspaceId: string,
+  text: string
+): Promise<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null> {
+  const leadId = extractLeadIdFromTelegramText(text);
+  if (!leadId) {
+    return null;
+  }
+
+  return findLeadByLeadId(client, workspaceId, leadId);
+}
+
+async function findLeadByLeadId(
+  client: TelegramWorkerPrismaLike,
+  workspaceId: string,
+  leadId: string
+): Promise<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null> {
   const leads = await client.lead.findMany({
     where: {
       workspaceId,
