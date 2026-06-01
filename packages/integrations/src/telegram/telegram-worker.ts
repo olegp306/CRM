@@ -658,7 +658,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           messageId: message.replyToMessageId
         })
       : null;
-    const activeSession = replySession ?? (await telegramDraftStore.getActive({ workspaceId: config.workspaceId, chatId: message.chatId }));
+    let activeSession = replySession ?? (await telegramDraftStore.getActive({ workspaceId: config.workspaceId, chatId: message.chatId }));
 
     if (!activeSession) {
       const persistedLeadMatch = decideIncomingLeadMatch({
@@ -760,7 +760,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    const session = activeSession
+    let session = activeSession
       ? mergeTelegramLeadDraftSession(activeSession, draft, {
           receivedAt: hydratedMessage.receivedAt,
           sourceMessageIds: message.sourceMessageIds
@@ -776,42 +776,58 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     if (activeSession?.leadId) {
       const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
-      const updated = client.lead.update
-        ? await client.lead.update({
-            where: {
-              workspaceId_leadId: {
-                workspaceId: config.workspaceId,
-                leadId: activeSession.leadId
+      try {
+        const updated = client.lead.update
+          ? await client.lead.update({
+              where: {
+                workspaceId_leadId: {
+                  workspaceId: config.workspaceId,
+                  leadId: activeSession.leadId
+                }
+              },
+              data: {
+                ...createTelegramLeadUpdateData(
+                  { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
+                  { ...session.draft, missingData: templateAwareMissingData },
+                  message
+                ),
+                rawInput: session.draft.rawInput
               }
-            },
-            data: {
-              ...createTelegramLeadUpdateData(
-                { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
-                { ...session.draft, missingData: templateAwareMissingData },
-                message
-              ),
-              rawInput: session.draft.rawInput
-            }
-          })
-        : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
-      const sent = await sendWorkerTelegramMessage({
-        botToken: config.botToken,
-        chatId: message.chatId,
-        text: createTelegramLeadUpdatedMessage(updated.leadId, { ...session.draft, missingData: templateAwareMissingData }),
-        parseMode: "HTML",
-        replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, updated.leadId, {
-          email: session.draft.email,
-          missingFields: templateAwareMissingData
-        }),
-        fetchImpl
-      });
-      if (templateAwareMissingData.length > 0) {
-        await telegramDraftStore.save({ ...session, leadId: activeSession.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
-      } else {
+            })
+          : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
+        const sent = await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: createTelegramLeadUpdatedMessage(updated.leadId, { ...session.draft, missingData: templateAwareMissingData }),
+          parseMode: "HTML",
+          replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, updated.leadId, {
+            email: session.draft.email,
+            missingFields: templateAwareMissingData
+          }),
+          fetchImpl
+        });
+        if (templateAwareMissingData.length > 0) {
+          await telegramDraftStore.save({ ...session, leadId: activeSession.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
+        } else {
+          await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
+        }
+        processed += 1;
+        continue;
+      } catch (error) {
+        if (!isPrismaRecordNotFoundError(error)) {
+          throw error;
+        }
+        console.warn(`Clearing stale Telegram draft session for missing lead ${activeSession.leadId}.`);
         await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
+        activeSession = null;
+        session = createTelegramLeadDraftSession({
+          chatId: message.chatId,
+          workspaceId: config.workspaceId,
+          receivedAt: hydratedMessage.receivedAt,
+          sourceMessageIds: message.sourceMessageIds,
+          draft
+        });
       }
-      processed += 1;
-      continue;
     }
 
     if (!kpStatus.ready) {
@@ -1029,6 +1045,19 @@ function createTelegramCrmOnlyReplyMarkup(crmBaseUrl: string | undefined, leadId
       ]
     ]
   };
+}
+
+function isPrismaRecordNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown };
+  if (candidate.code === "P2025") {
+    return true;
+  }
+
+  return typeof candidate.message === "string" && /No record was found for an update/i.test(candidate.message);
 }
 
 async function sendTelegramServerErrorFallbackMessage(input: {

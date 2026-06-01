@@ -1770,6 +1770,112 @@ describe("telegram worker", () => {
     });
   });
 
+  it("clears a stale Telegram draft session and creates a new lead when the saved lead was deleted", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-new", leadId: "L-2026-001", status: "needs_data" };
+        }),
+        update: vi.fn(async () => {
+          const error = new Error("An operation failed because it depends on one or more records that were required but not found. No record was found for an update.");
+          Object.assign(error, { code: "P2025" });
+          throw error;
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Fresh Client",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: undefined,
+        projectAddress: undefined,
+        email: null,
+        phone: null,
+        missingData: ["projectAddress", "bgfM2"],
+        summary: "Fresh lead after table reset.",
+        suggestedReply: "Need address and BGF."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    await telegramDraftStore.save({
+      chatId: "12345",
+      workspaceId: "workspace-demo",
+      startedAt: "2026-06-01T18:00:00.000Z",
+      updatedAt: "2026-06-01T18:00:00.000Z",
+      sourceMessageIds: [700],
+      telegramDraftMessageId: 701,
+      leadId: "L-2026-099",
+      draft: {
+        source: "telegram",
+        clientName: "Deleted Client",
+        email: null,
+        phone: null,
+        requestType: "new_build",
+        projectAddress: null,
+        bgfM2: null,
+        rawInput: "Deleted lead draft",
+        missingData: ["projectAddress"],
+        isStandard: true,
+        telegramSourceExternalId: "telegram:12345:700",
+        temperature: "warm"
+      }
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 79,
+            message: {
+              message_id: 709,
+              date: 1780254660,
+              chat: { id: 12345 },
+              text: "Fresh Client needs a new EFH offer."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 79 });
+
+    expect(client.lead.update).toHaveBeenCalledOnce();
+    expect(created).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          leadId: "L-2026-001",
+          status: "needs_data",
+          rawInput: expect.stringContaining("Fresh lead after table reset.")
+        })
+      })
+    ]);
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toMatchObject({
+      leadId: "L-2026-001"
+    });
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("<b>L-2026-001</b> created in CRM.");
+  });
+
   it("creates a lead when current template required fields are ready even if static KP fields are missing", async () => {
     const created: unknown[] = [];
     const generated: unknown[] = [];
