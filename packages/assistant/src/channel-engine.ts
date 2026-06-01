@@ -306,66 +306,6 @@ function createLeadReminderResponse(message: AssistantChannelMessage): Assistant
   };
 }
 
-function createTableExportResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
-  const exportKind = detectTableExportKind(message.content, message.context.module);
-  if (!exportKind) {
-    return null;
-  }
-
-  return {
-    intent: "support_request",
-    shouldPersistFeedback: false,
-    feedbackType: undefined,
-    buttons: [{ label: "Download CSV", action: "download_csv", url: `/exports/${exportKind}` }],
-    normalizedActions: [],
-    text: `Готово, подготовил CSV export для таблицы ${getExportKindLabel(exportKind)}. Его можно открыть в Excel.`
-  };
-}
-
-function detectTableExportKind(content: string, moduleContext?: string): "leads" | "clients" | "projects" | "cold-targets" | null {
-  const text = content.toLowerCase();
-  const asksForExport = /\b(csv|excel|xlsx|spreadsheet|export|download)\b/i.test(text) || /(csv|excel|СЌРєСЃРµР»|СЌРєСЃРїРѕСЂС‚|СЃРєРёРЅСЊ|СЃРєР°С‡Р°Р№|С‚Р°Р±Р»РёС†)/i.test(text);
-  if (!asksForExport) {
-    return null;
-  }
-
-  if (/\bclients?\b|РєР»РёРµРЅС‚/i.test(text)) {
-    return "clients";
-  }
-
-  if (/\bprojects?\b|РїСЂРѕРµРєС‚/i.test(text)) {
-    return "projects";
-  }
-
-  if (/\bcold[-\s]?targets?\b|\boutreach\b|С…РѕР»РѕРґРЅ|cold target/i.test(text)) {
-    return "cold-targets";
-  }
-
-  if (/\bleads?\b|Р»РёРґ|Р·Р°СЏРІРє/i.test(text)) {
-    return "leads";
-  }
-
-  if (moduleContext === "clients" || moduleContext === "projects" || moduleContext === "leads") {
-    return moduleContext;
-  }
-
-  if (moduleContext === "outreach") {
-    return "cold-targets";
-  }
-
-  return null;
-}
-
-function getExportKindLabel(kind: "leads" | "clients" | "projects" | "cold-targets"): string {
-  const labels = {
-    leads: "leads",
-    clients: "clients",
-    projects: "projects",
-    "cold-targets": "cold targets"
-  };
-  return labels[kind];
-}
-
 function isHelpMessage(content: string, intent: string): boolean {
   if (/^\/(?:start|help)\b/i.test(content.trim())) {
     return true;
