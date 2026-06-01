@@ -1527,14 +1527,20 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
 
 function createTelegramGeneralAssistantResponse(
   workspaceId: string,
-  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments">,
   replyTo?: { leadId: string; sourceMessageId: string }
 ) {
+  if (!replyTo && shouldPreferTelegramLeadIntake(message)) {
+    return null;
+  }
+
   const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message, replyTo));
 
+  if (response.intent === "capability_request" || response.shouldPersistFeedback || hasDownloadCsvAction(response)) {
+    return createTelegramLimitedActionsResponse();
+  }
+
   if (
-    response.intent === "capability_request" ||
-    response.shouldPersistFeedback ||
     response.intent === "support_request" ||
     (response.intent === "crm_action" &&
       (isReminderRequest(message.text) || isLeadInteractionNoteCommand(message.text) || isLeadNaturalContextNote(message.text)))
@@ -1543,6 +1549,19 @@ function createTelegramGeneralAssistantResponse(
   }
 
   return null;
+}
+
+function hasDownloadCsvAction(response: { buttons?: Array<{ action?: string }> }): boolean {
+  return response.buttons?.some((button) => button.action === "download_csv") ?? false;
+}
+
+function shouldPreferTelegramLeadIntake(
+  message: Pick<AllowedTelegramMessageBatch, "text" | "sourceMessageIds" | "attachments">
+): boolean {
+  return (
+    (message.attachments?.length ?? 0) > 0 ||
+    message.sourceMessageIds.length > 1
+  );
 }
 
 async function createTelegramCrmOrchestratorFallbackResponse(
