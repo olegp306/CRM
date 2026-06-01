@@ -34,6 +34,16 @@ describe("lead interaction note commands", () => {
     );
   });
 
+  it("detects real Russian unicode make-a-note commands and keeps the useful note text", () => {
+    const message =
+      "\u0421\u0434\u0435\u043b\u0430\u0439 \u043f\u043e\u043c\u0435\u0442\u043a\u0443, \u0447\u0442\u043e \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u043b\u0441\u044f \u0441 \u044d\u0442\u0438\u043c \u0447\u0435\u043b\u043e\u0432\u0435\u043a\u043e\u043c \u0437\u0430 \u043a\u043e\u0444\u0435. \u041e\u043d \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437.";
+
+    expect(isLeadInteractionNoteCommand(message)).toBe(true);
+    expect(createLeadInteractionNoteSummary(message)).toBe(
+      "\u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u043b\u0441\u044f \u0441 \u044d\u0442\u0438\u043c \u0447\u0435\u043b\u043e\u0432\u0435\u043a\u043e\u043c \u0437\u0430 \u043a\u043e\u0444\u0435. \u041e\u043d \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437."
+    );
+  });
+
   it("detects Russian remember-about-lead commands and removes the lead id from the note summary", () => {
     const message = "Запомни про лида L-2026-002: вчера встретились за кофе, клиент любит джаз.";
 

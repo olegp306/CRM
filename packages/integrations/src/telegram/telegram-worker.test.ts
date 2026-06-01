@@ -3103,6 +3103,100 @@ describe("telegram worker", () => {
     });
   });
 
+  it("records a real Russian replied reminder as a CRM follow-up and history", async () => {
+    const auditEvents: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 441,
+            message: {
+              message_id: 914,
+              date: 1779297400,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "\u041d\u0430\u043f\u043e\u043c\u043d\u0438 \u0437\u0430\u0432\u0442\u0440\u0430 \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c LinkedIn \u0443 \u043d\u0435\u0433\u043e"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          saveAuditEvent: async (event) => {
+            auditEvents.push(event);
+          },
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 441 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-2" },
+      data: {
+        followup1Date: new Date("2026-05-21T09:00:00.000Z"),
+        followupStatus: "planned"
+      }
+    });
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        action: "assistant.channel.event",
+        metadata: expect.objectContaining({
+          type: "lead_interaction_note",
+          channel: "telegram",
+          leadId: "L-2026-002",
+          messageId: "914",
+          summary:
+            "Reminder scheduled: \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c LinkedIn \u0443 \u043d\u0435\u0433\u043e. Due: 2026-05-21 09:00."
+        })
+      })
+    );
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBody.text).toContain("Reminder scheduled");
+    expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "CRM",
+      url: "https://crm.example.com/leads?leadId=L-2026-002"
+    });
+  });
+
   it("records an explicit lead-id reminder without requiring a Telegram reply", async () => {
     const auditEvents: unknown[] = [];
     const client = {
