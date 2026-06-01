@@ -1,4 +1,5 @@
 import type { AssistantChannelMessage } from "./channel-message";
+import { isReminderRequest } from "./lead-reminder";
 
 export type CrmOrchestratorIntent =
   | "CREATE_LEAD"
@@ -161,7 +162,7 @@ function hasSpecificTargetEntitySignal(text: string): boolean {
 }
 
 function isReminderRequestText(text: string): boolean {
-  return /\b(remind|reminder|follow[-\s]?up|call back|schedule|meeting|task)\b/i.test(text);
+  return isReminderRequest(text) || /\b(remind|reminder|follow[-\s]?up|call back|schedule|meeting|task)\b/i.test(text);
 }
 
 function isUpdateLeadRequest(text: string): boolean {

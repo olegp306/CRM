@@ -293,6 +293,20 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("Client context:");
   });
 
+  it("asks for a lead before saving natural client context without creating a draft lead", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content:
+        "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f: \u0432\u0447\u0435\u0440\u0430 \u0432\u0438\u0434\u0435\u043b\u0438 \u0435\u0433\u043e \u043d\u0430 \u0432\u044b\u0441\u0442\u0430\u0432\u043a\u0435, \u043e\u043d \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437."
+    });
+
+    expect(result.intent).toBe("crm_action");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([]);
+    expect(result.text).toContain("Which lead should I save this note to?");
+  });
+
   it("answers Russian selected-lead status questions with a CRM deep link", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,

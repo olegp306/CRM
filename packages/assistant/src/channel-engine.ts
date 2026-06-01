@@ -36,6 +36,11 @@ export function createAssistantChannelResponse(
     return reminderResponse;
   }
 
+  const noteNeedsLeadResponse = createLeadNoteNeedsLeadResponse(message);
+  if (noteNeedsLeadResponse) {
+    return noteNeedsLeadResponse;
+  }
+
   const contextNoteResponse = createLeadNaturalContextNoteResponse(message);
   if (contextNoteResponse) {
     return contextNoteResponse;
@@ -139,6 +144,25 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
+  };
+}
+
+function createLeadNoteNeedsLeadResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  if (getReferencedLeadId(message)) {
+    return null;
+  }
+
+  if (!isLeadInteractionNoteCommand(message.content) && !isLeadNaturalContextNote(message.content)) {
+    return null;
+  }
+
+  return {
+    intent: "crm_action",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: "Which lead should I save this note to? Reply to a lead card or include the lead number."
   };
 }
 

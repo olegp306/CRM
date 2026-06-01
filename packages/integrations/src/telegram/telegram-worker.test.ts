@@ -206,6 +206,57 @@ describe("telegram worker", () => {
     ]);
   });
 
+  it("asks which lead to update for standalone client context instead of creating a draft lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 13,
+            message: {
+              message_id: 8,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text:
+                "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f: \u0432\u0447\u0435\u0440\u0430 \u0432\u0438\u0434\u0435\u043b\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043d\u0430 \u0432\u044b\u0441\u0442\u0430\u0432\u043a\u0435, \u043e\u043d \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 13 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Which lead should I save this note to?");
+  });
+
   it("routes Telegram search requests without parsing them as new leads", async () => {
     const client = {
       lead: {

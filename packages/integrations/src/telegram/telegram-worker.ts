@@ -1536,7 +1536,8 @@ function createTelegramGeneralAssistantResponse(
     response.intent === "capability_request" ||
     response.shouldPersistFeedback ||
     response.intent === "support_request" ||
-    (response.intent === "crm_action" && isReminderRequest(message.text))
+    (response.intent === "crm_action" &&
+      (isReminderRequest(message.text) || isLeadInteractionNoteCommand(message.text) || isLeadNaturalContextNote(message.text)))
   ) {
     return response;
   }
