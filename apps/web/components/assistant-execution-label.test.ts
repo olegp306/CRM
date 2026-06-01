@@ -40,4 +40,16 @@ describe("assistant execution label", () => {
     expect(getAssistantExecutionLabel(execution)).toBe("Duplicate lead L-2026-001");
     expect(getAssistantExecutionButtons(execution)).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
+
+  it("labels assistant lead updates and links back to CRM", () => {
+    const execution = {
+      status: "executed",
+      actionType: "update_lead",
+      leadId: "L-2026-004",
+      recordId: "lead-record-4"
+    } as const;
+
+    expect(getAssistantExecutionLabel(execution)).toBe("Updated lead L-2026-004");
+    expect(getAssistantExecutionButtons(execution)).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+  });
 });

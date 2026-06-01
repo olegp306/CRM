@@ -71,6 +71,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
+    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).not.toContain("mark KP as sent");
   });
 
   it("answers Telegram start command with shared help", () => {
@@ -83,6 +85,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("I can create and update leads");
+    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).not.toContain("mark KP as sent");
   });
 
   it("answers new lead commands with source-material intake guidance", () => {
@@ -289,6 +293,20 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("Client context:");
   });
 
+  it("asks for a lead before saving natural client context without creating a draft lead", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content:
+        "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f: \u0432\u0447\u0435\u0440\u0430 \u0432\u0438\u0434\u0435\u043b\u0438 \u0435\u0433\u043e \u043d\u0430 \u0432\u044b\u0441\u0442\u0430\u0432\u043a\u0435, \u043e\u043d \u043b\u044e\u0431\u0438\u0442 \u0434\u0436\u0430\u0437."
+    });
+
+    expect(result.intent).toBe("crm_action");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([]);
+    expect(result.text).toContain("Which lead should I save this note to?");
+  });
+
   it("answers Russian selected-lead status questions with a CRM deep link", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
@@ -303,6 +321,54 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("support_request");
     expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
     expect(result.text).toContain("L-2026-004");
+  });
+
+  it("keeps Telegram lead status answers inside the current create/update-only scope", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "What is the status of this lead?",
+      replyTo: {
+        sourceChannel: "telegram",
+        sourceMessageId: "900",
+        leadId: "L-2026-004"
+      }
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.text).toContain("L-2026-004");
+    expect(result.text).toContain("create or update leads");
+    expect(result.text).not.toContain("follow-ups");
+    expect(result.text).not.toContain("KP documents");
+  });
+
+  it("routes Telegram lead search requests through the CRM orchestrator instead of lead intake", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "Find the client by phone +49 160 4442211"
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toContain("Telegram actions are limited right now.");
+    expect(result.text).toContain("I can only create a lead or update an existing lead");
+    expect(result.text).not.toContain("Lead Search Agent");
+    expect(result.text).not.toContain("Search is recognized");
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("asks one Telegram clarification before attaching a file without lead context", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "Attach this PDF to the CRM record",
+      attachments: [{ id: "pdf-1", kind: "pdf", fileName: "brief.pdf", mimeType: "application/pdf" }]
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toBe("Which lead should I attach this file to?");
+    expect(result.buttons).toEqual([]);
   });
 
   it("keeps lead status questions with screenshots as support requests", () => {

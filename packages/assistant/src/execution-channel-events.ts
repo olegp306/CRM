@@ -1,6 +1,6 @@
 import type { ExecuteAssistantActionResult } from "./action-execution";
 import type { AssistantChannel } from "./channel-message";
-import { createLeadMatchDetectedEvent, type AssistantChannelEvent } from "./channel-event";
+import { createLeadDraftUpdatedEvent, createLeadMatchDetectedEvent, type AssistantChannelEvent } from "./channel-event";
 
 export type CreateExecutionChannelEventsInput = {
   channel: AssistantChannel;
@@ -26,6 +26,19 @@ export function createExecutionChannelEvents({
         leadId: execution.leadId,
         matchType: "duplicate",
         matchedFields: []
+      })
+    ];
+  }
+
+  if (execution.actionType === "update_lead") {
+    return [
+      createLeadDraftUpdatedEvent({
+        type: "lead_draft_updated",
+        channel,
+        threadId,
+        leadId: execution.leadId,
+        fieldsChanged: execution.fieldsChanged,
+        missingData: []
       })
     ];
   }

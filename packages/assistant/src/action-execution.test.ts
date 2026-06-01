@@ -455,6 +455,80 @@ describe("executeAssistantAction", () => {
     ]);
   });
 
+  it("updates an existing lead from assistant source material through the update port", async () => {
+    const updatedLeads: unknown[] = [];
+    const updateLeadAction: AssistantActionWriteDraft = {
+      ...action,
+      actionType: "update_lead",
+      messageId: "message-update-lead",
+      preview: {
+        ...action.preview,
+        actionType: "update_lead",
+        summary: "Update selected lead from assistant source material",
+        changes: [
+          { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+          { field: "lead.sourceText", from: null, to: "Client sent updated BGF 210 m2 and budget 42000 EUR." },
+          { field: "lead.clientName", from: null, to: "Irina Schneider" },
+          { field: "lead.requestType", from: null, to: "new_build" },
+          { field: "lead.projectAddress", from: null, to: "Bad Aibling" },
+          { field: "lead.bgfM2", from: null, to: 210 },
+          { field: "lead.email", from: null, to: "irina@example.com" },
+          { field: "lead.phone", from: null, to: null },
+          { field: "lead.missingData", from: null, to: ["projectAddress"] },
+          { field: "lead.isStandard", from: null, to: true },
+          { field: "lead.temperature", from: null, to: "warm" }
+        ]
+      }
+    };
+
+    const result = await executeAssistantAction({
+      action: updateLeadAction,
+      now: new Date("2026-05-21T00:00:00Z"),
+      existingLeadIds: ["L-2026-004"],
+      createLead: async (lead) => ({ id: "unused", ...lead }),
+      updateLead: async (lead) => {
+        updatedLeads.push(lead);
+        return { id: "lead-record-4", status: "needs_data", ...lead };
+      }
+    });
+
+    expect(result).toEqual({
+      status: "executed",
+      actionType: "update_lead",
+      leadId: "L-2026-004",
+      recordId: "lead-record-4",
+      fieldsChanged: [
+        "rawInput",
+        "clientName",
+        "requestType",
+        "projectAddress",
+        "bgfM2",
+        "email",
+        "phone",
+        "missingData",
+        "isStandard",
+        "temperature"
+      ]
+    });
+    expect(updatedLeads).toEqual([
+      {
+        workspaceId: "workspace-1",
+        leadId: "L-2026-004",
+        rawInput: "Client sent updated BGF 210 m2 and budget 42000 EUR.",
+        requestedByUserId: "user-1",
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        projectAddress: "Bad Aibling",
+        bgfM2: 210,
+        email: "irina@example.com",
+        phone: null,
+        missingData: ["projectAddress"],
+        isStandard: true,
+        temperature: "warm"
+      }
+    ]);
+  });
+
   it("still returns the created lead when KP document generation fails", async () => {
     const result = await executeAssistantAction({
       action,

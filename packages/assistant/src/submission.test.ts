@@ -46,7 +46,7 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.3.0"
+      appVersion: "0.3.2"
     });
     expect(result.response).toBe("I saved this as product feedback for review.");
   });
@@ -221,7 +221,51 @@ describe("assistant submission orchestration", () => {
     );
   });
 
-  it("previews schedule follow-up actions when the request asks for a reminder", () => {
+  it("enriches web lead-update previews with parsed fields before confirmation", async () => {
+    const input = {
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+      content: "Add this to the selected lead: updated BGF 210 m2 and email irina@example.com.",
+      threadId: "thread-update-enrich",
+      messageId: "message-update-enrich"
+    } satisfies Parameters<typeof createAssistantSubmissionResult>[0];
+    const result = createAssistantSubmissionResult(input);
+
+    const enriched = await enrichLeadIntakeSubmissionResult(result, input, {
+      parseLead: async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "medium",
+        temperature: "warm",
+        bgfM2: 210,
+        projectAddress: "Bad Aibling",
+        email: "irina@example.com",
+        phone: null,
+        missingData: ["projectAddress"],
+        summary: "Updated lead fields",
+        suggestedReply: "Updated."
+      })
+    });
+
+    expect(enriched.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead from assistant source material",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        { field: "lead.sourceText", from: null, to: expect.stringContaining("Summary: Updated lead fields") },
+        { field: "lead.clientName", from: null, to: "Irina Schneider" },
+        { field: "lead.requestType", from: null, to: "new_build" },
+        { field: "lead.projectAddress", from: null, to: "Bad Aibling" },
+        { field: "lead.bgfM2", from: null, to: 210 },
+        { field: "lead.email", from: null, to: "irina@example.com" },
+        { field: "lead.phone", from: null, to: null },
+        { field: "lead.missingData", from: null, to: ["projectAddress"] },
+        { field: "lead.isStandard", from: null, to: true },
+        { field: "lead.temperature", from: null, to: "warm" }
+      ]
+    });
+  });
+
+  it("keeps standalone reminder requests out of generic assistant write actions", () => {
     const result = createAssistantSubmissionResult({
       context: baseContext,
       content: "Schedule follow-up for lead L-2026-001 tomorrow",
@@ -229,56 +273,46 @@ describe("assistant submission orchestration", () => {
       messageId: "message-5"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "schedule_followup",
-      summary: "Schedule follow-up from assistant request",
-      changes: [{ field: "followup.sourceText", from: null, to: "Schedule follow-up for lead L-2026-001 tomorrow" }],
-      requiresConfirmation: true
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
-    expect(result.responseButtons).toEqual([
-      { label: "Confirm", action: "confirm" },
-      { label: "Cancel", action: "cancel" }
-    ]);
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
+    expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
-  it("previews Russian follow-up schedule commands for selected leads", () => {
+  it("stores selected-lead follow-up requests as lead history without standalone actions", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
-      content: "Напомни по этому лиду завтра",
-      threadId: "thread-ru-followup",
-      messageId: "message-ru-followup"
+      content: "Remind me tomorrow to check this lead LinkedIn",
+      threadId: "thread-selected-followup",
+      messageId: "message-selected-followup"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "schedule_followup",
-      summary: "Schedule follow-up from assistant request",
-      changes: [{ field: "followup.sourceText", from: null, to: "Напомни по этому лиду завтра" }],
-      requiresConfirmation: true
-    });
-    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
+    expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
-  it("previews natural Russian reminders without creating lead drafts", () => {
+  it("keeps selected-lead reminders from creating lead drafts", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
-      content: "Напомни завтра посмотреть LinkedIn у него",
-      threadId: "thread-ru-natural-followup",
-      messageId: "message-ru-natural-followup"
+      content: "Remind me tomorrow to send a short note to this client",
+      threadId: "thread-natural-followup",
+      messageId: "message-natural-followup"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "schedule_followup",
-      summary: "Schedule follow-up from assistant request",
-      changes: [{ field: "followup.sourceText", from: null, to: "Напомни завтра посмотреть LinkedIn у него" }],
-      requiresConfirmation: true
-    });
+    expect(result.actionPreview).toBeNull();
     expect(result.actionPreview?.actionType).not.toBe("create_lead");
-    expect(result.response).toBe("I prepared a schedule follow-up preview. Confirm before I execute it.");
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
   });
 
-  it("previews project task update actions when the request targets project tasks", () => {
+  it("keeps project task updates out of generic assistant write actions", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/projects", module: "projects", selectedRecordIds: ["P-2026-001"] },
       content: "Update project task permit package to done",
@@ -286,24 +320,13 @@ describe("assistant submission orchestration", () => {
       messageId: "message-6"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "update_project_task",
-      summary: "Update project task from assistant request",
-      changes: [
-        { field: "project.selectedRecordIds", from: null, to: ["P-2026-001"] },
-        { field: "task.sourceText", from: null, to: "Update project task permit package to done" }
-      ],
-      requiresConfirmation: true
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a project task update preview. Confirm before I execute it.");
-    expect(result.responseButtons).toEqual([
-      { label: "Confirm", action: "confirm" },
-      { label: "Cancel", action: "cancel" }
-    ]);
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Right now I can create or update leads");
+    expect(result.responseButtons).toEqual([]);
   });
 
-  it("previews KP generation actions when the request asks for an offer document", () => {
+  it("keeps KP generation requests out of generic assistant write actions", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/documents", module: "documents", selectedRecordIds: ["L-2026-001"] },
       content: "Generate KP for lead L-2026-001",
@@ -311,46 +334,13 @@ describe("assistant submission orchestration", () => {
       messageId: "message-7"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "generate_kp",
-      summary: "Generate KP document from assistant request",
-      changes: [
-        { field: "document.type", from: null, to: "kp" },
-        { field: "document.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "document.sourceText", from: null, to: "Generate KP for lead L-2026-001" }
-      ],
-      requiresConfirmation: true
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
-    expect(result.responseButtons).toEqual([
-      { label: "Confirm", action: "confirm" },
-      { label: "Cancel", action: "cancel" }
-    ]);
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Right now I can create or update leads");
+    expect(result.responseButtons).toEqual([]);
   });
 
-  it("previews Russian KP generation commands for selected leads", () => {
-    const result = createAssistantSubmissionResult({
-      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-001"] },
-      content: "Сгенерируй КП для этого лида",
-      threadId: "thread-ru-generate-kp",
-      messageId: "message-ru-generate-kp"
-    });
-
-    expect(result.actionPreview).toMatchObject({
-      actionType: "generate_kp",
-      summary: "Generate KP document from assistant request",
-      changes: [
-        { field: "document.type", from: null, to: "kp" },
-        { field: "document.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "document.sourceText", from: null, to: "Сгенерируй КП для этого лида" }
-      ]
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a KP generation preview. Confirm before I execute it.");
-  });
-
-  it("previews KP sent actions for selected leads", () => {
+  it("keeps typed KP sent requests out of generic assistant write actions", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
       content: "Mark KP sent for this lead",
@@ -358,43 +348,12 @@ describe("assistant submission orchestration", () => {
       messageId: "message-8"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "mark_kp_sent",
-      summary: "Mark KP as sent from assistant request",
-      changes: [
-        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "lead.sourceText", from: null, to: "Mark KP sent for this lead" }
-      ],
-      requiresConfirmation: true
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.response).toBe("I prepared a KP sent update preview. Confirm before I execute it.");
-    expect(result.responseButtons).toEqual([
-      { label: "Confirm", action: "confirm" },
-      { label: "Cancel", action: "cancel" }
-    ]);
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Right now I can create or update leads");
   });
 
-  it("previews Russian KP sent commands for selected leads", () => {
-    const result = createAssistantSubmissionResult({
-      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
-      content: "КП отправлено",
-      threadId: "thread-ru-kp-sent",
-      messageId: "message-ru-kp-sent"
-    });
-
-    expect(result.actionPreview).toMatchObject({
-      actionType: "mark_kp_sent",
-      summary: "Mark KP as sent from assistant request",
-      changes: [
-        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "lead.sourceText", from: null, to: "КП отправлено" }
-      ]
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-  });
-
-  it("previews KP sent undo actions for selected leads", () => {
+  it("keeps typed KP sent undo requests out of generic assistant write actions", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
       content: "Undo KP sent for this lead",
@@ -402,41 +361,11 @@ describe("assistant submission orchestration", () => {
       messageId: "message-undo-kp"
     });
 
-    expect(result.actionPreview).toMatchObject({
-      actionType: "undo_kp_sent",
-      summary: "Undo KP sent from assistant request",
-      changes: [
-        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "lead.sourceText", from: null, to: "Undo KP sent for this lead" }
-      ],
-      requiresConfirmation: true
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-    expect(result.responseButtons).toEqual([
-      { label: "Confirm", action: "confirm" },
-      { label: "Cancel", action: "cancel" }
-    ]);
+    expect(result.actionPreview).toBeNull();
+    expect(result.confirmationStatus).toBeNull();
+    expect(result.response).toContain("Right now I can create or update leads");
+    expect(result.responseButtons).toEqual([]);
   });
-
-  it("previews Russian KP sent undo commands for selected leads", () => {
-    const result = createAssistantSubmissionResult({
-      context: { ...baseContext, selectedRecordIds: ["L-2026-001"] },
-      content: "Отмени отправку КП",
-      threadId: "thread-ru-undo-kp",
-      messageId: "message-ru-undo-kp"
-    });
-
-    expect(result.actionPreview).toMatchObject({
-      actionType: "undo_kp_sent",
-      summary: "Undo KP sent from assistant request",
-      changes: [
-        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-001"] },
-        { field: "lead.sourceText", from: null, to: "Отмени отправку КП" }
-      ]
-    });
-    expect(result.confirmationStatus).toBe("awaiting_confirmation");
-  });
-
   it("blocks action mode for roles without permission and creates permission feedback", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, role: "viewer" },
@@ -512,6 +441,34 @@ describe("assistant submission orchestration", () => {
       { label: "DOC", action: "download_doc", url: "/documents/attachments/docx-1?download=1" },
       { label: "Send KP", action: "send_kp", url: "mailto:?subject=KP%20L-2026-004" },
       { label: "Mark KP sent", action: "mark_kp_sent" }
+    ]);
+  });
+
+  it("previews selected lead updates from web source material", () => {
+    const result = createAssistantSubmissionResult({
+      context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+      content: "Add this to the selected lead: client sent updated BGF 210 m2 and budget 42000 EUR.",
+      threadId: "thread-selected-lead-update",
+      messageId: "message-selected-lead-update"
+    });
+
+    expect(result.response).toContain("I can update this lead L-2026-004");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead from assistant source material",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        {
+          field: "lead.sourceText",
+          from: null,
+          to: "Add this to the selected lead: client sent updated BGF 210 m2 and budget 42000 EUR."
+        }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+    expect(result.responseButtons).toEqual([
+      { label: "CRM", action: "open_crm", url: "/leads?leadId=L-2026-004" },
+      { label: "Update lead", action: "confirm" }
     ]);
   });
 

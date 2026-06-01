@@ -40,7 +40,10 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
       intent: "lead_update",
       shouldPersistFeedback: false,
       feedbackType: undefined,
-      buttons: createLeadCrmButtons(referencedLeadId),
+      buttons:
+        message.channel === "web"
+          ? [...createLeadCrmButtons(referencedLeadId), { label: "Update lead", action: "confirm" }]
+          : createLeadCrmButtons(referencedLeadId),
       normalizedActions: ["open_crm"],
       text: `I can update this lead ${referencedLeadId} from your message. I will merge new source material, fill missing KP fields when possible, and ask if the content looks like a different client.`
     };
@@ -61,7 +64,7 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
     }
 
     if (lead.kpReady) {
-      const actions = createLeadChatActions(lead);
+      const actions = createChannelLeadChatActions(message.channel, createLeadChatActions(lead));
       const buttons = createLeadChatActionButtons(actions);
       return {
         intent: "crm_action",
@@ -69,7 +72,10 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
         feedbackType: undefined,
         buttons,
         normalizedActions: actions.map((action) => action.type),
-        text: `Lead ${lead.leadId} has enough data for KP. You can open CRM, review PDF, download DOC, send KP, or update the KP sent status.`
+        text:
+          message.channel === "telegram"
+            ? `Lead ${lead.leadId} has enough data for KP. Telegram can open CRM, PDF, and DOC links. Send/update KP actions are paused here while we unify the workflow.`
+            : `Lead ${lead.leadId} has enough data for KP. You can open CRM, review PDF, download DOC, send KP, or update the KP sent status.`
       };
     }
   }
@@ -138,6 +144,14 @@ function getReferencedLeadId(message: AssistantChannelMessage): string | null {
 
 function createLeadCrmButtons(leadId: string): AssistantChannelResponseButton[] {
   return [{ label: "CRM", action: "open_crm", url: `/leads?leadId=${encodeURIComponent(leadId)}` }];
+}
+
+function createChannelLeadChatActions(channel: AssistantChannelMessage["channel"], actions: LeadChatAction[]): LeadChatAction[] {
+  if (channel !== "telegram") {
+    return actions;
+  }
+
+  return actions.filter((action) => action.type === "open_crm" || action.type === "open_pdf" || action.type === "download_doc");
 }
 
 type _EnsureLeadChatNormalizedAction = LeadChatAction["type"] extends LeadChatNormalizedAction ? true : never;

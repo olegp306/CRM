@@ -3,6 +3,8 @@ import type {
   CreatedLeadRecord,
   MarkKpSentFromAssistantInput,
   MarkedKpSentLeadRecord,
+  UpdateLeadFromAssistantInput,
+  UpdatedLeadRecord,
   UndoKpSentFromAssistantInput,
   UndoneKpSentLeadRecord
 } from "@app/assistant";
@@ -55,6 +57,37 @@ function getAssistantLeadStore(): AssistantLeadStore {
 
       getStore().push(lead);
       return lead;
+    },
+    async update(input) {
+      const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId);
+
+      if (!lead) {
+        throw new Error(`Lead ${input.leadId} was not found`);
+      }
+
+      lead.rawInput = [lead.rawInput?.trim(), `Assistant update from ${input.requestedByUserId}:\n${input.rawInput.trim()}`]
+        .filter(Boolean)
+        .join("\n\n");
+      lead.clientName = input.clientName ?? lead.clientName;
+      lead.requestType = input.requestType ?? lead.requestType;
+      lead.projectAddress = input.projectAddress ?? lead.projectAddress;
+      lead.bgfM2 = input.bgfM2 ?? lead.bgfM2;
+      lead.email = input.email ?? lead.email;
+      lead.phone = input.phone ?? lead.phone;
+      lead.missingData = input.missingData ?? lead.missingData;
+      lead.isStandard = input.isStandard ?? lead.isStandard;
+      lead.temperature = input.temperature ?? lead.temperature;
+
+      const result: UpdatedLeadRecord = {
+        id: lead.id,
+        workspaceId: input.workspaceId,
+        leadId: input.leadId,
+        status: lead.status,
+        rawInput: lead.rawInput,
+        requestedByUserId: input.requestedByUserId
+      };
+
+      return result;
     },
     async markKpSent(input) {
       const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId);
@@ -116,6 +149,51 @@ export async function listAssistantCreatedLeads(workspaceId: string): Promise<Cr
 
 export async function createAssistantLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord> {
   return getAssistantLeadStore().create(input);
+}
+
+export async function updateAssistantLead(input: UpdateLeadFromAssistantInput): Promise<UpdatedLeadRecord> {
+  return getAssistantLeadStore().update(input);
+}
+
+export async function scheduleAssistantLeadReminder(input: {
+  workspaceId: string;
+  leadId: string;
+  followup1Date: Date;
+  followupStatus: "planned";
+}): Promise<void> {
+  const runtime = selectAssistantLeadStoreRuntime({
+    databaseUrl: process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    memoryStore: "memory" as const,
+    prismaStore: "prisma" as const
+  });
+
+  if (runtime === "prisma") {
+    await prisma.lead.update({
+      where: {
+        workspaceId_leadId: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId
+        }
+      },
+      data: {
+        followup1Date: input.followup1Date,
+        followupStatus: input.followupStatus
+      }
+    });
+    return;
+  }
+
+  const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId) as
+    | (CreatedLeadRecord & { followup1Date?: Date; followupStatus?: string | null })
+    | undefined;
+
+  if (!lead) {
+    throw new Error(`Lead ${input.leadId} was not found`);
+  }
+
+  lead.followup1Date = input.followup1Date;
+  lead.followupStatus = input.followupStatus;
 }
 
 export async function markAssistantLeadKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord> {

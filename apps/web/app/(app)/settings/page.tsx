@@ -30,6 +30,10 @@ export default function SettingsPage() {
           <h2 className="text-base font-semibold">AI intake</h2>
           <p className="mt-2 text-sm text-muted-foreground">Metaprompt and model for client material analysis.</p>
         </a>
+        <a href="/settings/crm-orchestrator" className="rounded-lg border border-border bg-white p-4 transition hover:bg-muted">
+          <h2 className="text-base font-semibold">CRM orchestrator</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Routing prompt and model for Telegram and assistant requests.</p>
+        </a>
       </div>
     </section>
   );

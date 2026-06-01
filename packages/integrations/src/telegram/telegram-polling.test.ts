@@ -73,6 +73,35 @@ describe("telegram polling", () => {
     ).toEqual(["[Telegram PDF attachment: lead.pdf]"]);
   });
 
+  it("keeps replied bot lead card text for lead update routing", () => {
+    expect(
+      createAllowedTelegramMessages(
+        [
+          {
+            update_id: 5,
+            message: {
+              message_id: 14,
+              date: 1779296400,
+              chat: { id: "123" },
+              text: "добавь email katya@example.com",
+              reply_to_message: {
+                message_id: 9,
+                text: "L-2026-048 created in CRM.\nLead fields..."
+              }
+            }
+          }
+        ],
+        new Set(["123"])
+      )
+    ).toEqual([
+      expect.objectContaining({
+        messageId: 14,
+        replyToMessageId: 9,
+        replyToText: "L-2026-048 created in CRM.\nLead fields..."
+      })
+    ]);
+  });
+
   it("accepts allowed Telegram voice messages as source material", () => {
     expect(
       createAllowedTelegramMessages(

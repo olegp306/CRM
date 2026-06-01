@@ -3,6 +3,8 @@ import type {
   CreatedLeadRecord,
   MarkKpSentFromAssistantInput,
   MarkedKpSentLeadRecord,
+  UpdateLeadFromAssistantInput,
+  UpdatedLeadRecord,
   UndoKpSentFromAssistantInput,
   UndoneKpSentLeadRecord
 } from "@app/assistant";
@@ -36,6 +38,7 @@ export type AssistantLeadPrismaClientLike = {
 export type AssistantLeadStore = {
   list(workspaceId: string): Promise<CreatedLeadRecord[]>;
   create(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord>;
+  update(input: UpdateLeadFromAssistantInput): Promise<UpdatedLeadRecord>;
   markKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord>;
   undoKpSent(input: UndoKpSentFromAssistantInput): Promise<UndoneKpSentLeadRecord>;
 };
@@ -57,6 +60,36 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
       });
 
       return toCreatedLeadRecord(row);
+    },
+
+    async update(input) {
+      const [existing] = await client.lead.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId
+        },
+        take: 1
+      });
+      const rawInput = appendAssistantLeadUpdate(existing?.rawInput, input.requestedByUserId, input.rawInput);
+      const data = createLeadUpdateData(input, rawInput);
+      const row = await client.lead.update({
+        where: {
+          workspaceId_leadId: {
+            workspaceId: input.workspaceId,
+            leadId: input.leadId
+          }
+        },
+        data
+      });
+
+      return {
+        id: row.id,
+        workspaceId: row.workspaceId,
+        leadId: row.leadId,
+        status: row.status,
+        rawInput: row.rawInput ?? rawInput,
+        requestedByUserId: input.requestedByUserId
+      };
     },
 
     async markKpSent(input) {
@@ -113,6 +146,26 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
       };
     }
   };
+}
+
+function createLeadUpdateData(input: UpdateLeadFromAssistantInput, rawInput: string): Record<string, unknown> {
+  const data: Record<string, unknown> = { rawInput };
+  const optionalFields: Array<keyof Pick<
+    UpdateLeadFromAssistantInput,
+    "clientName" | "requestType" | "projectAddress" | "bgfM2" | "email" | "phone" | "missingData" | "isStandard" | "temperature"
+  >> = ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone", "missingData", "isStandard", "temperature"];
+
+  for (const field of optionalFields) {
+    if (input[field] !== undefined) {
+      data[field] = input[field];
+    }
+  }
+
+  return data;
+}
+
+function appendAssistantLeadUpdate(existingRawInput: string | null | undefined, requestedByUserId: string, rawInput: string): string {
+  return [existingRawInput?.trim(), `Assistant update from ${requestedByUserId}:\n${rawInput.trim()}`].filter(Boolean).join("\n\n");
 }
 
 function toCreatedLeadRecord(row: LeadRow): CreatedLeadRecord {

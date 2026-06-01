@@ -59,7 +59,7 @@ describe("assistant channel parity", () => {
     expect(getLeadTargetId(web)).toBe("L-2026-004");
   });
 
-  it("returns equivalent KP-ready actions for both channels", () => {
+  it("keeps KP-ready lookup shared but limits Telegram to safe links in the create/update-only slice", () => {
     const lead = {
       leadId: "L-2026-011",
       missingFields: [],
@@ -86,8 +86,10 @@ describe("assistant channel parity", () => {
       { lead }
     );
 
-    expect(toComparableResponse(web)).toEqual(toComparableResponse(telegram));
     expect(web.normalizedActions).toEqual(["open_crm", "open_pdf", "download_doc", "send_kp", "mark_kp_sent", "undo_kp_sent"]);
+    expect(telegram.normalizedActions).toEqual(["open_crm", "open_pdf", "download_doc"]);
+    expect(web.intent).toBe(telegram.intent);
+    expect(getLeadTargetId(web)).toBe(getLeadTargetId(telegram));
   });
 
   it("routes theme capability questions away from lead intake in both channels", () => {

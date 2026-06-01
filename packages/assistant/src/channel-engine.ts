@@ -1,6 +1,7 @@
 import { classifyIntent } from "./classify-intent";
 import { createCapabilityResponse } from "./capability-registry";
 import type { AssistantChannelMessage, AssistantChannelResponse, AssistantChannelResponseButton } from "./channel-message";
+import { routeCrmOrchestratorRequest, type CrmOrchestratorDecision } from "./crm-orchestrator-agent";
 import {
   createLeadChatOrchestratorResponse,
   type LeadChatSnapshot,
@@ -12,7 +13,7 @@ import {
   isLeadInteractionNoteCommand,
   isLeadNaturalContextNote
 } from "./lead-interaction-note";
-import { createReminderHistorySummary, isReminderRequest } from "./lead-reminder";
+import { createReminderHistorySummary, createReminderUserResponse, isReminderRequest } from "./lead-reminder";
 
 export function createAssistantChannelResponse(
   message: AssistantChannelMessage,
@@ -33,6 +34,11 @@ export function createAssistantChannelResponse(
   const reminderResponse = createLeadReminderResponse(message);
   if (reminderResponse) {
     return reminderResponse;
+  }
+
+  const noteNeedsLeadResponse = createLeadNoteNeedsLeadResponse(message);
+  if (noteNeedsLeadResponse) {
+    return noteNeedsLeadResponse;
   }
 
   const contextNoteResponse = createLeadNaturalContextNoteResponse(message);
@@ -67,6 +73,11 @@ export function createAssistantChannelResponse(
     };
   }
 
+  const telegramOrchestratorResponse = createTelegramCrmOrchestratorResponse(message);
+  if (telegramOrchestratorResponse) {
+    return telegramOrchestratorResponse;
+  }
+
   const leadChatResponse = createLeadChatOrchestratorResponse({ message, lead: options.lead });
   if (options.lead && leadChatResponse) {
     return leadChatResponse;
@@ -85,9 +96,7 @@ export function createAssistantChannelResponse(
       feedbackType: undefined,
       buttons: createLeadCrmButtons(leadId),
       normalizedActions: leadId ? ["open_crm"] : [],
-      text: leadId
-        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
-        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      text: createSupportResponseText(message.channel, leadId)
     };
   }
 
@@ -100,9 +109,7 @@ export function createAssistantChannelResponse(
       feedbackType: undefined,
       buttons: createLeadCrmButtons(leadId),
       normalizedActions: leadId ? ["open_crm"] : [],
-      text: leadId
-        ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
-        : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material."
+      text: createSupportResponseText(message.channel, leadId)
     };
   }
 
@@ -138,6 +145,108 @@ function createLeadInteractionNoteResponse(message: AssistantChannelMessage): As
     normalizedActions: ["open_crm"],
     text: `Saved this note to lead ${leadId} history: ${summary}`
   };
+}
+
+function createLeadNoteNeedsLeadResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  if (getReferencedLeadId(message)) {
+    return null;
+  }
+
+  if (!isLeadInteractionNoteCommand(message.content) && !isLeadNaturalContextNote(message.content)) {
+    return null;
+  }
+
+  return {
+    intent: "crm_action",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: "Which lead should I save this note to? Reply to a lead card or include the lead number."
+  };
+}
+
+function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
+  if (message.channel !== "telegram") {
+    return null;
+  }
+
+  const decision = routeCrmOrchestratorRequest(message);
+
+  if (decision.intent === "CLARIFICATION_REQUIRED") {
+    return null;
+  }
+
+  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
+  if (decision.intent === "ATTACH_FILE" && getReferencedLeadId(message)) {
+    return null;
+  }
+
+  if (decision.status === "need_clarification") {
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
+  }
+
+  if (decision.intent === "SEARCH_LEAD") {
+    return createTelegramLimitedCrmActionsResponse();
+  }
+
+  if (decision.intent === "CREATE_REMINDER") {
+    return createTelegramLimitedCrmActionsResponse();
+  }
+
+  if (decision.intent === "ATTACH_FILE") {
+    return createTelegramLimitedCrmActionsResponse();
+  }
+
+  return null;
+}
+
+function createTelegramLimitedCrmActionsResponse(): AssistantChannelResponse {
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: [
+      "Telegram actions are limited right now.",
+      "For now I can only create a lead or update an existing lead.",
+      "Reply to a lead card with new source material or missing fields."
+    ].join("\n")
+  };
+}
+
+export function createCrmOrchestratorRoutedButPausedResponse(decision: CrmOrchestratorDecision, detail: string): AssistantChannelResponse {
+  return {
+    intent: "support_request",
+    shouldPersistFeedback: false,
+    feedbackType: undefined,
+    buttons: [],
+    normalizedActions: [],
+    text: `${detail}\nRoute: ${decision.action}.\nFor now I can create a lead or update an existing lead in Telegram.`
+  };
+}
+
+function createSupportResponseText(channel: AssistantChannelMessage["channel"], leadId: string | null): string {
+  if (channel === "telegram") {
+    return leadId
+      ? `I can help with lead ${leadId}. Right now in Telegram I create or update leads and can open this lead in CRM.`
+      : "Right now in Telegram I create or update leads. Reply to a lead card or send client source material.";
+  }
+
+  return leadId
+    ? `I can help with lead ${leadId}: KP documents, follow-ups, CRM status, and what is waiting next.`
+    : "I can help with leads, KP documents, follow-ups, and CRM status. Ask me about a lead or send source material.";
 }
 
 function createLeadNaturalContextNoteResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
@@ -181,7 +290,7 @@ function createLeadReminderResponse(message: AssistantChannelMessage): Assistant
     feedbackType: undefined,
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
-    text: `Saved this reminder to lead ${leadId} history: ${createReminderHistorySummary(message.content)}`
+    text: createReminderUserResponse(leadId, message.content, { now: new Date(message.receivedAt) })
   };
 }
 
@@ -300,10 +409,14 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
     channel === "web"
       ? "In the web app, you can also attach files and photos here. On mobile, use your keyboard microphone for voice dictation."
       : "In Telegram, you can send text, photos, PDFs, voice messages, and audio files. Reply to a lead card to update that exact lead.";
+  const capabilityText =
+    channel === "telegram"
+      ? "I can create and update leads. Right now in Telegram I only create leads and update existing leads; other CRM actions are paused while we unify the workflow."
+      : "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.";
 
   return [
     "Hi, I am Oleg's CRM assistant.",
-    "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.",
+    capabilityText,
     uploadHint,
     "I only save feature requests when the message is clearly product feedback."
   ].join("\n\n");

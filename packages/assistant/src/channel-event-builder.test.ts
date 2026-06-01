@@ -67,7 +67,7 @@ describe("inbound message channel events", () => {
       threadId: "telegram-1",
       messageId: "message-3",
       leadId: "L-2026-044",
-      summary: "Reminder requested: Напомни завтра посмотреть LinkedIn у него"
+      summary: expect.stringContaining("Reminder scheduled: посмотреть LinkedIn у него. Due:")
     });
   });
 

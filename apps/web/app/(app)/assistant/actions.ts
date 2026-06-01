@@ -17,6 +17,7 @@ import {
   createInboundMessageChannelEvents,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
+  createOpenAiCrmOrchestrator,
   createExecutionChannelEvents,
   enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
@@ -35,6 +36,8 @@ import {
   createPlatformReleaseReadiness,
   createPlatformReleaseTriage,
   createPlatformReleaseWorkflow,
+  createLeadReminderDraft,
+  isReminderRequest,
   type AuditReviewFilters,
   type AssistantChannelAttachment,
   type AssistantContext,
@@ -44,11 +47,19 @@ import {
 } from "@app/assistant";
 import { generateAssistantKpDocument, listAssistantGeneratedDocuments } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
-import { createAssistantLead, listAssistantCreatedLeads, markAssistantLeadKpSent, undoAssistantLeadKpSent } from "./lead-execution-store";
+import {
+  createAssistantLead,
+  listAssistantCreatedLeads,
+  markAssistantLeadKpSent,
+  scheduleAssistantLeadReminder,
+  undoAssistantLeadKpSent,
+  updateAssistantLead
+} from "./lead-execution-store";
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
-import { getClientMaterialAnalysisSetting } from "../settings/ai-intake/ai-intake-store";
+import { getClientMaterialAnalysisSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
+import { getAssistantLeadTargetId } from "./assistant-lead-target";
 
 export type SubmitAssistantMessageInput = {
   context: AssistantContext;
@@ -63,12 +74,16 @@ export type SubmitOnboardingAssistantMessageInput = SubmitAssistantMessageInput;
 const assistantThemePreferences = new Set(["light", "dark", "nocturne", "graphite", "warm"]);
 
 export async function submitAssistantMessageAction(input: SubmitAssistantMessageInput) {
-  const selectedLeadId = input.context.selectedRecordIds?.[0];
-  const [leads, generatedDocuments] = selectedLeadId
+  const targetLeadId = getAssistantLeadTargetId(input.content, input.context.selectedRecordIds);
+  const [leads, generatedDocuments] = targetLeadId
     ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
     : [[], []];
-  const selectedLead = selectedLeadId ? createSelectedLeadChatSnapshot(selectedLeadId, leads, generatedDocuments) : null;
-  const clientMaterialAnalysisSetting = await getClientMaterialAnalysisSetting(input.context.workspaceId);
+  const selectedLead = targetLeadId ? createSelectedLeadChatSnapshot(targetLeadId, leads, generatedDocuments) : null;
+  const [clientMaterialAnalysisSetting, crmOrchestratorSetting] = await Promise.all([
+    getClientMaterialAnalysisSetting(input.context.workspaceId),
+    getCrmOrchestratorSetting(input.context.workspaceId)
+  ]);
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
   const assistantInput = {
     ...input,
     attachments: input.attachments ?? [],
@@ -77,16 +92,23 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   const initialResult = await createOpenAIAssistantSubmissionResult(
     assistantInput,
     {
-      apiKey: process.env.OPENAI_API_KEY?.trim() ?? "",
-      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini"
+      apiKey: openAiApiKey,
+      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+      crmOrchestrator: openAiApiKey
+        ? createOpenAiCrmOrchestrator({
+            apiKey: openAiApiKey,
+            model: crmOrchestratorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+            prompt: crmOrchestratorSetting.prompt
+          })
+        : undefined
     }
   );
-  const result = process.env.OPENAI_API_KEY?.trim()
+  const result = openAiApiKey
     ? await enrichLeadIntakeSubmissionResult(
         initialResult,
         assistantInput,
         createOpenAiAssistantLeadParserClient({
-          apiKey: process.env.OPENAI_API_KEY.trim(),
+          apiKey: openAiApiKey,
           model: clientMaterialAnalysisSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
           prompt: clientMaterialAnalysisSetting.prompt
         })
@@ -104,7 +126,7 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
           channel: "web",
           threadId: input.threadId,
           messageId: input.messageId,
-          leadId: input.context.selectedRecordIds?.[0],
+          leadId: targetLeadId ?? undefined,
           content: input.content
         })
       ]
@@ -113,6 +135,18 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   const repository = getAssistantRepository();
 
   await repository.save(persistenceDraft);
+  if (targetLeadId && isReminderRequest(input.content)) {
+    const reminderDraft = createLeadReminderDraft(input.content);
+    if (reminderDraft.dueAt) {
+      await scheduleAssistantLeadReminder({
+        workspaceId: input.context.workspaceId,
+        leadId: targetLeadId,
+        followup1Date: reminderDraft.dueAt,
+        followupStatus: "planned"
+      });
+      revalidatePath("/leads");
+    }
+  }
   const [threads, messages, feedback, actions] = await Promise.all([
     repository.listThreads(input.context.workspaceId),
     repository.listMessages(input.threadId),
@@ -401,6 +435,7 @@ export async function confirmAssistantActionAction({
     existingLeadIds: existingLeads.map((lead) => lead.leadId),
     existingLeads,
     createLead: createAssistantLead,
+    updateLead: updateAssistantLead,
     scheduleFollowup: createAssistantFollowup,
     updateProjectTask: updateAssistantProjectTask,
     generateKpDocument: generateAssistantKpDocument,

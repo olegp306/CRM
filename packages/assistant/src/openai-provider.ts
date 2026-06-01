@@ -1,8 +1,10 @@
 import { createActionPreview, type ActionPreview, type AssistantActionType } from "./action-preview";
-import { createAssistantChannelResponse, isLeadSourceMaterial } from "./channel-engine";
+import { createAssistantChannelResponse, createCrmOrchestratorRoutedButPausedResponse, isLeadSourceMaterial } from "./channel-engine";
 import type { AssistantChannelMessage } from "./channel-message";
 import { advanceActionConfirmation } from "./confirmation-state";
 import type { AssistantContext } from "./context";
+import type { CrmOrchestratorDecision } from "./crm-orchestrator-agent";
+import type { CrmOrchestratorClient } from "./openai-crm-orchestrator";
 import { createFeedbackItemFromMessage } from "./feedback-item";
 import { getPermissionBlockedResponse } from "./permission-blocked";
 import {
@@ -19,6 +21,7 @@ export type OpenAIAssistantConfig = {
   model: string;
   endpoint?: string;
   fetch?: OpenAIAssistantFetch;
+  crmOrchestrator?: CrmOrchestratorClient;
 };
 
 type OpenAIPlan = {
@@ -43,11 +46,7 @@ type OpenAIAttachmentSummary = {
 const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
 const allowedActionTypes = new Set<AssistantActionType>([
   "create_lead",
-  "generate_kp",
-  "schedule_followup",
-  "update_project_task",
-  "mark_kp_sent",
-  "undo_kp_sent"
+  "update_lead"
 ]);
 const maxAttachmentTextPreviewLength = 500;
 
@@ -83,6 +82,19 @@ export async function createOpenAIAssistantSubmissionResult(
       thread,
       message,
       channelResponse: deterministicChannelResponse,
+      context: input.context,
+      threadId: input.threadId,
+      messageId: input.messageId,
+      attachments: input.attachments ?? []
+    });
+  }
+
+  const crmOrchestratorResponse = await createWebCrmOrchestratorFallbackResponse(config.crmOrchestrator, channelMessage);
+  if (crmOrchestratorResponse) {
+    return createAssistantSubmissionResultFromChannelResponse({
+      thread,
+      message,
+      channelResponse: crmOrchestratorResponse,
       context: input.context,
       threadId: input.threadId,
       messageId: input.messageId,
@@ -146,15 +158,73 @@ export async function createOpenAIAssistantSubmissionResult(
     };
   }
 
-  return createAssistantSubmissionResultFromChannelResponse({
+  return {
     thread,
     message,
-    channelResponse: deterministicChannelResponse,
-    context: input.context,
-    threadId: input.threadId,
-    messageId: input.messageId,
-    attachments: input.attachments ?? []
-  });
+    response: plan.response,
+    feedback: null,
+    actionPreview: null,
+    responseButtons: [],
+    confirmationStatus: null,
+    permissionBlocked: null
+  };
+}
+
+async function createWebCrmOrchestratorFallbackResponse(
+  crmOrchestrator: CrmOrchestratorClient | undefined,
+  message: AssistantChannelMessage
+) {
+  if (!crmOrchestrator || !shouldUseWebCrmOrchestratorFallback(message)) {
+    return null;
+  }
+
+  let decision: CrmOrchestratorDecision;
+  try {
+    decision = await crmOrchestrator.route(message);
+  } catch {
+    return null;
+  }
+
+  if (!decision) {
+    return null;
+  }
+
+  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
+  if (decision.status === "need_clarification" || decision.intent === "CLARIFICATION_REQUIRED") {
+    return {
+      intent: "support_request" as const,
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: decision.message
+    };
+  }
+
+  if (decision.intent === "SEARCH_LEAD") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Search is recognized, but web assistant search is not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "CREATE_REMINDER") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "Reminder creation is recognized, but web assistant reminders are not enabled in this cut yet.");
+  }
+
+  if (decision.intent === "ATTACH_FILE") {
+    return createCrmOrchestratorRoutedButPausedResponse(decision, "File attachment is recognized, but web assistant file-only attachment is not enabled in this cut yet.");
+  }
+
+  return null;
+}
+
+function shouldUseWebCrmOrchestratorFallback(message: AssistantChannelMessage): boolean {
+  if (message.attachments.length > 0) {
+    return false;
+  }
+
+  return !isLeadSourceMaterial(message);
 }
 
 function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof createAssistantChannelResponse>): boolean {
@@ -162,6 +232,7 @@ function shouldUseChannelResponseBeforeOpenAI(channelResponse: ReturnType<typeof
     channelResponse.intent === "help" ||
     channelResponse.intent === "capability_request" ||
     channelResponse.intent === "lead_intake" ||
+    channelResponse.intent === "business_process_note" ||
     (channelResponse.intent === "crm_action" && Boolean(channelResponse.normalizedActions?.length)) ||
     channelResponse.intent === "support_request" ||
     channelResponse.shouldPersistFeedback
@@ -332,6 +403,17 @@ function createPreviewFromPlan(plan: OpenAIPlan, fallbackSourceText: string, con
     });
   }
 
+  if (plan.action.actionType === "update_lead") {
+    return createActionPreview({
+      actionType: "update_lead",
+      summary: plan.action.summary,
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: context.selectedRecordIds ?? [] },
+        { field: "lead.sourceText", from: null, to: sourceText }
+      ]
+    });
+  }
+
   if (plan.action.actionType === "update_project_task") {
     return createActionPreview({
       actionType: "update_project_task",
@@ -365,13 +447,10 @@ function canUseAssistantActionMode(role: string): boolean {
 function createSystemPrompt(): string {
   return [
     "You are the CRM assistant runtime for an architecture studio SaaS.",
-    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"generate_kp\" | \"schedule_followup\" | \"update_project_task\" | \"mark_kp_sent\" | \"undo_kp_sent\", \"summary\": string, \"sourceText\": string}}.",
+    "Return only valid JSON with shape: {\"response\": string, \"action\": null | {\"actionType\": \"create_lead\" | \"update_lead\", \"summary\": string, \"sourceText\": string}}.",
     "Use create_lead when the user asks to add, create, capture, or register a lead/client opportunity.",
-    "Use schedule_followup for reminders or follow-up scheduling.",
-    "Use update_project_task for project/task status changes.",
-    "Use generate_kp for KP, offer, proposal, or document generation.",
-    "Use mark_kp_sent when the user says an existing KP, offer, or proposal was sent.",
-    "Use undo_kp_sent when the user asks to undo, revert, clear, or remove a KP sent status.",
+    "Use update_lead when the user wants to add, merge, correct, or attach source information to an existing selected lead.",
+    "For reminders, KP generation, KP sent status, project tasks, search, or file-only attachment requests, explain briefly that this cut only creates or updates leads and set action to null.",
     "If no operational action is needed, set action to null."
   ].join("\n");
 }

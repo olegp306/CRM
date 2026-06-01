@@ -148,6 +148,103 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     ]);
   });
 
+  it("uses OpenAI to produce an update lead preview for selected web leads", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I prepared a lead update preview for L-2026-004.",
+                  action: {
+                    actionType: "update_lead",
+                    summary: "Update selected lead with new BGF",
+                    sourceText: "Client sent updated BGF 210 m2."
+                  }
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, selectedRecordIds: ["L-2026-004"] },
+        content: "Update this lead with BGF 210 m2",
+        threadId: "thread-update-lead-plan",
+        messageId: "message-update-lead-plan"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/chat/completions",
+      expect.objectContaining({
+        body: expect.stringContaining("update_lead")
+      })
+    );
+    expect(result.response).toBe("I prepared a lead update preview for L-2026-004.");
+    expect(result.actionPreview).toMatchObject({
+      actionType: "update_lead",
+      summary: "Update selected lead with new BGF",
+      changes: [
+        { field: "lead.selectedRecordIds", from: null, to: ["L-2026-004"] },
+        { field: "lead.sourceText", from: null, to: "Client sent updated BGF 210 m2." }
+      ]
+    });
+    expect(result.confirmationStatus).toBe("awaiting_confirmation");
+  });
+
+  it("keeps the generic OpenAI planner focused on create and update lead actions", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can answer that without a write action.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+
+    await createOpenAIAssistantSubmissionResult(
+      {
+        context: baseContext,
+        content: "Create lead Anna Beispiel, BGF 150",
+        threadId: "thread-openai-action-scope",
+        messageId: "message-openai-action-scope"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock
+      }
+    );
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const systemPrompt = request.messages[0].content;
+    expect(systemPrompt).toContain('"create_lead" | "update_lead"');
+    expect(systemPrompt).not.toContain("schedule_followup");
+    expect(systemPrompt).not.toContain("generate_kp");
+    expect(systemPrompt).not.toContain("mark_kp_sent");
+    expect(systemPrompt).not.toContain("undo_kp_sent");
+  });
+
   it("routes source-material uploads to lead intake even when OpenAI returns a create lead action", async () => {
     const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
       new Response(
@@ -322,6 +419,242 @@ describe("createOpenAIAssistantSubmissionResult", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.response).toContain("has enough data for KP");
     expect(result.responseButtons.map((button) => button.label)).toEqual(["CRM", "PDF", "DOC", "Send KP", "Mark KP sent"]);
+  });
+
+  it("uses the CRM orchestrator client for ambiguous web CRM routing before the generic OpenAI planner", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SEARCH_LEAD" as const,
+        reasoning: "The user asks to pull up an existing person.",
+        action: "Lead Search Agent" as const,
+        status: "ready" as const,
+        message: "I will search for that lead."
+      }))
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Can you pull up what we know about the person from yesterday?",
+        threadId: "thread-web-crm-orchestrator",
+        messageId: "message-web-crm-orchestrator"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "web",
+        content: "Can you pull up what we know about the person from yesterday?"
+      })
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("Lead Search Agent");
+    expect(result.actionPreview).toBeNull();
+    expect(result.feedback).toBeNull();
+  });
+
+  it("uses CRM orchestrator clarification for ambiguous web requests instead of the generic OpenAI planner", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "CLARIFICATION_REQUIRED" as const,
+        reasoning: "The target CRM action is unclear.",
+        action: "clarification" as const,
+        status: "need_clarification" as const,
+        message: "Do you want me to create a new lead or update an existing one?"
+      }))
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Let's do that thing for the client",
+        threadId: "thread-web-crm-clarification",
+        messageId: "message-web-crm-clarification"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toBe("Do you want me to create a new lead or update an existing one?");
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("falls back to the generic OpenAI planner when CRM orchestrator returns no usable decision", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  response: "I can answer that without a write action.",
+                  action: null
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+    const crmOrchestrator = {
+      route: vi.fn(async () => undefined as never)
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Can you handle this CRM thing?",
+        threadId: "thread-web-crm-empty-decision",
+        messageId: "message-web-crm-empty-decision"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result.response).toBe("I can answer that without a write action.");
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps selected-lead reminders in the shared channel engine before OpenAI routing", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+        content: "Remind me tomorrow to call this client",
+        threadId: "thread-web-reminder-shared",
+        messageId: "message-web-reminder-shared"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-004");
+    expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps selected-lead notes in the shared channel engine before OpenAI routing", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads", selectedRecordIds: ["L-2026-004"] },
+        content: "Record that the client prefers short emails.",
+        threadId: "thread-web-note-shared",
+        messageId: "message-web-note-shared"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("Saved this note to lead L-2026-004 history");
+    expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps explicit lead-id reminders in the shared channel engine before OpenAI routing", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "leads" },
+        content: "Remind me tomorrow to call lead L-2026-004",
+        threadId: "thread-web-reminder-explicit-id",
+        messageId: "message-web-reminder-explicit-id"
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-004");
+    expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
+    expect(result.actionPreview).toBeNull();
+  });
+
+  it("keeps web source-material uploads on lead intake without CRM orchestrator routing", async () => {
+    const fetchMock = vi.fn<OpenAIAssistantFetch>();
+    const crmOrchestrator = {
+      route: vi.fn()
+    };
+
+    const result = await createOpenAIAssistantSubmissionResult(
+      {
+        context: { ...baseContext, route: "/leads", module: "assistant" },
+        content: "Please review this source material and create a lead if the data is sufficient.",
+        threadId: "thread-web-source-material",
+        messageId: "message-web-source-material",
+        attachments: [
+          {
+            id: "attachment-1",
+            kind: "pdf",
+            fileName: "brief.pdf",
+            mimeType: "application/pdf",
+            base64: "JVBERi0x"
+          }
+        ]
+      },
+      {
+        apiKey: "test-key",
+        model: "gpt-test",
+        fetch: fetchMock,
+        crmOrchestrator
+      }
+    );
+
+    expect(crmOrchestrator.route).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.actionPreview).toMatchObject({
+      actionType: "create_lead",
+      summary: "Create lead from assistant source material"
+    });
   });
 
   it("accepts source-material uploads without persisting feature feedback when OpenAI returns no action", async () => {

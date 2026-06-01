@@ -24,6 +24,27 @@ export type CreatedLeadRecord = Omit<CreateLeadFromAssistantInput, "status"> & {
   status: string;
 };
 
+export type UpdateLeadFromAssistantInput = {
+  workspaceId: string;
+  leadId: string;
+  rawInput: string;
+  requestedByUserId: string;
+  clientName?: string | null;
+  requestType?: string | null;
+  projectAddress?: string | null;
+  bgfM2?: number | null;
+  email?: string | null;
+  phone?: string | null;
+  missingData?: LeadMissingField[];
+  isStandard?: boolean;
+  temperature?: "cold" | "warm" | "hot" | "unknown";
+};
+
+export type UpdatedLeadRecord = UpdateLeadFromAssistantInput & {
+  id: string;
+  status: string;
+};
+
 export type ScheduleFollowupFromAssistantInput = {
   workspaceId: string;
   followupId: string;
@@ -104,6 +125,7 @@ export type ExecuteAssistantActionInput = {
   existingLeadIds: string[];
   existingLeads?: CreatedLeadRecord[];
   createLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord>;
+  updateLead?(input: UpdateLeadFromAssistantInput): Promise<UpdatedLeadRecord>;
   scheduleFollowup?(input: ScheduleFollowupFromAssistantInput): Promise<CreatedFollowupRecord>;
   updateProjectTask?(input: UpdateProjectTaskFromAssistantInput): Promise<UpdatedProjectTaskRecord>;
   generateKpDocument?(input: GenerateKpDocumentFromAssistantInput): Promise<GeneratedKpDocumentRecord>;
@@ -120,6 +142,13 @@ export type ExecuteAssistantActionResult =
       pdfAttachmentId?: string;
       docxAttachmentId?: string;
       documentError?: string;
+    }
+  | {
+      status: Extract<ActionConfirmationStatus, "executed">;
+      actionType: "update_lead";
+      leadId: string;
+      recordId: string;
+      fieldsChanged: string[];
     }
   | {
       status: Extract<ActionConfirmationStatus, "executed">;
@@ -179,6 +208,7 @@ export async function executeAssistantAction({
   existingLeadIds,
   existingLeads = [],
   createLead,
+  updateLead,
   scheduleFollowup,
   updateProjectTask,
   generateKpDocument,
@@ -186,6 +216,54 @@ export async function executeAssistantAction({
   undoKpSent
 }: ExecuteAssistantActionInput): Promise<ExecuteAssistantActionResult> {
   const confirmedStatus = advanceActionConfirmation(action.status, "confirm");
+
+  if (action.actionType === "update_lead") {
+    if (!updateLead) {
+      throw new Error("Assistant action update_lead is missing an execution port");
+    }
+
+    const leadId = getSinglePreviewRecordId(action, "lead.selectedRecordIds");
+    const rawInput = getPreviewChangeValue(action, "lead.sourceText");
+    const updatedLead = await updateLead({
+      workspaceId: action.workspaceId,
+      leadId,
+      rawInput,
+      requestedByUserId: action.requestedByUserId,
+      clientName: getOptionalPreviewString(action, "lead.clientName"),
+      requestType: getOptionalPreviewString(action, "lead.requestType"),
+      projectAddress: getOptionalPreviewString(action, "lead.projectAddress"),
+      bgfM2: getOptionalPreviewNumber(action, "lead.bgfM2"),
+      email: getOptionalPreviewString(action, "lead.email"),
+      phone: getOptionalPreviewString(action, "lead.phone"),
+      missingData: getOptionalPreviewLeadMissingFields(action, "lead.missingData") ?? undefined,
+      isStandard: getOptionalPreviewBoolean(action, "lead.isStandard") ?? undefined,
+      temperature: getOptionalPreviewTemperature(action, "lead.temperature") ?? undefined
+    });
+    const executedStatus = advanceActionConfirmation(confirmedStatus, "execute");
+
+    if (executedStatus !== "executed") {
+      throw new Error(`Assistant action ${action.messageId} did not execute`);
+    }
+
+    return {
+      status: executedStatus,
+      actionType: "update_lead",
+      leadId: updatedLead.leadId,
+      recordId: updatedLead.id,
+      fieldsChanged: getPreviewChangedLeadFields(action, [
+        "lead.sourceText",
+        "lead.clientName",
+        "lead.requestType",
+        "lead.projectAddress",
+        "lead.bgfM2",
+        "lead.email",
+        "lead.phone",
+        "lead.missingData",
+        "lead.isStandard",
+        "lead.temperature"
+      ])
+    };
+  }
 
   if (action.actionType === "create_lead") {
     const rawInput = getPreviewChangeValue(action, "lead.sourceText");
@@ -471,6 +549,12 @@ function getPreviewChangeValue(action: AssistantActionWriteDraft, field: string)
   }
 
   return change.to.trim();
+}
+
+function getPreviewChangedLeadFields(action: AssistantActionWriteDraft, fields: string[]): string[] {
+  return fields
+    .filter((field) => action.preview.changes.some((change) => change.field === field))
+    .map((field) => (field === "lead.sourceText" ? "rawInput" : field.replace(/^lead\./, "")));
 }
 
 function getOptionalPreviewString(action: AssistantActionWriteDraft, field: string): string | null {

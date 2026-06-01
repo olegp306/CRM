@@ -133,4 +133,34 @@ describe("lead chat orchestrator", () => {
       { label: "Undo", action: "undo_kp_sent" }
     ]);
   });
+
+  it("limits Telegram KP-ready actions to safe links while create/update is the only active Telegram flow", () => {
+    const result = createLeadChatOrchestratorResponse({
+      message: {
+        ...baseMessage,
+        channel: "telegram",
+        content: "Is KP ready?"
+      },
+      lead: {
+        leadId: "L-2026-011",
+        missingFields: [],
+        kpReady: true,
+        pdfUrl: "/api/kp/L-2026-011.pdf",
+        docxUrl: "/api/kp/L-2026-011.docx",
+        canSendKp: true,
+        kpSent: true
+      }
+    });
+
+    expect(result?.intent).toBe("crm_action");
+    expect(result?.normalizedActions).toEqual(["open_crm", "open_pdf", "download_doc"]);
+    expect(result?.buttons).toEqual([
+      { label: "CRM", action: "open_crm", url: "/leads?leadId=L-2026-011" },
+      { label: "PDF", action: "open_pdf", url: "/api/kp/L-2026-011.pdf" },
+      { label: "DOC", action: "download_doc", url: "/api/kp/L-2026-011.docx" }
+    ]);
+    expect(result?.text).toContain("Telegram can open CRM, PDF, and DOC links");
+    expect(result?.text).not.toContain("send KP");
+    expect(result?.text).not.toContain("KP sent status");
+  });
 });

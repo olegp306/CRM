@@ -53,12 +53,13 @@ function createFakeClient() {
       },
       update: (args) => {
         calls.push({ method: "update", args });
+        const data = (args as { data?: { rawInput?: string; status?: string } }).data;
         return Promise.resolve({
           id: "lead-record-1",
           workspaceId: "workspace-1",
           leadId: "L-2026-001",
-          status: "kp_sent",
-          rawInput: "Existing lead"
+          status: data?.status ?? "kp_sent",
+          rawInput: data?.rawInput ?? "Existing lead"
         });
       }
     }
@@ -197,6 +198,59 @@ describe("assistant lead Prisma store", () => {
           kpSentDate: new Date("2026-05-21T10:30:00.000Z"),
           followup1Date: new Date("2026-05-28T10:30:00.000Z"),
           followupStatus: "planned"
+        }
+      }
+    });
+  });
+
+  it("updates lead source material through a workspace-scoped lead update", async () => {
+    const { client, calls } = createFakeClient();
+    const store = createAssistantLeadPrismaStore(client);
+
+    const lead = await store.update({
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      rawInput: "Client sent updated BGF 210 m2 and budget 42000 EUR.",
+      requestedByUserId: "user-1",
+      bgfM2: 210,
+      email: "irina@example.com",
+      missingData: ["projectAddress"],
+      temperature: "warm"
+    });
+
+    expect(lead).toEqual({
+      id: "lead-record-1",
+      workspaceId: "workspace-1",
+      leadId: "L-2026-001",
+      status: "kp_sent",
+      rawInput: "Existing lead\n\nAssistant update from user-1:\nClient sent updated BGF 210 m2 and budget 42000 EUR.",
+      requestedByUserId: "user-1"
+    });
+    expect(calls[0]).toEqual({
+      method: "findMany",
+      args: {
+        where: {
+          workspaceId: "workspace-1",
+          leadId: "L-2026-001"
+        },
+        take: 1
+      }
+    });
+    expect(calls[1]).toEqual({
+      method: "update",
+      args: {
+        where: {
+          workspaceId_leadId: {
+            workspaceId: "workspace-1",
+            leadId: "L-2026-001"
+          }
+        },
+        data: {
+          rawInput: "Existing lead\n\nAssistant update from user-1:\nClient sent updated BGF 210 m2 and budget 42000 EUR.",
+          bgfM2: 210,
+          email: "irina@example.com",
+          missingData: ["projectAddress"],
+          temperature: "warm"
         }
       }
     });
