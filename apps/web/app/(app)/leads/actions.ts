@@ -5,53 +5,15 @@ import { createKpSentLeadUpdate, createLeadIntakeDraft, createTelegramLeadIntake
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
 import { createLeadFromIntakeDraft } from "./lead-intake-store";
+import { translateLeadSummary, type LeadSummaryTranslationResult } from "./lead-summary-translation";
 
-export async function translateLeadSummaryAction(input: { text: string; targetLanguage: "ru" | "de" }): Promise<string> {
-  const text = input.text.trim();
-  if (!text) {
-    return "";
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OpenAI API key is not configured for lead summary translation.");
-  }
-
-  const targetLanguage = input.targetLanguage === "de" ? "German" : "Russian";
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_TRANSLATION_MODEL || "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content:
-            "Translate CRM lead summaries faithfully. Preserve names, addresses, dates, numbers, BGF, budgets, and product terms. Return only the translated text."
-        },
-        {
-          role: "user",
-          content: `Translate this lead summary to ${targetLanguage}:\n\n${text}`
-        }
-      ],
-      temperature: 0.1
-    })
+export async function translateLeadSummaryAction(input: { text: string; targetLanguage: "ru" | "de" }): Promise<LeadSummaryTranslationResult> {
+  return translateLeadSummary({
+    text: input.text,
+    targetLanguage: input.targetLanguage,
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_TRANSLATION_MODEL || "gpt-4.1-mini"
   });
-
-  if (!response.ok) {
-    throw new Error(`Lead summary translation failed: ${response.status} ${response.statusText}`.trim());
-  }
-
-  const payload = (await response.json()) as { output_text?: unknown };
-  const translated = typeof payload.output_text === "string" ? payload.output_text.trim() : "";
-  if (!translated) {
-    throw new Error("Lead summary translation returned an empty response.");
-  }
-
-  return translated;
 }
 
 export async function createManualLeadAction(formData: FormData): Promise<void> {
