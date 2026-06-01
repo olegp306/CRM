@@ -119,6 +119,7 @@ export type LeadSummaryInfoItem = {
   title: string;
   kind: "message" | "photo" | "pdf" | "audio" | "summary";
   description: string;
+  fullText?: string;
   url: string | null;
 };
 
@@ -237,63 +238,102 @@ export function createLeadSummaryInfo(rawInput: string): LeadSummaryInfoItem[] {
   const transcriptByNumber = createAudioTranscriptMap(lines);
   const materialAnalysis = parseLeadMaterialAnalysis(lines);
   const items: LeadSummaryInfoItem[] = [];
+  const leadSummary = materialAnalysis.leadSummary ?? findLegacyLeadSummary(lines);
+
+  if (leadSummary) {
+    items.push(createLeadSummaryInfoItem("Lead summary", "summary", leadSummary, null));
+  }
+
+  const sourceMessage = createLeadSourceMessage(lines);
+  if (sourceMessage) {
+    items.push(createLeadSummaryInfoItem("Message", "message", sourceMessage, null));
+  }
 
   for (const line of lines) {
     if (/^Telegram sources?:/i.test(line)) {
-      items.push(
-        ...createLeadSourceReferenceEntries(line).map((entry) => {
-          const reference = createLeadSourceReference(entry.trim());
-          return {
-            title: "Telegram message",
-            kind: "message" as const,
-            description: reference.label,
-            url: reference.url
-          };
-        })
-      );
       continue;
     }
 
     const attachment = parseTelegramAttachmentSummaryLine(line);
     if (attachment) {
       const analyzedDescription = materialAnalysis.documentSummaryByFileName.get(attachment.fileName.toLowerCase());
-      items.push({
-        title: attachment.fileName,
-        kind: attachment.kind,
-        description: truncateLeadSummaryDescription(
-          analyzedDescription ?? createAttachmentDescription(attachment, transcriptByNumber.get(attachment.number))
-        ),
-        url: attachment.savedAttachmentId ? `/documents/attachments/${encodeURIComponent(attachment.savedAttachmentId)}?download=1` : null
-      });
+      items.push(
+        createLeadSummaryInfoItem(
+          attachment.fileName,
+          attachment.kind,
+          analyzedDescription ?? createAttachmentDescription(attachment, transcriptByNumber.get(attachment.number)),
+          attachment.savedAttachmentId ? `/documents/attachments/${encodeURIComponent(attachment.savedAttachmentId)}` : null
+        )
+      );
       continue;
     }
-
-    const legacySummary = /^Summary:\s*(.+)$/i.exec(line)?.[1]?.trim();
-    if (legacySummary && materialAnalysis.leadSummary) {
-      continue;
-    }
-
-    const summary = /^(?:Lead summary|Summary):\s*(.+)$/i.exec(line)?.[1]?.trim();
-    if (summary) {
-      items.push({
-        title: "Lead summary",
-        kind: "summary",
-        description: summary,
-        url: null
-      });
-    }
-  }
-
-  if (materialAnalysis.leadSummary && !items.some((item) => item.title === "Lead summary")) {
-    items.push({
-      title: "Lead summary",
-      kind: "summary",
-      description: materialAnalysis.leadSummary,
-      url: null
-    });
   }
 
   return items;
+}
+
+function createLeadSummaryInfoItem(
+  title: string,
+  kind: LeadSummaryInfoItem["kind"],
+  fullText: string,
+  url: string | null
+): LeadSummaryInfoItem {
+  return {
+    title,
+    kind,
+    description: truncateLeadSummaryDescription(fullText),
+    fullText,
+    url
+  };
+}
+
+function findLegacyLeadSummary(lines: string[]): string | null {
+  const leadSummary = lines.map((line) => /^Lead summary:\s*(.+)$/i.exec(line)?.[1]?.trim()).find(Boolean);
+  if (leadSummary) {
+    return leadSummary;
+  }
+
+  return lines.map((line) => /^Summary:\s*(.+)$/i.exec(line)?.[1]?.trim()).find(Boolean) ?? null;
+}
+
+function createLeadSourceMessage(lines: string[]): string | null {
+  const messageLines: string[] = [];
+  let isSourceMaterialSummaryBlock = false;
+  let isAudioTranscriptBody = false;
+
+  for (const line of lines) {
+    if (/^Source material summaries:\s*$/i.test(line)) {
+      isSourceMaterialSummaryBlock = true;
+      continue;
+    }
+
+    if (isSourceMaterialSummaryBlock) {
+      if (/^-\s+/.test(line)) {
+        continue;
+      }
+      isSourceMaterialSummaryBlock = false;
+    }
+
+    if (/^Audio transcript \d+/i.test(line)) {
+      isAudioTranscriptBody = true;
+      continue;
+    }
+
+    if (isAudioTranscriptBody) {
+      isAudioTranscriptBody = false;
+      if (!isLeadSummaryControlLine(line)) {
+        continue;
+      }
+    }
+
+    if (isLeadSummaryControlLine(line)) {
+      continue;
+    }
+
+    messageLines.push(line);
+  }
+
+  return messageLines.join("\n").trim() || null;
 }
 
 function parseLeadMaterialAnalysis(lines: string[]): {
@@ -400,7 +440,7 @@ function createAttachmentDescription(
 }
 
 function truncateLeadSummaryDescription(description: string): string {
-  return description.length > 120 ? `${description.slice(0, 117).trimEnd()}...` : description;
+  return description.length > 150 ? `${description.slice(0, 147).trimEnd().replace(/\.+$/u, "")}...` : description;
 }
 
 function createLeadSourceReferenceEntries(line: string): string[] {

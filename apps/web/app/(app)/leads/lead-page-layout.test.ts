@@ -42,6 +42,13 @@ describe("leads page layout", () => {
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeGreaterThan(-1);
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeLessThan(tableSource.indexOf("<LeadHistoryPanel"));
     expect(tableSource).toContain("Lead summary info");
+    expect(tableSource).toContain("Translate summary to Russian");
+    expect(tableSource).toContain("Translate summary to German");
+    expect(tableSource).toContain("Show full");
+    expect(tableSource).toContain("View file");
+    expect(tableSource).toContain("function ExpandableLeadText");
+    expect(tableSource).toContain("summaryItem.fullText ?? summaryItem.description");
+    expect(tableSource).not.toContain(">Download<");
     expect(tableSource).toContain("break-all");
     expect(tableSource).toContain("min-w-0 overflow-hidden");
     expect(tableSource).toContain("min-h-[44px]");
@@ -52,10 +59,13 @@ describe("leads page layout", () => {
   });
 
   it("renders collapsed lead card sections as visible mobile rows", () => {
-    expect(tableSource).toContain('className="h-screen max-h-screen overflow-auto p-4 pb-32 scroll-pb-32"');
+    expect(tableSource).toContain('className="fixed inset-0 z-50 w-screen overflow-hidden bg-white"');
+    expect(tableSource).toContain('className="box-border h-screen max-h-screen w-full max-w-full overflow-y-auto overflow-x-hidden p-4 pb-32 scroll-pb-32"');
+    expect(tableSource).toContain('className="sticky top-0 z-30 -mx-4 -mt-4 flex w-[calc(100%+2rem)] justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur"');
     expect(tableSource).not.toContain('className="grid h-screen max-h-screen gap-4 overflow-auto p-4 pb-32 scroll-pb-32"');
     expect(tableSource).toContain('className="mt-4 min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30"');
-    expect(tableSource).toContain('className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"');
+    expect(tableSource).toContain('className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-foreground"');
+    expect(tableSource).toContain('className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"');
     expect(tableSource).not.toContain("className={leadAccordionClassName}");
     expect(tableSource).not.toContain("className={leadAccordionSummaryClassName}");
   });
