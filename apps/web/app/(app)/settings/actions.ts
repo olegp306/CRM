@@ -3,17 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
+import type { ClearLeadTableActionState } from "./danger-zone-action-state";
 import { clearWorkspaceLeadTable } from "./danger-zone-store";
-
-export type ClearLeadTableActionState = {
-  status: "idle" | "success" | "error";
-  message: string;
-};
-
-export const initialClearLeadTableActionState: ClearLeadTableActionState = {
-  status: "idle",
-  message: ""
-};
 
 export async function clearLeadTableAction(
   _state: ClearLeadTableActionState,

@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.6`
+Current stable version: `0.3.7`
 
 Stable tag format:
 
@@ -21,6 +21,7 @@ v0.3.2
 v0.3.4
 v0.3.5
 v0.3.6
+v0.3.7
 ```
 
 ## Branch Workflow
@@ -147,6 +148,14 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.3.7
+
+Settings reset hotfix:
+
+- Fixed the Settings page crash caused by a non-async export in the lead reset server action module.
+- The protected lead reset dialog keeps its client-side state in a regular module while the server action file exports only async actions.
+- Verified the production build and `/settings` route load successfully after the fix.
 
 ## 0.3.6
 
