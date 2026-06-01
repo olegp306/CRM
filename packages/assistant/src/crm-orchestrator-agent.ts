@@ -49,7 +49,7 @@ Use when the user wants to change client data, add a comment, change status, upd
 
 Finds leads.
 
-Use when the user searches for a client, asks for client information, wants to open a lead card, or searches by name, phone, email, or company.
+Use when the user searches for a client, asks for client information, wants to open a lead card, asks for filtered lead lists, asks for last-month/current-month leads, or asks to export leads/clients as CSV/Excel.
 
 ### Reminder Agent
 
@@ -113,11 +113,11 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
   }
 
   if (isSearchLeadRequest(text)) {
-    if (!hasSearchablePersonSignal(text)) {
+    if (!hasSearchablePersonSignal(text) && !hasCollectionSearchSignal(text)) {
       return clarification("SEARCH_LEAD", "Lead search needs a name, phone, email, company, or lead id.", "Which client should I search for?");
     }
 
-    return ready("SEARCH_LEAD", "User wants to find a lead or client record.", "Lead Search Agent", "Passing the request to the lead search agent.");
+    return ready("SEARCH_LEAD", "User wants to search, filter, list, or export CRM records.", "Lead Search Agent", "Passing the request to the lead search agent.");
   }
 
   if (leadId || isUpdateLeadRequest(text)) {
@@ -177,7 +177,13 @@ function isCreateLeadRequest(text: string): boolean {
 }
 
 function isSearchLeadRequest(text: string): boolean {
-  return /\b(find|search|look up|show|open)\b.*\b(lead|client|customer|contact|phone|email)\b/i.test(text);
+  return (
+    /\b(find|search|look up|show|open|list|filter|get|send|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts|phone|email|csv|excel|xlsx)\b/i.test(
+      text
+    ) ||
+    /\b(csv|excel|xlsx|spreadsheet|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
+    /(покажи|найди|выведи|дай|скинь|экспорт|экспортируй|фильтр|отфильтруй).*(лид|лиды|клиент|клиенты|заявк)/i.test(text)
+  );
 }
 
 function hasContactSignal(text: string): boolean {
@@ -186,6 +192,16 @@ function hasContactSignal(text: string): boolean {
 
 function hasSearchablePersonSignal(text: string): boolean {
   return hasContactSignal(text) || /\bL-\d{4}-\d+\b/i.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(text);
+}
+
+function hasCollectionSearchSignal(text: string): boolean {
+  return (
+    /\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
+    /\b(csv|excel|xlsx|spreadsheet|export)\b/i.test(text) ||
+    /\b(last|this|current|previous)\s+(month|week|year)\b/i.test(text) ||
+    /\b(hot|warm|cold|new|needs_data|sent|signed)\b/i.test(text) ||
+    /(лид|лиды|клиент|клиенты|заявк|прошл\w*\s+месяц|текущ\w*\s+месяц|тепл\w*|горяч\w*|холодн\w*)/i.test(text)
+  );
 }
 
 function hasMultipleLeadCreationSignals(text: string): boolean {

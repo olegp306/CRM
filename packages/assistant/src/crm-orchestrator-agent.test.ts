@@ -111,6 +111,33 @@ describe("CRM orchestrator agent", () => {
     });
   });
 
+  it("routes table export requests through the lead search agent for later search/filter execution", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Send me CSV export of leads from last month"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SEARCH_LEAD",
+      action: "Lead Search Agent",
+      status: "ready"
+    });
+    expect(result.reasoning).toContain("search");
+  });
+
+  it("routes broad filtered lead list requests to the lead search agent without asking for a person", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Покажи всех warm лидов за прошлый месяц"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SEARCH_LEAD",
+      action: "Lead Search Agent",
+      status: "ready"
+    });
+  });
+
   it("asks for target entity before attaching a file without lead context", () => {
     const result = routeCrmOrchestratorRequest({
       ...baseMessage,

@@ -20,15 +20,29 @@ export function createAssistantChannelResponse(
   options: { lead?: LeadChatSnapshot | null } = {}
 ): AssistantChannelResponse {
   const intent = classifyIntent(message.content);
-  const capabilityResponse = createCapabilityResponse(message);
 
-  if (capabilityResponse) {
-    return capabilityResponse;
+  if (isHelpMessage(message.content, intent)) {
+    return {
+      intent: "help",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: createSharedCapabilityMessage(message.channel)
+    };
   }
 
-  const tableExportResponse = createTableExportResponse(message);
-  if (tableExportResponse) {
-    return tableExportResponse;
+  if (message.channel !== "telegram") {
+    const capabilityResponse = createCapabilityResponse(message);
+
+    if (capabilityResponse) {
+      return capabilityResponse;
+    }
+
+    const tableExportResponse = createTableExportResponse(message);
+    if (tableExportResponse) {
+      return tableExportResponse;
+    }
   }
 
   const reminderResponse = createLeadReminderResponse(message);
@@ -51,18 +65,7 @@ export function createAssistantChannelResponse(
     return noteResponse;
   }
 
-  if (isHelpMessage(message.content, intent)) {
-    return {
-      intent: "help",
-      shouldPersistFeedback: false,
-      feedbackType: undefined,
-      buttons: [],
-      normalizedActions: [],
-      text: createSharedCapabilityMessage(message.channel)
-    };
-  }
-
-  if (isPersistedFeedbackIntent(intent)) {
+  if (message.channel !== "telegram" && isPersistedFeedbackIntent(intent)) {
     return {
       intent,
       shouldPersistFeedback: true,
@@ -115,6 +118,10 @@ export function createAssistantChannelResponse(
 
   if (leadChatResponse) {
     return leadChatResponse;
+  }
+
+  if (message.channel === "telegram") {
+    return createTelegramLimitedCrmActionsResponse();
   }
 
   const responseIntent = intent === "permission_blocked" ? "other" : intent;

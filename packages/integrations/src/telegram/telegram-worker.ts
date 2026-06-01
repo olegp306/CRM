@@ -1534,10 +1534,22 @@ function createTelegramGeneralAssistantResponse(
     return null;
   }
 
+  if (!replyTo && isDisabledTelegramEarlyAssistantRequest(message.text)) {
+    return createTelegramLimitedActionsResponse();
+  }
+
+  if (!replyTo && isTelegramSearchOrFilterRequest(message.text)) {
+    return createTelegramLimitedActionsResponse();
+  }
+
   const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message, replyTo));
 
   if (response.intent === "capability_request" || response.shouldPersistFeedback || hasDownloadCsvAction(response)) {
     return createTelegramLimitedActionsResponse();
+  }
+
+  if (isGenericTelegramLimitedActionsResponse(response)) {
+    return null;
   }
 
   if (
@@ -1555,13 +1567,38 @@ function hasDownloadCsvAction(response: { buttons?: Array<{ action?: string }> }
   return response.buttons?.some((button) => button.action === "download_csv") ?? false;
 }
 
+function isGenericTelegramLimitedActionsResponse(response: { text: string; buttons?: Array<unknown> }): boolean {
+  return response.text === createTelegramLimitedActionsText() && (response.buttons?.length ?? 0) === 0;
+}
+
 function shouldPreferTelegramLeadIntake(
   message: Pick<AllowedTelegramMessageBatch, "text" | "sourceMessageIds" | "attachments">
 ): boolean {
   return (
     (message.attachments?.length ?? 0) > 0 ||
-    message.sourceMessageIds.length > 1
+    message.sourceMessageIds.length > 1 ||
+    (looksLikeTelegramLeadSourceMaterial(message.text) && !isDisabledTelegramEarlyAssistantRequest(message.text) && !isTelegramSearchOrFilterRequest(message.text))
   );
+}
+
+function isDisabledTelegramEarlyAssistantRequest(text: string): boolean {
+  return isTelegramThemeCapabilityRequest(text) || isTelegramTableExportRequest(text);
+}
+
+function isTelegramThemeCapabilityRequest(text: string): boolean {
+  return (
+    /\b(theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(text) ||
+    /(тем[ауы]|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(text) ||
+    /(С‚РµРјР°|С‚РµРјРЅ\w*|РЅРѕС‡РЅ\w*\s+СЂРµР¶РёРј|РІРµС‡РµСЂРЅ\w*\s+С‚РµРј|С†РІРµС‚РѕРІ\w*\s+СЃС…РµРј|РѕС„РѕСЂРјР»РµРЅ|РІРЅРµС€РЅ\w*\s+РІРёРґ)/i.test(text)
+  );
+}
+
+function isTelegramTableExportRequest(text: string): boolean {
+  return /\b(csv|excel|xlsx|spreadsheet|export)\b/i.test(text) || /(csv|excel|экспорт|скачай|скинь|таблиц)/i.test(text);
+}
+
+function isTelegramSearchOrFilterRequest(text: string): boolean {
+  return /\b(find|search|look up|show|open|list|filter|get)\b/i.test(text) || /(покажи|найди|выведи|дай|фильтр|отфильтруй)/i.test(text);
 }
 
 async function createTelegramCrmOrchestratorFallbackResponse(
@@ -1640,6 +1677,10 @@ function shouldUseCrmOrchestratorFallback(
 
   if ((message.attachments?.length ?? 0) > 0) {
     return false;
+  }
+
+  if (isTelegramSearchOrFilterRequest(message.text)) {
+    return true;
   }
 
   return !looksLikeTelegramLeadSourceMaterial(message.text);
