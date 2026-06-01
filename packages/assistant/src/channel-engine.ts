@@ -13,7 +13,7 @@ import {
   isLeadInteractionNoteCommand,
   isLeadNaturalContextNote
 } from "./lead-interaction-note";
-import { createReminderHistorySummary, isReminderRequest } from "./lead-reminder";
+import { createReminderHistorySummary, createReminderUserResponse, isReminderRequest } from "./lead-reminder";
 
 export function createAssistantChannelResponse(
   message: AssistantChannelMessage,
@@ -266,7 +266,7 @@ function createLeadReminderResponse(message: AssistantChannelMessage): Assistant
     feedbackType: undefined,
     buttons: createLeadCrmButtons(leadId),
     normalizedActions: ["open_crm"],
-    text: `Saved this reminder to lead ${leadId} history: ${createReminderHistorySummary(message.content)}`
+    text: createReminderUserResponse(leadId, message.content, { now: new Date(message.receivedAt) })
   };
 }
 

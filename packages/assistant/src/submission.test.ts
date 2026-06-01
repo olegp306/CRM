@@ -275,7 +275,8 @@ describe("assistant submission orchestration", () => {
 
     expect(result.actionPreview).toBeNull();
     expect(result.confirmationStatus).toBeNull();
-    expect(result.response).toContain("Saved this reminder to lead L-2026-001 history");
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
     expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
@@ -289,7 +290,8 @@ describe("assistant submission orchestration", () => {
 
     expect(result.actionPreview).toBeNull();
     expect(result.confirmationStatus).toBeNull();
-    expect(result.response).toContain("Saved this reminder to lead L-2026-001 history");
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
     expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
@@ -303,7 +305,8 @@ describe("assistant submission orchestration", () => {
 
     expect(result.actionPreview).toBeNull();
     expect(result.actionPreview?.actionType).not.toBe("create_lead");
-    expect(result.response).toContain("Saved this reminder to lead L-2026-001 history");
+    expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
+    expect(result.response).toContain("09:00");
   });
 
   it("keeps project task updates out of generic assistant write actions", () => {

@@ -155,6 +155,47 @@ export async function updateAssistantLead(input: UpdateLeadFromAssistantInput): 
   return getAssistantLeadStore().update(input);
 }
 
+export async function scheduleAssistantLeadReminder(input: {
+  workspaceId: string;
+  leadId: string;
+  followup1Date: Date;
+  followupStatus: "planned";
+}): Promise<void> {
+  const runtime = selectAssistantLeadStoreRuntime({
+    databaseUrl: process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    memoryStore: "memory" as const,
+    prismaStore: "prisma" as const
+  });
+
+  if (runtime === "prisma") {
+    await prisma.lead.update({
+      where: {
+        workspaceId_leadId: {
+          workspaceId: input.workspaceId,
+          leadId: input.leadId
+        }
+      },
+      data: {
+        followup1Date: input.followup1Date,
+        followupStatus: input.followupStatus
+      }
+    });
+    return;
+  }
+
+  const lead = getStore().find((item) => item.workspaceId === input.workspaceId && item.leadId === input.leadId) as
+    | (CreatedLeadRecord & { followup1Date?: Date; followupStatus?: string | null })
+    | undefined;
+
+  if (!lead) {
+    throw new Error(`Lead ${input.leadId} was not found`);
+  }
+
+  lead.followup1Date = input.followup1Date;
+  lead.followupStatus = input.followupStatus;
+}
+
 export async function markAssistantLeadKpSent(input: MarkKpSentFromAssistantInput): Promise<MarkedKpSentLeadRecord> {
   return getAssistantLeadStore().markKpSent(input);
 }

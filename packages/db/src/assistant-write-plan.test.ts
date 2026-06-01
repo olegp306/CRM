@@ -61,7 +61,7 @@ describe("assistant Prisma write plan", () => {
       status: "new",
       priority: "normal",
       moduleContext: "leads",
-      appVersion: "0.3.0"
+      appVersion: "0.3.2"
     });
   });
 

@@ -2900,7 +2900,7 @@ describe("telegram worker", () => {
     });
   });
 
-  it("records a replied reminder as lead history without creating a gift reminder lead", async () => {
+  it("records a replied reminder as a CRM follow-up and history without creating a gift reminder lead", async () => {
     const auditEvents: unknown[] = [];
     const client = {
       lead: {
@@ -2921,7 +2921,7 @@ describe("telegram worker", () => {
           return [];
         }),
         create: vi.fn(),
-        update: vi.fn()
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
       }
     };
     const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
@@ -2964,7 +2964,13 @@ describe("telegram worker", () => {
 
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
-    expect(client.lead.update).not.toHaveBeenCalled();
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-2" },
+      data: {
+        followup1Date: new Date("2026-05-21T09:00:00.000Z"),
+        followupStatus: "planned"
+      }
+    });
     expect(auditEvents).toContainEqual(
       expect.objectContaining({
         action: "assistant.channel.event",
@@ -2973,14 +2979,15 @@ describe("telegram worker", () => {
           channel: "telegram",
           leadId: "L-2026-002",
           messageId: "904",
-          summary: "Reminder requested: Напомни завтра посмотреть LinkedIn у него"
+          summary: "Reminder scheduled: посмотреть LinkedIn у него. Due: 2026-05-21 09:00."
         })
       })
     );
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
     expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
-    expect(sendBody.text).toContain("History note: <b>Reminder requested:");
+    expect(sendBody.text).toContain("Reminder scheduled");
+    expect(sendBody.text).toContain("2026-05-21 09:00");
     expect(sendBody.text).not.toContain("Saved this reminder");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",

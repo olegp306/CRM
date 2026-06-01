@@ -9,6 +9,7 @@ import {
   createLeadNaturalContextSummary,
   createMessageReceivedEvent,
   createOpenAiCrmOrchestrator,
+  createLeadReminderDraft,
   createReminderHistorySummary,
   decideIncomingLeadMatch,
   decideLeadFlow,
@@ -327,8 +328,33 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       const summary = isExplicitNote
         ? createLeadInteractionNoteSummary(message.text)
         : isReminder
-          ? createReminderHistorySummary(message.text)
+          ? createReminderHistorySummary(message.text, { now: new Date(message.receivedAt) })
           : createLeadNaturalContextSummary(message.text);
+      const reminderDraft = isReminder ? createLeadReminderDraft(message.text, { now: new Date(message.receivedAt) }) : null;
+
+      if (reminderDraft?.calendarStatus === "needs_date") {
+        await sendTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: `I can create a reminder for lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I need a date or time. For example: "remind me tomorrow to call the client".`,
+          parseMode: "HTML",
+          replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
+          fetchImpl
+        });
+        processed += 1;
+        continue;
+      }
+
+      if (reminderDraft?.dueAt && client.lead.update && repliedLead.id) {
+        await client.lead.update({
+          where: { id: repliedLead.id },
+          data: {
+            followup1Date: reminderDraft.dueAt,
+            followupStatus: "planned"
+          }
+        });
+      }
+
       await saveTelegramChannelEvent(
         config,
         message,

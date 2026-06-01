@@ -36,6 +36,8 @@ import {
   createPlatformReleaseReadiness,
   createPlatformReleaseTriage,
   createPlatformReleaseWorkflow,
+  createLeadReminderDraft,
+  isReminderRequest,
   type AuditReviewFilters,
   type AssistantChannelAttachment,
   type AssistantContext,
@@ -49,6 +51,7 @@ import {
   createAssistantLead,
   listAssistantCreatedLeads,
   markAssistantLeadKpSent,
+  scheduleAssistantLeadReminder,
   undoAssistantLeadKpSent,
   updateAssistantLead
 } from "./lead-execution-store";
@@ -131,6 +134,18 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
   const repository = getAssistantRepository();
 
   await repository.save(persistenceDraft);
+  if (selectedLeadId && isReminderRequest(input.content)) {
+    const reminderDraft = createLeadReminderDraft(input.content);
+    if (reminderDraft.dueAt) {
+      await scheduleAssistantLeadReminder({
+        workspaceId: input.context.workspaceId,
+        leadId: selectedLeadId,
+        followup1Date: reminderDraft.dueAt,
+        followupStatus: "planned"
+      });
+      revalidatePath("/leads");
+    }
+  }
   const [threads, messages, feedback, actions] = await Promise.all([
     repository.listThreads(input.context.workspaceId),
     repository.listMessages(input.threadId),
