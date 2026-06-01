@@ -20,6 +20,29 @@ describe("lead reminder agent", () => {
     expect(draft.dueAt?.toISOString()).toBe("2026-05-27T09:00:00.000Z");
   });
 
+  it("extracts explicit time from a dated Russian reminder", () => {
+    const draft = createLeadReminderDraft("Напомни 10 июня в 15:30 позвонить клиенту", {
+      now: new Date("2026-05-26T08:15:00.000Z")
+    });
+
+    expect(draft.summary).toBe("позвонить клиенту");
+    expect(draft.dueAt?.toISOString()).toBe("2026-06-10T15:30:00.000Z");
+  });
+
+  it("extracts relative day offsets and next week reminders", () => {
+    expect(
+      createLeadReminderDraft("Напомни через 3 дня отправить письмо", {
+        now: new Date("2026-05-26T08:15:00.000Z")
+      }).dueAt?.toISOString()
+    ).toBe("2026-05-29T09:00:00.000Z");
+
+    expect(
+      createLeadReminderDraft("Schedule next week to call the client", {
+        now: new Date("2026-05-26T08:15:00.000Z")
+      }).dueAt?.toISOString()
+    ).toBe("2026-06-02T09:00:00.000Z");
+  });
+
   it("extracts yearly reminder context without pretending it is an ordinary one-off date", () => {
     const draft = createLeadReminderDraft("Запомни: каждый год 10 июня поздравить клиента с днем рождения", {
       now: new Date("2026-05-26T08:15:00.000Z")

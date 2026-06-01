@@ -2988,6 +2988,7 @@ describe("telegram worker", () => {
     expect(sendBody.text).toContain("<b>L-2026-002</b> updated in CRM.");
     expect(sendBody.text).toContain("Reminder scheduled");
     expect(sendBody.text).toContain("2026-05-21 09:00");
+    expect(sendBody.text).toContain("Google Calendar sync is not connected yet");
     expect(sendBody.text).not.toContain("Saved this reminder");
     expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",

@@ -277,6 +277,7 @@ describe("assistant submission orchestration", () => {
     expect(result.confirmationStatus).toBeNull();
     expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
     expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
     expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
@@ -292,6 +293,7 @@ describe("assistant submission orchestration", () => {
     expect(result.confirmationStatus).toBeNull();
     expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
     expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
     expect(result.responseButtons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-001" }]);
   });
 
@@ -307,6 +309,7 @@ describe("assistant submission orchestration", () => {
     expect(result.actionPreview?.actionType).not.toBe("create_lead");
     expect(result.response).toContain("Scheduled this reminder on lead L-2026-001");
     expect(result.response).toContain("09:00");
+    expect(result.response).toContain("Google Calendar sync is not connected yet");
   });
 
   it("keeps project task updates out of generic assistant write actions", () => {

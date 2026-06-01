@@ -34,6 +34,7 @@ import type { WorkspaceAiSettingRecord, WorkspaceAiSettingStore } from "@app/db"
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
+import { syncEventToGoogleCalendar, type CalendarSyncResult } from "../google/calendar";
 import {
   createLeadDraftFromTelegramMessage,
   createOpenAiLeadParserClient,
@@ -354,6 +355,16 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           }
         });
       }
+      const calendarSync =
+        reminderDraft?.dueAt
+          ? await syncEventToGoogleCalendar({
+              workspaceId: config.workspaceId,
+              title: `Follow up ${repliedLead.leadId}`,
+              startsAt: reminderDraft.dueAt,
+              endsAt: new Date(reminderDraft.dueAt.getTime() + 30 * 60 * 1000),
+              description: summary
+            })
+          : null;
 
       await saveTelegramChannelEvent(
         config,
@@ -370,7 +381,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       await sendTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramLeadHistoryUpdatedMessage(repliedLead.leadId, summary),
+        text: createTelegramLeadHistoryUpdatedMessage(repliedLead.leadId, summary, calendarSync),
         parseMode: "HTML",
         replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
         fetchImpl
@@ -995,8 +1006,16 @@ function createTelegramInteractionSummary(messageText: string, changedFields: st
   return "Telegram interaction saved.";
 }
 
-function createTelegramLeadHistoryUpdatedMessage(leadId: string, summary: string): string {
-  return [`<b>${escapeHtml(leadId)}</b> updated in CRM.`, "", `History note: <b>${escapeHtml(summary)}</b>`].join("\n");
+function createTelegramLeadHistoryUpdatedMessage(leadId: string, summary: string, calendarSync?: CalendarSyncResult | null): string {
+  return [
+    `<b>${escapeHtml(leadId)}</b> updated in CRM.`,
+    "",
+    `History note: <b>${escapeHtml(summary)}</b>`,
+    calendarSync?.status === "synced" ? `Google Calendar synced: <b>${escapeHtml(calendarSync.googleEventId)}</b>` : "",
+    calendarSync?.status === "skipped" ? "Google Calendar sync is not connected yet." : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function createTelegramExistingLeadClarificationMessage(leadId: string, matchedFields: string[]): string {

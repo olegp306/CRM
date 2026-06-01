@@ -54,7 +54,7 @@ export function createReminderUserResponse(leadId: string, content: string, opti
   }
 
   const recurrence = draft.recurrence === "yearly" ? " It is marked as yearly." : "";
-  return `Scheduled this reminder on lead ${leadId}: ${draft.summary}. Due: ${formatReminderDateTime(draft.dueAt)}.${recurrence} I also saved it to the lead history.`;
+  return `Scheduled this reminder on lead ${leadId}: ${draft.summary}. Due: ${formatReminderDateTime(draft.dueAt)}.${recurrence} I also saved it to the lead history. Google Calendar sync is not connected yet.`;
 }
 
 export function formatReminderDateTime(date: Date): string {
@@ -62,22 +62,34 @@ export function formatReminderDateTime(date: Date): string {
 }
 
 function extractReminderDueDate(text: string, now: Date): { date: Date | null; label: string | null; matchedText: string | null } {
+  const time = extractReminderTime(text);
+
+  const relativeDays = /(?:через\s+(\d{1,2})\s+(?:день|дня|дней)|\bin\s+(\d{1,2})\s+days?\b)/i.exec(text);
+  if (relativeDays) {
+    const days = Number(relativeDays[1] ?? relativeDays[2]);
+    return { date: createDateAtTime(addDays(now, days), time.hour, time.minute), label: relativeDays[0], matchedText: relativeDays[0] };
+  }
+
+  if (/\b(next week)\b/i.test(text) || /(?:через\s+неделю|на\s+следующей\s+неделе)/i.test(text)) {
+    return { date: createDateAtTime(addDays(now, 7), time.hour, time.minute), label: "next week", matchedText: RegExp.lastMatch || "next week" };
+  }
+
   if (/послезавтра/i.test(text)) {
-    return { date: createDateAtHour(addDays(now, 2), 9), label: "day after tomorrow", matchedText: RegExp.lastMatch || "послезавтра" };
+    return { date: createDateAtTime(addDays(now, 2), time.hour, time.minute), label: "day after tomorrow", matchedText: RegExp.lastMatch || "послезавтра" };
   }
 
   if (/\b(tomorrow)\b/i.test(text) || /завтра/i.test(text)) {
-    return { date: createDateAtHour(addDays(now, 1), 9), label: "tomorrow", matchedText: RegExp.lastMatch || "tomorrow" };
+    return { date: createDateAtTime(addDays(now, 1), time.hour, time.minute), label: "tomorrow", matchedText: RegExp.lastMatch || "tomorrow" };
   }
 
   if (/\b(today)\b/i.test(text) || /сегодня/i.test(text)) {
-    return { date: createDateAtHour(now, 9), label: "today", matchedText: RegExp.lastMatch || "today" };
+    return { date: createDateAtTime(now, time.hour, time.minute), label: "today", matchedText: RegExp.lastMatch || "today" };
   }
 
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(text);
   if (iso) {
     return {
-      date: createUtcDate(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 9),
+      date: createUtcDate(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), time.hour, time.minute),
       label: iso[0],
       matchedText: iso[0]
     };
@@ -87,7 +99,7 @@ function extractReminderDueDate(text: string, now: Date): { date: Date | null; l
   if (dotted) {
     const year = dotted[3] ? Number(dotted[3]) : resolveMonthDayYear(now, Number(dotted[2]) - 1, Number(dotted[1]));
     return {
-      date: createUtcDate(year, Number(dotted[2]) - 1, Number(dotted[1]), 9),
+      date: createUtcDate(year, Number(dotted[2]) - 1, Number(dotted[1]), time.hour, time.minute),
       label: dotted[0],
       matchedText: dotted[0]
     };
@@ -100,7 +112,7 @@ function extractReminderDueDate(text: string, now: Date): { date: Date | null; l
     const monthIndex = getMonthIndex(monthName[2]);
     const day = Number(monthName[1]);
     return {
-      date: createUtcDate(resolveMonthDayYear(now, monthIndex, day), monthIndex, day, 9),
+      date: createUtcDate(resolveMonthDayYear(now, monthIndex, day), monthIndex, day, time.hour, time.minute),
       label: monthName[0],
       matchedText: monthName[0]
     };
@@ -124,6 +136,8 @@ function normalizeReminderSummary(text: string, matchedDueText: string | null): 
 
   summary = summary
     .replace(/\b(?:today|tomorrow)\b|сегодня|завтра|послезавтра/gi, "")
+    .replace(/(?:через\s+\d{1,2}\s+(?:день|дня|дней)|\bin\s+\d{1,2}\s+days?\b|\bnext week\b|через\s+неделю|на\s+следующей\s+неделе)/gi, "")
+    .replace(/(?:\b(?:at)\s*|в\s*)?\d{1,2}:\d{2}\b|(?:в|at)\s+\d{1,2}(?:\s*(?:часов|часа|am|pm))?/gi, "")
     .replace(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\.\d{1,2}(?:\.\d{4})?\b/g, "")
     .replace(/(?:\d{1,2})\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/gi, "")
     .replace(/^\s*(?:to|что|о том,? что|про|about)\s+/i, "")
@@ -144,11 +158,41 @@ function addDays(date: Date, days: number): Date {
 }
 
 function createDateAtHour(date: Date, hour: number): Date {
-  return createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hour);
+  return createDateAtTime(date, hour, 0);
 }
 
-function createUtcDate(year: number, month: number, day: number, hour: number): Date {
-  return new Date(Date.UTC(year, month, day, hour, 0, 0, 0));
+function createDateAtTime(date: Date, hour: number, minute: number): Date {
+  return createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hour, minute);
+}
+
+function createUtcDate(year: number, month: number, day: number, hour: number, minute = 0): Date {
+  return new Date(Date.UTC(year, month, day, hour, minute, 0, 0));
+}
+
+function extractReminderTime(text: string): { hour: number; minute: number } {
+  const colon = /(?:\b(?:at|в)\s*)?(\d{1,2}):(\d{2})\b/i.exec(text);
+  if (colon) {
+    return { hour: normalizeHour(Number(colon[1]), text), minute: Number(colon[2]) };
+  }
+
+  const hourOnly = /(?:\b(?:at|в)\s+)(\d{1,2})(?:\s*(am|pm|часов|часа))?/i.exec(text);
+  if (hourOnly) {
+    return { hour: normalizeHour(Number(hourOnly[1]), hourOnly[2] ?? text), minute: 0 };
+  }
+
+  return { hour: 9, minute: 0 };
+}
+
+function normalizeHour(hour: number, marker: string): number {
+  if (/\bpm\b/i.test(marker) && hour < 12) {
+    return hour + 12;
+  }
+
+  if (/\bam\b/i.test(marker) && hour === 12) {
+    return 0;
+  }
+
+  return Math.min(Math.max(hour, 0), 23);
 }
 
 function resolveMonthDayYear(now: Date, month: number, day: number): number {
