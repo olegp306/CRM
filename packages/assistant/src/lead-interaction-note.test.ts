@@ -34,6 +34,13 @@ describe("lead interaction note commands", () => {
     );
   });
 
+  it("detects Russian remember-about-lead commands and removes the lead id from the note summary", () => {
+    const message = "Запомни про лида L-2026-002: вчера встретились за кофе, клиент любит джаз.";
+
+    expect(isLeadInteractionNoteCommand(message)).toBe(true);
+    expect(createLeadInteractionNoteSummary(message)).toBe("вчера встретились за кофе, клиент любит джаз.");
+  });
+
   it("does not treat general questions as lead notes", () => {
     expect(
       isLeadInteractionNoteCommand(
