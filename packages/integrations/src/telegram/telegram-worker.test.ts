@@ -4125,6 +4125,76 @@ describe("telegram worker", () => {
     expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("I could not parse this lead yet");
   });
 
+  it("answers Telegram with a generic server error when a lead is created but processing fails before confirmation", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Fam. Schneider",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        bgfM2: 160,
+        projectAddress: "Chiemseeufer 7",
+        email: "fam@example.com",
+        phone: "+49 170 123456",
+        missingData: [],
+        summary: "Standard EFH lead",
+        suggestedReply: "Danke."
+      }))
+    };
+    const telegramDraftStore = {
+      getActive: vi.fn(async () => null),
+      getByTelegramMessage: vi.fn(async () => null),
+      save: vi.fn(async () => undefined),
+      clear: vi.fn(async () => {
+        throw new Error("Database connection lost while clearing Telegram draft.");
+      })
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 78,
+            message: {
+              message_id: 708,
+              date: 1780254616,
+              chat: { id: 12345 },
+              text: "Need EFH offer"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 78 });
+
+    expect(client.lead.create).toHaveBeenCalledOnce();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1]?.body));
+    expect(sendBody.text).toBe("Server error occurred. Please try again later.");
+    expect(sendBody.text).not.toContain("Database connection lost");
+  });
+
   it("runs worker iterations in loop mode with injectable sleep", async () => {
     const runs: number[] = [];
     const sleeps: number[] = [];

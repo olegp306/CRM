@@ -262,6 +262,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   }
 
   for (const message of messageBatches) {
+    let telegramReplySent = false;
+    const sendWorkerTelegramMessage: typeof sendTelegramMessage = async (input) => {
+      const sent = await sendTelegramMessage(input);
+      telegramReplySent = true;
+      return sent;
+    };
+
+    try {
     const leadFlowDecision = decideLeadFlow(createTelegramAssistantChannelMessage(config.workspaceId, message));
 
     if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command") {
@@ -272,7 +280,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         sourceMessageIds: message.sourceMessageIds,
         draft: createEmptyTelegramLeadDraft(message)
       });
-      const sent = await sendTelegramMessage({
+      const sent = await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramNewLeadStartedMessage(session),
@@ -284,7 +292,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (isTelegramStartRequest(message)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/start"),
@@ -295,7 +303,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (isTelegramHelpRequest(message)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/help"),
@@ -340,7 +348,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       const reminderDraft = isReminder ? createLeadReminderDraft(message.text, { now: new Date(message.receivedAt) }) : null;
 
       if (reminderDraft?.calendarStatus === "needs_date") {
-        await sendTelegramMessage({
+        await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
           text: `I can create a reminder for lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I need a date or time. For example: "remind me tomorrow to call the client".`,
@@ -384,7 +392,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           summary
         })
       );
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLeadHistoryUpdatedMessage(repliedLead.leadId, summary, calendarSync),
@@ -398,7 +406,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     const searchFilterResponse = await createTelegramSearchFilterResponse(config, client, message);
     if (searchFilterResponse) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: searchFilterResponse.text,
@@ -419,7 +427,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         !repliedLead && generalAssistantResponse.intent === "crm_action" && isReminderRequest(message.text)
           ? createTelegramLimitedActionsText()
           : generalAssistantResponse.text;
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: responseText,
@@ -436,7 +444,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
     );
     if (crmOrchestratorFallbackResponse) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: crmOrchestratorFallbackResponse.text,
@@ -448,7 +456,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (repliedLead && isTelegramKpSentCommand(message) && !isTelegramKpSentUndoCommand(message)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLimitedActionsText(repliedLead.leadId),
@@ -460,7 +468,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (repliedLead && isTelegramKpSentUndoCommand(message)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLimitedActionsText(repliedLead.leadId),
@@ -478,7 +486,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           sourceMessageId: String(message.replyToMessageId ?? message.messageId)
         })
       );
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: response.text,
@@ -508,7 +516,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     });
 
     if (exactSourceMatch.kind === "exact_duplicate") {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: `Lead <b>${escapeHtml(exactSourceMatch.leadId)}</b> already exists. Open it in CRM to check the saved data.`,
@@ -522,7 +530,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     const hydratedMessage = await hydrateTelegramLeadMessage(message, config);
     if (hasAudioTranscriptionFailure(hydratedMessage)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramAudioTranscriptionFailureMessage(),
@@ -557,7 +565,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLeadParseFailureMessage(),
@@ -568,7 +576,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (!repliedLead && shouldAskClarifyingQuestionForAudio(draft, hydratedMessage)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramAmbiguousAudioClarificationMessage(),
@@ -580,7 +588,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     if (repliedLead) {
       if (!client.lead.update || !repliedLead.id) {
-        await sendTelegramMessage({
+        await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
           text: `I found lead <b>${escapeHtml(repliedLead.leadId)}</b>, but I cannot update it from this worker yet.`,
@@ -592,7 +600,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }
 
       if (isPossibleDifferentLead(createTelegramLeadSessionFromExistingLead(repliedLead, message), draft)) {
-        await sendTelegramMessage({
+        await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
           text: createTelegramLeadUpdateClarificationMessage(repliedLead, draft),
@@ -631,7 +639,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           summary: createTelegramInteractionSummary(message.text, createDetectedTelegramLeadFields(draft))
         })
       );
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft),
@@ -675,7 +683,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       if (persistedLeadMatch.kind === "likely_update") {
         const lead = existingIds.find((item) => item.leadId === persistedLeadMatch.leadId);
         if (!client.lead.update || !lead?.id) {
-          await sendTelegramMessage({
+          await sendWorkerTelegramMessage({
             botToken: config.botToken,
             chatId: message.chatId,
             text: `I found lead <b>${escapeHtml(persistedLeadMatch.leadId)}</b>, but I cannot update it from this worker yet.`,
@@ -715,7 +723,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
             summary: createTelegramInteractionSummary(message.text, fieldsChanged)
           })
         );
-        await sendTelegramMessage({
+        await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
           text: createTelegramLeadUpdatedMessage(lead.leadId, draft),
@@ -728,7 +736,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }
 
       if (persistedLeadMatch.kind === "needs_clarification") {
-        await sendTelegramMessage({
+        await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
           text: createTelegramExistingLeadClarificationMessage(persistedLeadMatch.leadId, persistedLeadMatch.matchedFields),
@@ -742,7 +750,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
 
     if (activeSession && !replySession && isPossibleDifferentLead(activeSession, draft)) {
-      await sendTelegramMessage({
+      await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramPossibleDifferentLeadMessage(activeSession, draft),
@@ -786,7 +794,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
             }
           })
         : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
-      const sent = await sendTelegramMessage({
+      const sent = await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLeadUpdatedMessage(updated.leadId, { ...session.draft, missingData: templateAwareMissingData }),
@@ -839,7 +847,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           missingData: templateAwareMissingData
         })
       );
-      const sent = await sendTelegramMessage({
+      const sent = await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramLeadConfirmation({
@@ -957,7 +965,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     }
     await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
 
-    const finalMessage = await sendTelegramMessage({
+    const finalMessage = await sendWorkerTelegramMessage({
       botToken: config.botToken,
       chatId: message.chatId,
       text: createTelegramLeadConfirmation({
@@ -986,6 +994,17 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       });
     }
     processed += 1;
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : error);
+      if (!telegramReplySent) {
+        await sendTelegramServerErrorFallbackMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          fetchImpl
+        });
+      }
+      skipped += message.sourceMessageIds.length;
+    }
   }
 
   return {
@@ -1010,6 +1029,23 @@ function createTelegramCrmOnlyReplyMarkup(crmBaseUrl: string | undefined, leadId
       ]
     ]
   };
+}
+
+async function sendTelegramServerErrorFallbackMessage(input: {
+  botToken: string;
+  chatId: string;
+  fetchImpl: typeof fetch;
+}): Promise<void> {
+  try {
+    await sendTelegramMessage({
+      botToken: input.botToken,
+      chatId: input.chatId,
+      text: "Server error occurred. Please try again later.",
+      fetchImpl: input.fetchImpl
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
 }
 
 function createTelegramInteractionSummary(messageText: string, changedFields: string[]): string {
