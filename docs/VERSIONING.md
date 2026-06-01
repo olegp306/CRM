@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.7`
+Current stable version: `0.3.8`
 
 Stable tag format:
 
@@ -22,6 +22,7 @@ v0.3.4
 v0.3.5
 v0.3.6
 v0.3.7
+v0.3.8
 ```
 
 ## Branch Workflow
@@ -148,6 +149,14 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.3.8
+
+Telegram lead confirmation polish release:
+
+- Telegram lead creation confirmations no longer repeat the lead id in the field list.
+- The lead summary now appears directly under the pricing/missing-data block as plain text without a `Summary:` label.
+- Confirmation fields remain focused on status, KP readiness/generation, request details, standard flag, and missing KP data.
 
 ## 0.3.7
 
