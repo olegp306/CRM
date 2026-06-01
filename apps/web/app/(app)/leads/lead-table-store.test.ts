@@ -149,29 +149,33 @@ describe("lead table model", () => {
       )
     ).toEqual([
       {
-        title: "Telegram message",
+        title: "Lead summary",
+        kind: "summary",
+        description: "Ready Neubau EFH lead",
+        fullText: "Ready Neubau EFH lead",
+        url: null
+      },
+      {
+        title: "Message",
         kind: "message",
-        description: "telegram:-100777:42",
-        url: "https://t.me/c/777/42"
+        description: "Need EFH offer",
+        fullText: "Need EFH offer",
+        url: null
       },
       {
         title: "client-brief.mp3",
         kind: "audio",
         description: "Client says the address is Gartenweg 9 and BGF is 195 m2.",
-        url: "/documents/attachments/attachment-audio-1?download=1"
+        fullText: "Client says the address is Gartenweg 9 and BGF is 195 m2.",
+        url: "/documents/attachments/attachment-audio-1"
       },
       {
         title: "grundriss.pdf",
         kind: "pdf",
         description: "PDF file from Telegram: grundriss.pdf.",
-        url: "/documents/attachments/attachment-pdf-1?download=1"
+        fullText: "PDF file from Telegram: grundriss.pdf.",
+        url: "/documents/attachments/attachment-pdf-1"
       },
-      {
-        title: "Lead summary",
-        kind: "summary",
-        description: "Ready Neubau EFH lead",
-        url: null
-      }
     ]);
   });
 
@@ -191,27 +195,62 @@ describe("lead table model", () => {
       )
     ).toEqual([
       {
-        title: "Telegram message",
+        title: "Lead summary",
+        kind: "summary",
+        description: "Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+        fullText: "Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+        url: null
+      },
+      {
+        title: "Message",
         kind: "message",
-        description: "telegram:-100777:42",
-        url: "https://t.me/c/777/42"
+        description: "Need EFH offer",
+        fullText: "Need EFH offer",
+        url: null
       },
       {
         title: "client-brief.mp3",
         kind: "audio",
         description: "Voice message contains budget, start date, and move-in timing.",
-        url: "/documents/attachments/attachment-audio-1?download=1"
+        fullText: "Voice message contains budget, start date, and move-in timing.",
+        url: "/documents/attachments/attachment-audio-1"
       },
       {
         title: "grundriss.pdf",
         kind: "pdf",
         description: "PDF shows the floor plan and confirms BGF 195 m2.",
-        url: "/documents/attachments/attachment-pdf-1?download=1"
+        fullText: "PDF shows the floor plan and confirms BGF 195 m2.",
+        url: "/documents/attachments/attachment-pdf-1"
       },
+    ]);
+  });
+
+  it("puts lead summary first and keeps long Telegram text expandable without Telegram links", () => {
+    const longMessage =
+      "Здравствуйте, меня зовут Ирина Шнайдер, есть проект дома в Bad Aibling, Gartenweg 9, нужно коммерческое предложение на архитектуру для Neubau EFH. Площадь BGF 195 м2, желаемая дата начала сентябрь 2026.";
+
+    expect(
+      createLeadSummaryInfo(
+        [
+          longMessage,
+          "Telegram sources: telegram:-100777:42",
+          "Lead summary: Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling."
+        ].join("\n")
+      )
+    ).toEqual([
       {
         title: "Lead summary",
         kind: "summary",
         description: "Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+        fullText: "Client wants an LP1-4 commercial proposal for a Neubau EFH in Bad Aibling.",
+        url: null
+      },
+      {
+        title: "Message",
+        kind: "message",
+        description:
+          "Здравствуйте, меня зовут Ирина Шнайдер, есть проект дома в Bad Aibling, Gartenweg 9, нужно коммерческое предложение на архитектуру для Neubau EFH...",
+        fullText: longMessage,
         url: null
       }
     ]);
@@ -230,6 +269,7 @@ describe("lead table model", () => {
         title: "Lead summary",
         kind: "summary",
         description: "Detailed client-material analysis summary for the proposal workflow.",
+        fullText: "Detailed client-material analysis summary for the proposal workflow.",
         url: null
       }
     ]);
@@ -250,7 +290,7 @@ describe("lead table model", () => {
       kind: "photo",
       description: "Photo file from Telegram: image/jpeg."
     });
-    expect(audio?.description.length).toBeLessThanOrEqual(120);
+    expect(audio?.description.length).toBeLessThanOrEqual(150);
     expect(audio?.description).toContain("This voice message describes a hillside renovation request");
   });
 

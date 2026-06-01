@@ -42,6 +42,7 @@ import {
   type LeadTableViewMode
 } from "./lead-table-store";
 import { usePersistentTablePreferences } from "../table-preferences";
+import { translateLeadSummaryAction } from "./actions";
 
 type LeadsTableProps = {
   rows: LeadTableRow[];
@@ -761,33 +762,76 @@ function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextActio
 
 function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [translatedSummary, setTranslatedSummary] = useState<string | null>(null);
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translatingTo, setTranslatingTo] = useState<"ru" | "de" | null>(null);
+  const summaryItem = items.find((item) => item.kind === "summary") ?? null;
+  const materialItems = summaryItem ? items.filter((item) => item !== summaryItem) : items;
+
+  async function handleTranslateSummary(targetLanguage: "ru" | "de") {
+    if (!summaryItem) {
+      return;
+    }
+
+    setTranslatingTo(targetLanguage);
+    setTranslationError(null);
+    try {
+      setTranslatedSummary(
+        await translateLeadSummaryAction({
+          text: summaryItem.fullText ?? summaryItem.description,
+          targetLanguage
+        })
+      );
+    } catch (error) {
+      setTranslationError(error instanceof Error ? error.message : "Could not translate the lead summary.");
+    } finally {
+      setTranslatingTo(null);
+    }
+  }
 
   return (
-    <LeadCardAccordion title="Lead summary info" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
+    <LeadCardAccordion
+      title="Lead summary info"
+      isOpen={isOpen}
+      onToggle={() => setIsOpen((current) => !current)}
+      headerActions={
+        summaryItem ? (
+          <div className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              aria-label="Translate summary to Russian"
+              disabled={translatingTo !== null}
+              onClick={() => handleTranslateSummary("ru")}
+              className="rounded-md border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
+            >
+              {translatingTo === "ru" ? "..." : "RU"}
+            </button>
+            <button
+              type="button"
+              aria-label="Translate summary to German"
+              disabled={translatingTo !== null}
+              onClick={() => handleTranslateSummary("de")}
+              className="rounded-md border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
+            >
+              {translatingTo === "de" ? "..." : "DE"}
+            </button>
+          </div>
+        ) : null
+      }
+    >
       <div className="grid min-w-0 gap-2 px-3 pb-3">
-        {items.length > 0 ? (
-          items.map((item, index) => (
-            <article key={`${item.title}-${item.kind}-${index}`} className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
-              <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] sm:items-start">
-                <div className="min-w-0">
-                  <p className="break-words font-semibold text-foreground">{item.title}</p>
-                  <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.kind}</p>
-                </div>
-                <p className="min-w-0 break-words text-sm text-muted-foreground">{item.description}</p>
-                {item.url ? (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-fit rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary"
-                  >
-                    Download
-                  </a>
-                ) : null}
-              </div>
-            </article>
-          ))
-        ) : (
+        {summaryItem ? (
+          <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Summary</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-foreground">
+              {translatedSummary ?? summaryItem.description}
+            </p>
+            {translationError ? <p className="mt-2 break-words text-xs text-rose-700">{translationError}</p> : null}
+          </article>
+        ) : null}
+        {materialItems.length > 0 ? (
+          materialItems.map((item, index) => <LeadSummaryInfoItemCard key={`${item.title}-${item.kind}-${index}`} item={item} />)
+        ) : summaryItem ? null : (
           <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No summarized source materials saved yet.</p>
         )}
       </div>
@@ -795,30 +839,80 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
   );
 }
 
+function LeadSummaryInfoItemCard({ item }: { item: LeadSummaryInfoItem }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const fullText = item.fullText ?? item.description;
+  const canExpand = fullText.trim() !== item.description.trim();
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0">
+          <p className="break-words font-semibold text-foreground">{item.title}</p>
+          <p className="mt-1 text-xs font-medium uppercase text-muted-foreground">{item.kind}</p>
+        </div>
+        <div className="grid min-w-0 gap-1">
+          <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{isExpanded ? fullText : item.description}</p>
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => setIsExpanded((current) => !current)}
+              className="w-fit text-xs font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              {isExpanded ? "Hide full" : "Show full"}
+            </button>
+          ) : null}
+        </div>
+        {item.url ? (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            className="w-fit rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary"
+          >
+            View file
+          </a>
+        ) : (
+          <span className="hidden sm:block" aria-hidden="true" />
+        )}
+      </div>
+    </article>
+  );
+}
+
 function LeadCardAccordion({
   title,
   isOpen,
   onToggle,
+  headerActions,
   children
 }: {
   title: string;
   isOpen: boolean;
   onToggle: () => void;
+  headerActions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="mt-4 min-w-0 overflow-hidden rounded-lg border border-border bg-muted/30">
-      <button
-        type="button"
-        className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-semibold text-foreground"
-        aria-expanded={isOpen}
-        onClick={onToggle}
-      >
-        <span>{title}</span>
-        <span aria-hidden="true" className="text-xs text-muted-foreground">
-          {isOpen ? "Hide" : "Show"}
-        </span>
-      </button>
+      <div className="flex min-h-[44px] w-full items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-foreground">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+          aria-expanded={isOpen}
+          onClick={onToggle}
+        >
+          <span className="min-w-0 truncate">{title}</span>
+          <span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground">
+            {isOpen ? "Hide" : "Show"}
+          </span>
+        </button>
+        {headerActions ? (
+          <span className="flex shrink-0 items-center gap-2">
+          {headerActions}
+          </span>
+        ) : null}
+      </div>
       {isOpen ? children : null}
     </section>
   );
