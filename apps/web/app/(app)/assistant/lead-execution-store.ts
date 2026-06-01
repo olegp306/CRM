@@ -6,7 +6,8 @@ import type {
   UpdateLeadFromAssistantInput,
   UpdatedLeadRecord,
   UndoKpSentFromAssistantInput,
-  UndoneKpSentLeadRecord
+  UndoneKpSentLeadRecord,
+  LeadSearchRecord
 } from "@app/assistant";
 import { createAssistantLeadPrismaStore, prisma, type AssistantLeadStore } from "@app/db";
 import { selectDatabaseBackedRuntime } from "../../../lib/database-runtime";
@@ -145,6 +146,60 @@ function getAssistantLeadStore(): AssistantLeadStore {
 
 export async function listAssistantCreatedLeads(workspaceId: string): Promise<CreatedLeadRecord[]> {
   return getAssistantLeadStore().list(workspaceId);
+}
+
+export async function listAssistantLeadSearchRecords(workspaceId: string): Promise<LeadSearchRecord[]> {
+  const runtime = selectAssistantLeadStoreRuntime({
+    databaseUrl: process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    memoryStore: "memory" as const,
+    prismaStore: "prisma" as const
+  });
+
+  if (runtime === "prisma") {
+    const records = await prisma.lead.findMany({
+      where: { workspaceId, archivedAt: null },
+      orderBy: [{ createdDate: "desc" }, { leadId: "asc" }],
+      select: {
+        id: true,
+        leadId: true,
+        createdDate: true,
+        status: true,
+        temperature: true,
+        requestType: true,
+        projectAddress: true,
+        client: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    return records.map((record) => ({
+      id: record.id,
+      leadId: record.leadId,
+      createdDate: record.createdDate,
+      status: record.status,
+      temperature: record.temperature,
+      requestType: record.requestType,
+      projectAddress: record.projectAddress,
+      clientName: record.client?.name ?? null
+    }));
+  }
+
+  return getStore()
+    .filter((lead) => lead.workspaceId === workspaceId)
+    .map((lead) => ({
+      id: lead.id,
+      leadId: lead.leadId,
+      createdDate: (lead as CreatedLeadRecord & { createdDate?: string | Date }).createdDate ?? new Date(0),
+      status: lead.status,
+      temperature: lead.temperature,
+      requestType: lead.requestType,
+      projectAddress: lead.projectAddress,
+      clientName: lead.clientName
+    }));
 }
 
 export async function createAssistantLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord> {

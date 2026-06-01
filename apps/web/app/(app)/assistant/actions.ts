@@ -18,6 +18,7 @@ import {
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
   createOpenAiCrmOrchestrator,
+  createLeadSearchFilterSubmissionResult,
   createExecutionChannelEvents,
   enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
@@ -38,8 +39,10 @@ import {
   createPlatformReleaseWorkflow,
   createLeadReminderDraft,
   isReminderRequest,
+  routeCrmOrchestratorRequest,
   type AuditReviewFilters,
   type AssistantChannelAttachment,
+  type AssistantChannelMessage,
   type AssistantContext,
   type AssistantSubmissionResult,
   type FeedbackTriageEvent,
@@ -50,6 +53,7 @@ import { createAssistantFollowup } from "./followup-execution-store";
 import {
   createAssistantLead,
   listAssistantCreatedLeads,
+  listAssistantLeadSearchRecords,
   markAssistantLeadKpSent,
   scheduleAssistantLeadReminder,
   undoAssistantLeadKpSent,
@@ -89,20 +93,23 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
     attachments: input.attachments ?? [],
     lead: selectedLead
   };
-  const initialResult = await createOpenAIAssistantSubmissionResult(
-    assistantInput,
-    {
-      apiKey: openAiApiKey,
-      model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
-      crmOrchestrator: openAiApiKey
-        ? createOpenAiCrmOrchestrator({
-            apiKey: openAiApiKey,
-            model: crmOrchestratorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
-            prompt: crmOrchestratorSetting.prompt
-          })
-        : undefined
-    }
-  );
+  const searchFilterResult = await createWebAssistantSearchFilterResult(assistantInput);
+  const initialResult =
+    searchFilterResult ??
+    (await createOpenAIAssistantSubmissionResult(
+      assistantInput,
+      {
+        apiKey: openAiApiKey,
+        model: process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+        crmOrchestrator: openAiApiKey
+          ? createOpenAiCrmOrchestrator({
+              apiKey: openAiApiKey,
+              model: crmOrchestratorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+              prompt: crmOrchestratorSetting.prompt
+            })
+          : undefined
+      }
+    ));
   const result = openAiApiKey
     ? await enrichLeadIntakeSubmissionResult(
         initialResult,
@@ -164,6 +171,30 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
       actionCount: actions.length
     }
   };
+}
+
+async function createWebAssistantSearchFilterResult(input: SubmitAssistantMessageInput & { attachments: AssistantChannelAttachment[] }) {
+  if (input.attachments.length > 0) {
+    return null;
+  }
+
+  const channelMessage: AssistantChannelMessage = {
+    channel: "web",
+    threadId: input.threadId,
+    messageId: input.messageId,
+    content: input.content.trim(),
+    receivedAt: new Date().toISOString(),
+    context: input.context,
+    attachments: input.attachments
+  };
+  const decision = routeCrmOrchestratorRequest(channelMessage);
+
+  if (decision.intent !== "SEARCH_LEAD" || decision.status !== "ready") {
+    return null;
+  }
+
+  const records = await listAssistantLeadSearchRecords(input.context.workspaceId);
+  return createLeadSearchFilterSubmissionResult(input, records);
 }
 
 export async function submitOnboardingAssistantMessageAction(input: SubmitOnboardingAssistantMessageInput) {

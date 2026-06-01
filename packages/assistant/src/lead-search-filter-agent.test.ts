@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createLeadSearchFilterSubmissionResult,
   createLeadSearchFilterResponse,
   filterLeadSearchRecords,
   parseLeadSearchFilterRequest,
@@ -87,5 +88,36 @@ describe("lead search/filter agent", () => {
     expect(response.text).toContain("L-2026-001");
     expect(response.text).toContain("L-2026-003");
     expect(response.buttons).toEqual([{ label: "Download CSV", action: "download_csv", url: "/exports/leads?date=last_month" }]);
+  });
+
+  it("creates a submission result for web assistant search/filter requests without feedback or action preview", () => {
+    const result = createLeadSearchFilterSubmissionResult(
+      {
+        context: {
+          workspaceId: "workspace-demo",
+          userId: "user-demo",
+          role: "admin",
+          route: "/assistant",
+          module: "assistant",
+          selectedRecordIds: []
+        },
+        content: "Send me CSV export of warm leads from last month",
+        threadId: "thread-search",
+        messageId: "message-search",
+        attachments: []
+      },
+      records,
+      {
+        now: new Date("2026-06-10T12:00:00.000Z")
+      }
+    );
+
+    expect(result.response).toContain("Found 1 leads");
+    expect(result.response).toContain("L-2026-001");
+    expect(result.feedback).toBeNull();
+    expect(result.actionPreview).toBeNull();
+    expect(result.responseButtons).toEqual([
+      { label: "Download CSV", action: "download_csv", url: "/exports/leads?date=last_month&temperature=warm" }
+    ]);
   });
 });

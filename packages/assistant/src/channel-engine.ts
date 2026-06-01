@@ -39,10 +39,6 @@ export function createAssistantChannelResponse(
       return capabilityResponse;
     }
 
-    const tableExportResponse = createTableExportResponse(message);
-    if (tableExportResponse) {
-      return tableExportResponse;
-    }
   }
 
   const reminderResponse = createLeadReminderResponse(message);

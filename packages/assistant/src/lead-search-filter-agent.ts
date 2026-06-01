@@ -1,4 +1,7 @@
 import type { AssistantChannelResponse } from "./channel-message";
+import type { AssistantSubmissionInput, AssistantSubmissionResult } from "./submission";
+import { createAssistantSubmissionResultFromChannelResponse } from "./submission";
+import { createAssistantMessageDraft, createAssistantThreadDraft } from "./thread-message";
 
 export type LeadSearchRecord = {
   id: string;
@@ -98,6 +101,35 @@ export function createLeadSearchFilterResponse(
     buttons: request.wantsCsv ? [{ label: "Download CSV", action: "download_csv", url: createLeadCsvUrl(request) }] : [],
     text
   };
+}
+
+export function createLeadSearchFilterSubmissionResult(
+  input: AssistantSubmissionInput,
+  records: LeadSearchRecord[],
+  options: { now?: Date; limit?: number } = {}
+): AssistantSubmissionResult {
+  const trimmedContent = input.content.trim();
+  const thread = createAssistantThreadDraft({
+    context: input.context,
+    title: trimmedContent
+  });
+  const message = createAssistantMessageDraft({
+    threadId: input.threadId,
+    userId: input.context.userId,
+    role: "user",
+    content: trimmedContent,
+    context: input.context
+  });
+
+  return createAssistantSubmissionResultFromChannelResponse({
+    thread,
+    message,
+    channelResponse: createLeadSearchFilterResponse(trimmedContent, records, options),
+    context: input.context,
+    threadId: input.threadId,
+    messageId: input.messageId,
+    attachments: input.attachments ?? []
+  });
 }
 
 function formatLeadSearchLine(record: LeadSearchRecord): string {

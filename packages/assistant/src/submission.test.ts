@@ -393,7 +393,7 @@ describe("assistant submission orchestration", () => {
     expect(result.actionPreview).toBeNull();
   });
 
-  it("answers CSV and Excel table export requests with a download button", () => {
+  it("keeps CSV and Excel table export out of the generic channel path", () => {
     const result = createAssistantSubmissionResult({
       context: { ...baseContext, route: "/leads", module: "leads" },
       content: "Скинь мне Excel таблицу лидов",
@@ -403,10 +403,8 @@ describe("assistant submission orchestration", () => {
 
     expect(result.feedback).toBeNull();
     expect(result.actionPreview).toBeNull();
-    expect(result.response).toContain("CSV");
-    expect(result.responseButtons).toEqual([
-      { label: "Download CSV", action: "download_csv", url: "/exports/leads" }
-    ]);
+    expect(result.responseButtons).toEqual([]);
+    expect(result.response).not.toContain("Download CSV");
   });
 
   it("answers selected KP-ready lead questions with shared lead actions", () => {
