@@ -1872,10 +1872,8 @@ function createTelegramLeadConfirmation({
   const missingData = Array.isArray(draft.missingData) ? draft.missingData : [];
   const kpReady = missingData.length === 0;
   const fields = [
-    ["Lead", leadId],
     ["Status", status],
     ["KP fields ready", kpReady ? "yes" : "no"],
-    ["Summary", createTelegramLeadSummary(draft, generatedDocumentId, generatedDocumentDelivered)],
     ["KP generation", generatedDocumentError],
     ["Request type", draft.requestType],
     ["Temperature", draft.temperature === "unknown" ? "" : draft.temperature],
@@ -1884,11 +1882,14 @@ function createTelegramLeadConfirmation({
     ["Standard", draft.isStandard === undefined ? "" : draft.isStandard ? "yes" : "no"],
     ["Missing for KP", missingData.length > 0 ? missingData.join(", ") : ""]
   ].filter(([, value]) => String(value ?? "").trim() !== "");
+  const summary = truncateTelegramLeadSummary(createTelegramLeadSummary(draft, generatedDocumentId, generatedDocumentDelivered));
 
   return [
     `<b>${escapeHtml(leadId)}</b> created in CRM.`,
     "",
     `Pricing: <b>${escapeHtml(createTelegramPricingBranchShortLabel(draft))}</b>${createTelegramPricingBranchShortReason(draft, missingData)}`,
+    "",
+    escapeHtml(summary),
     "",
     ...fields.map(([label, value]) => `${escapeHtml(String(label))}: <b>${escapeHtml(String(value))}</b>`)
   ].join("\n");
@@ -1914,6 +1915,15 @@ function createTelegramLeadSummary(
 function extractTelegramRawInputValue(rawInput: string, label: "Lead summary" | "Summary"): string | null {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escapedLabel}:\\s*(.+)$`, "im").exec(rawInput)?.[1]?.trim() ?? null;
+}
+
+function truncateTelegramLeadSummary(summary: string): string {
+  const normalized = summary.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 300) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 297).trimEnd()}...`;
 }
 
 function createTelegramKpGenerationErrorMessage(error: unknown): string {
