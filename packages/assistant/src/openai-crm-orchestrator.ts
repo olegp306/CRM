@@ -103,12 +103,12 @@ function createCrmOrchestratorJsonSchema() {
     properties: {
       intent: {
         type: "string",
-        enum: ["CREATE_LEAD", "UPDATE_LEAD", "SEARCH_LEAD", "CREATE_REMINDER", "ATTACH_FILE", "CLARIFICATION_REQUIRED"]
+        enum: ["CREATE_LEAD", "UPDATE_LEAD", "SEARCH_LEAD", "CREATE_REMINDER", "SUPPORT_REQUEST", "CLARIFICATION_REQUIRED"]
       },
       reasoning: { type: "string" },
       action: {
         type: "string",
-        enum: ["Lead Creation Agent", "Lead Update Agent", "Lead Search Agent", "Reminder Agent", "File Attachment Agent", "clarification"]
+        enum: ["Lead Creation Agent", "Lead Update Agent", "Lead Search Agent", "Reminder Agent", "Support Agent", "clarification"]
       },
       status: {
         type: "string",
@@ -144,7 +144,7 @@ function normalizeIntent(value: unknown): CrmOrchestratorIntent {
     "UPDATE_LEAD",
     "SEARCH_LEAD",
     "CREATE_REMINDER",
-    "ATTACH_FILE",
+    "SUPPORT_REQUEST",
     "CLARIFICATION_REQUIRED"
   ];
   return allowed.includes(value as CrmOrchestratorIntent) ? (value as CrmOrchestratorIntent) : "CLARIFICATION_REQUIRED";
@@ -164,7 +164,7 @@ function normalizeAction(value: unknown, status: CrmOrchestratorStatus): CrmOrch
     "Lead Update Agent",
     "Lead Search Agent",
     "Reminder Agent",
-    "File Attachment Agent"
+    "Support Agent"
   ];
   return allowed.includes(value as never) ? (value as Exclude<CrmOrchestratorDecision["action"], "clarification">) : "Lead Search Agent";
 }

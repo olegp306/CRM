@@ -3,6 +3,7 @@ import { getWorkspaceSession } from "@/app/workspace-session";
 import { createEditableRecordRows, type EditableRecord, type EditableTableField } from "../../editable-record-table-store";
 import { createLeadTableRows, leadTableColumns, type LeadTableRecord } from "../../leads/lead-table-store";
 import { createCsvDownloadFilename, createCsvExport, type CsvExportColumn, type CsvExportRow } from "../../table-export";
+import { createLeadExportWhereFromUrl } from "../lead-export-filter";
 
 type ExportKind = "leads" | "clients" | "projects" | "cold-targets";
 
@@ -15,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   }
 
   const session = await getWorkspaceSession();
-  const exportData = await createTableExportData(kind, session.workspaceId);
+  const exportData = await createTableExportData(kind, session.workspaceId, request.url);
   const csv = createCsvExport(exportData.columns, exportData.rows);
 
   return new Response(csv, {
@@ -26,10 +27,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
   });
 }
 
-async function createTableExportData(kind: ExportKind, workspaceId: string): Promise<{ columns: CsvExportColumn[]; rows: CsvExportRow[] }> {
+async function createTableExportData(kind: ExportKind, workspaceId: string, requestUrl: string): Promise<{ columns: CsvExportColumn[]; rows: CsvExportRow[] }> {
   if (kind === "leads") {
     const records = await prisma.lead.findMany({
-      where: { workspaceId, archivedAt: null },
+      where: createLeadExportWhereFromUrl(workspaceId, requestUrl),
       orderBy: [{ createdDate: "desc" }, { leadId: "asc" }],
       select: {
         id: true,

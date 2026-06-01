@@ -24,6 +24,7 @@ export * from "./lead-flow-decision";
 export * from "./lead-interaction-note";
 export * from "./lead-reminder";
 export * from "./lead-match-decision";
+export * from "./lead-search-filter-agent";
 export * from "./memory-repository";
 export * from "./openai-provider";
 export * from "./openai-client-material-analyzer";

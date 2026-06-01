@@ -6,7 +6,7 @@ export type CrmOrchestratorIntent =
   | "UPDATE_LEAD"
   | "SEARCH_LEAD"
   | "CREATE_REMINDER"
-  | "ATTACH_FILE"
+  | "SUPPORT_REQUEST"
   | "CLARIFICATION_REQUIRED";
 
 export type CrmOrchestratorStatus = "ready" | "need_clarification";
@@ -14,7 +14,7 @@ export type CrmOrchestratorStatus = "ready" | "need_clarification";
 export type CrmOrchestratorDecision = {
   intent: CrmOrchestratorIntent;
   reasoning: string;
-  action: "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "File Attachment Agent" | "clarification";
+  action: "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "Support Agent" | "clarification";
   status: CrmOrchestratorStatus;
   message: string;
 };
@@ -49,7 +49,7 @@ Use when the user wants to change client data, add a comment, change status, upd
 
 Finds leads.
 
-Use when the user searches for a client, asks for client information, wants to open a lead card, or searches by name, phone, email, or company.
+Use when the user searches for a client, asks for client information, wants to open a lead card, asks for filtered lead lists, asks for last-month/current-month leads, or asks to export leads/clients as CSV/Excel.
 
 ### Reminder Agent
 
@@ -57,11 +57,13 @@ Creates tasks and reminders.
 
 Use when the user asks to call back, create a task, create a follow-up, schedule a meeting, or set a reminder.
 
-### File Attachment Agent
+### Support Agent
 
-Attaches files to CRM entities.
+Answers product, capability, help, support, and unclear non-CRM-action questions.
 
-Use when the user wants to add a document, attach a contract, upload an invoice, attach a PDF, or add an image.
+Use when the user asks what the CRM can do, whether a feature exists, how to use something, or reports a support issue.
+
+Product feature requests, UX feedback, and capability questions are not CRM actions. Route them to Support Agent unless the message clearly asks to create, update, search, or schedule something.
 
 ## WORKFLOW
 
@@ -90,10 +92,10 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
 
   if (isAttachFileRequest(text) || (hasAttachment && Boolean(leadId))) {
     if (!leadId && !hasSpecificTargetEntitySignal(text)) {
-      return clarification("ATTACH_FILE", "File attachment needs a target CRM entity.", "Which lead should I attach this file to?");
+      return clarification("UPDATE_LEAD", "File material updates an existing lead but needs a target lead.", "Which lead should I update with this material?");
     }
 
-    return ready("ATTACH_FILE", "User wants to attach source material or a file.", "File Attachment Agent", "Passing the file to the attachment agent.");
+    return ready("UPDATE_LEAD", "User wants to add source material or a file to an existing CRM record.", "Lead Update Agent", "Passing the material to the lead update agent.");
   }
 
   if (isReminderRequestText(text)) {
@@ -113,11 +115,11 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
   }
 
   if (isSearchLeadRequest(text)) {
-    if (!hasSearchablePersonSignal(text)) {
+    if (!hasSearchablePersonSignal(text) && !hasCollectionSearchSignal(text)) {
       return clarification("SEARCH_LEAD", "Lead search needs a name, phone, email, company, or lead id.", "Which client should I search for?");
     }
 
-    return ready("SEARCH_LEAD", "User wants to find a lead or client record.", "Lead Search Agent", "Passing the request to the lead search agent.");
+    return ready("SEARCH_LEAD", "User wants to search, filter, list, or export CRM records.", "Lead Search Agent", "Passing the request to the lead search agent.");
   }
 
   if (leadId || isUpdateLeadRequest(text)) {
@@ -126,6 +128,10 @@ export function routeCrmOrchestratorRequest(message: AssistantChannelMessage): C
     }
 
     return ready("UPDATE_LEAD", "User wants to update an existing lead.", "Lead Update Agent", "Passing the request to the lead update agent.");
+  }
+
+  if (isSupportRequest(text)) {
+    return ready("SUPPORT_REQUEST", "User asks a product/support/capability question, not a CRM data action.", "Support Agent", "I can help with that support question.");
   }
 
   return clarification("CLARIFICATION_REQUIRED", "The request is ambiguous.", "Do you want me to create a new lead or update an existing lead?");
@@ -177,7 +183,22 @@ function isCreateLeadRequest(text: string): boolean {
 }
 
 function isSearchLeadRequest(text: string): boolean {
-  return /\b(find|search|look up|show|open)\b.*\b(lead|client|customer|contact|phone|email)\b/i.test(text);
+  return (
+    /\b(find|search|look up|show|open|list|filter|get|send|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts|phone|email|csv|excel|xlsx)\b/i.test(
+      text
+    ) ||
+    /\b(csv|excel|xlsx|spreadsheet|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
+    /(покажи|найди|выведи|дай|скинь|экспорт|экспортируй|фильтр|отфильтруй).*(лид|лиды|клиент|клиенты|заявк)/i.test(text)
+  );
+}
+
+function isSupportRequest(text: string): boolean {
+  return (
+    /\b(help|support|who are you|what can you do|how do i|how can i|do we have|is there|can i|can we|feature|feedback|request|theme|dark mode|color scheme|appearance|settings|problem|issue|please add|would be nice|later)\b/i.test(
+      text
+    ) ||
+    /(помоги|поддержк|кто ты|что умеешь|как|есть ли|можно ли|фича|фидбек|обратн\w*\s+связ|тема|темн\w*|цветов\w*\s+схем|оформлен|настройк|проблем|вопрос)/i.test(text)
+  );
 }
 
 function hasContactSignal(text: string): boolean {
@@ -186,6 +207,16 @@ function hasContactSignal(text: string): boolean {
 
 function hasSearchablePersonSignal(text: string): boolean {
   return hasContactSignal(text) || /\bL-\d{4}-\d+\b/i.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(text);
+}
+
+function hasCollectionSearchSignal(text: string): boolean {
+  return (
+    /\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
+    /\b(csv|excel|xlsx|spreadsheet|export)\b/i.test(text) ||
+    /\b(last|this|current|previous)\s+(month|week|year)\b/i.test(text) ||
+    /\b(hot|warm|cold|new|needs_data|sent|signed)\b/i.test(text) ||
+    /(лид|лиды|клиент|клиенты|заявк|прошл\w*\s+месяц|текущ\w*\s+месяц|тепл\w*|горяч\w*|холодн\w*)/i.test(text)
+  );
 }
 
 function hasMultipleLeadCreationSignals(text: string): boolean {

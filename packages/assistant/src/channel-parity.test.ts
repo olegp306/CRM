@@ -98,7 +98,8 @@ describe("assistant channel parity", () => {
     const telegram = createAssistantChannelResponse({ ...baseMessage, channel: "telegram", content });
 
     expect(web.intent).toBe("capability_request");
-    expect(telegram.intent).toBe("feature_request");
+    expect(telegram.intent).toBe("support_request");
+    expect(telegram.shouldPersistFeedback).toBe(false);
     expect(web.intent).not.toBe("lead_intake");
     expect(telegram.intent).not.toBe("lead_intake");
     expect(web.normalizedActions).toEqual(telegram.normalizedActions);

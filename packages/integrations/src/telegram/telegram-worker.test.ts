@@ -147,7 +147,7 @@ describe("telegram worker", () => {
     expect(sendBody.reply_markup.inline_keyboard[0]).toEqual([{ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" }]);
   });
 
-  it("answers theme capability questions without parsing them as leads", async () => {
+  it("routes standalone theme questions through Telegram support instead of capability handling", async () => {
     const client = {
       lead: {
         findMany: vi.fn(async () => []),
@@ -192,18 +192,169 @@ describe("telegram worker", () => {
 
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottelegram-token/sendMessage",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("Nocturne")
-      })
-    );
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.reply_markup.inline_keyboard[0]).toEqual([
-      { text: "Settings", url: "https://crm.example.com/settings/branding" }
-    ]);
+    expect(body.text).toContain("For now I can only create a lead or update an existing lead");
+    expect(body.text).not.toContain("Nocturne");
+    expect(body.reply_markup).toBeUndefined();
+  });
+
+  it("creates a lead from a batched source-material conversation even if one message mentions themes", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-7", leadId: "L-2026-007", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async (message) => ({
+        clientName: "Self Storage GmbH",
+        requestType: "self storage feasibility",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 1400,
+        projectAddress: "Bayern",
+        missingData: [],
+        summary: "Self storage feasibility with 1300-1400 m2 BGF",
+        suggestedReply: "Danke."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 21,
+            message: {
+              message_id: 11,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Есть вопрос по self storage, нужно понять BGF и посадку здания."
+            }
+          },
+          {
+            update_id: 22,
+            message: {
+              message_id: 12,
+              date: 1779296460,
+              chat: { id: 12345 },
+              text: "1000-1500 кв м, в идеале 1300-1400 кв м BGF. Тема для вечерней проверки не важна, это один лид."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 22 });
+
+    expect(parser.parseLead).toHaveBeenCalledTimes(1);
+    const parseLeadMock = vi.mocked(parser.parseLead);
+    expect(String(parseLeadMock.mock.calls[0]?.[0].text)).toContain("self storage");
+    expect(String(parseLeadMock.mock.calls[0]?.[0].text)).toContain("1300-1400");
+    expect(created).toHaveLength(1);
+    const sendCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendMessage")) as unknown as [
+      string,
+      { body?: unknown }
+    ];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("<b>L-2026-007</b> created in CRM.");
+    expect(body.text).not.toContain("Nocturne");
+  });
+
+  it("routes Telegram table export requests through the lead search/filter agent", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-1",
+            leadId: "L-2026-001",
+            createdDate: new Date("2026-05-15T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "EFH Neubau",
+            projectAddress: "Munich",
+            client: { name: "Anna Meyer" },
+            rawInput: "old"
+          },
+          {
+            id: "lead-record-2",
+            leadId: "L-2026-002",
+            createdDate: new Date("2026-06-01T10:00:00.000Z"),
+            status: "new",
+            temperature: "hot",
+            requestType: "Office",
+            projectAddress: "Berlin",
+            client: { name: "Buro GmbH" },
+            rawInput: "old"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 23,
+            message: {
+              message_id: 13,
+              date: 1779296520,
+              chat: { id: 12345 },
+              text: "Send me CSV export of warm leads from last month"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 23 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Found 1 leads");
+    expect(body.text).toContain("L-2026-001");
+    expect(body.text).not.toContain("L-2026-002");
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [[{ text: "Download CSV", url: "https://crm.example.com/exports/leads?date=last_month&temperature=warm" }]]
+    });
   });
 
   it("asks which lead to update for standalone client context instead of creating a draft lead", async () => {
@@ -302,17 +453,11 @@ describe("telegram worker", () => {
 
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(client.lead.create).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottelegram-token/sendMessage",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining("Telegram actions are limited right now.")
-      })
-    );
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("I can only create a lead or update an existing lead.");
+    expect(body.text).toContain("No leads matched this filter.");
     expect(body.text).not.toContain("Lead Search Agent");
+    expect(body.reply_markup).toBeUndefined();
   });
 
   it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {

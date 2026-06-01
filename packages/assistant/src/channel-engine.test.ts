@@ -358,6 +358,33 @@ describe("assistant channel engine", () => {
     expect(result.buttons).toEqual([]);
   });
 
+  it("does not expose Telegram theme capability as an early assistant action", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "is there a dark theme for evening work?"
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toContain("Right now in Telegram I create or update leads");
+    expect(result.text).not.toContain("Nocturne");
+    expect(result.shouldPersistFeedback).toBe(false);
+    expect(result.buttons).toEqual([]);
+  });
+
+  it("does not expose Telegram CSV export as a table-export action before search/filter routing", () => {
+    const result = createAssistantChannelResponse({
+      ...baseMessage,
+      channel: "telegram",
+      content: "Send me CSV export of leads from last month"
+    });
+
+    expect(result.intent).toBe("support_request");
+    expect(result.text).toContain("Telegram actions are limited right now.");
+    expect(result.text).not.toContain("CSV export");
+    expect(result.buttons).toEqual([]);
+  });
+
   it("asks one Telegram clarification before attaching a file without lead context", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
@@ -367,7 +394,7 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toBe("Which lead should I attach this file to?");
+    expect(result.text).toBe("Which lead should I update with this material?");
     expect(result.buttons).toEqual([]);
   });
 

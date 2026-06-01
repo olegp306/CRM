@@ -7,6 +7,7 @@ import {
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
+  createLeadSearchFilterResponse,
   createMessageReceivedEvent,
   createOpenAiCrmOrchestrator,
   createLeadReminderDraft,
@@ -16,11 +17,13 @@ import {
   isLeadInteractionNoteCommand,
   isLeadNaturalContextNote,
   isReminderRequest,
+  routeCrmOrchestratorRequest,
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
   type AssistantChannelMessage,
   type CrmOrchestratorDecision,
-  type CrmOrchestratorClient
+  type CrmOrchestratorClient,
+  type LeadSearchRecord
 } from "@app/assistant";
 import { getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
@@ -78,10 +81,13 @@ export type TelegramWorkerPrismaLike = {
         leadId: string;
         status?: string | null;
         rawInput: string | null;
-        client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
-        clientName?: string | null;
+        createdDate?: Date | string | null;
+        temperature?: string | null;
         requestType?: string | null;
         projectAddress?: string | null;
+        clientRecordId?: string | null;
+        client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
+        clientName?: string | null;
         bgfM2?: number | null;
         email?: string | null;
         phone?: string | null;
@@ -387,6 +393,19 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         fetchImpl
       });
       processed += 1;
+      continue;
+    }
+
+    const searchFilterResponse = await createTelegramSearchFilterResponse(config, client, message);
+    if (searchFilterResponse) {
+      await sendTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: searchFilterResponse.text,
+        replyMarkup: createTelegramResponseReplyMarkup(searchFilterResponse.buttons, config.crmBaseUrl),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
       continue;
     }
 
@@ -1527,14 +1546,28 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
 
 function createTelegramGeneralAssistantResponse(
   workspaceId: string,
-  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds">,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments">,
   replyTo?: { leadId: string; sourceMessageId: string }
 ) {
+  if (!replyTo && shouldPreferTelegramLeadIntake(message)) {
+    return null;
+  }
+
+  if (!replyTo && isDisabledTelegramEarlyAssistantRequest(message.text)) {
+    return createTelegramLimitedActionsResponse();
+  }
+
   const response = createAssistantChannelResponse(createTelegramAssistantChannelMessage(workspaceId, message, replyTo));
 
+  if (response.intent === "capability_request" || response.shouldPersistFeedback || hasDownloadCsvAction(response)) {
+    return createTelegramLimitedActionsResponse();
+  }
+
+  if (isGenericTelegramLimitedActionsResponse(response)) {
+    return null;
+  }
+
   if (
-    response.intent === "capability_request" ||
-    response.shouldPersistFeedback ||
     response.intent === "support_request" ||
     (response.intent === "crm_action" &&
       (isReminderRequest(message.text) || isLeadInteractionNoteCommand(message.text) || isLeadNaturalContextNote(message.text)))
@@ -1543,6 +1576,106 @@ function createTelegramGeneralAssistantResponse(
   }
 
   return null;
+}
+
+async function createTelegramSearchFilterResponse(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "crmBaseUrl">,
+  client: TelegramWorkerPrismaLike,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments">
+) {
+  if ((message.attachments?.length ?? 0) > 0 || !isTelegramSearchOrFilterRequest(message.text)) {
+    return null;
+  }
+
+  const decision = routeCrmOrchestratorRequest(createTelegramAssistantChannelMessage(config.workspaceId, message));
+  if (decision.intent !== "SEARCH_LEAD" || decision.status !== "ready") {
+    return null;
+  }
+
+  const records = await client.lead.findMany({
+    where: { workspaceId: config.workspaceId },
+    orderBy: [{ createdDate: "desc" }, { leadId: "asc" }],
+    select: {
+      id: true,
+      leadId: true,
+      createdDate: true,
+      status: true,
+      temperature: true,
+      requestType: true,
+      projectAddress: true,
+      client: {
+        select: {
+          name: true
+        }
+      }
+    }
+  });
+
+  return createLeadSearchFilterResponse(message.text, records.map(toTelegramLeadSearchRecord));
+}
+
+function toTelegramLeadSearchRecord(record: {
+  id?: string;
+  leadId: string;
+  createdDate?: Date | string | null;
+  status?: string | null;
+  temperature?: string | null;
+  requestType?: string | null;
+  projectAddress?: string | null;
+  client?: { name?: string | null } | null;
+  clientName?: string | null;
+}): LeadSearchRecord {
+  return {
+    id: record.id ?? record.leadId,
+    leadId: record.leadId,
+    createdDate: record.createdDate ?? new Date(0),
+    status: record.status ?? "unknown",
+    temperature: record.temperature,
+    requestType: record.requestType,
+    projectAddress: record.projectAddress,
+    clientName: record.client?.name ?? record.clientName ?? null
+  };
+}
+
+function hasDownloadCsvAction(response: { buttons?: Array<{ action?: string }> }): boolean {
+  return response.buttons?.some((button) => button.action === "download_csv") ?? false;
+}
+
+function isGenericTelegramLimitedActionsResponse(response: { text: string; buttons?: Array<unknown> }): boolean {
+  return response.text === createTelegramLimitedActionsText() && (response.buttons?.length ?? 0) === 0;
+}
+
+function shouldPreferTelegramLeadIntake(
+  message: Pick<AllowedTelegramMessageBatch, "text" | "sourceMessageIds" | "attachments">
+): boolean {
+  return (
+    (message.attachments?.length ?? 0) > 0 ||
+    message.sourceMessageIds.length > 1 ||
+    (looksLikeTelegramLeadSourceMaterial(message.text) && !isDisabledTelegramEarlyAssistantRequest(message.text) && !isTelegramSearchOrFilterRequest(message.text))
+  );
+}
+
+function isDisabledTelegramEarlyAssistantRequest(text: string): boolean {
+  return isTelegramThemeCapabilityRequest(text);
+}
+
+function isTelegramThemeCapabilityRequest(text: string): boolean {
+  return (
+    /\b(theme|dark mode|night mode|evening theme|color scheme|appearance|graphite|nocturne)\b/i.test(text) ||
+    /(тем[ауы]|темн\w*|ночн\w*\s+режим|вечерн\w*\s+тем|цветов\w*\s+схем|оформлен|внешн\w*\s+вид)/i.test(text) ||
+    /(С‚РµРјР°|С‚РµРјРЅ\w*|РЅРѕС‡РЅ\w*\s+СЂРµР¶РёРј|РІРµС‡РµСЂРЅ\w*\s+С‚РµРј|С†РІРµС‚РѕРІ\w*\s+СЃС…РµРј|РѕС„РѕСЂРјР»РµРЅ|РІРЅРµС€РЅ\w*\s+РІРёРґ)/i.test(text)
+  );
+}
+
+function isTelegramTableExportRequest(text: string): boolean {
+  return /\b(csv|excel|xlsx|spreadsheet|export)\b/i.test(text) || /(csv|excel|экспорт|скачай|скинь|таблиц)/i.test(text);
+}
+
+function isTelegramSearchOrFilterRequest(text: string): boolean {
+  if (isTelegramTableExportRequest(text)) {
+    return true;
+  }
+  return /\b(find|search|look up|show|open|list|filter|get)\b/i.test(text) || /(покажи|найди|выведи|дай|фильтр|отфильтруй)/i.test(text);
 }
 
 async function createTelegramCrmOrchestratorFallbackResponse(
@@ -1566,11 +1699,7 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     return createTelegramLimitedActionsResponse();
   }
 
-  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
-    return null;
-  }
-
-  if (decision.intent === "ATTACH_FILE" && replyTo?.leadId) {
+  if (decision.intent === "CREATE_LEAD") {
     return null;
   }
 
@@ -1585,6 +1714,10 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     };
   }
 
+  if (decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
   if (decision.intent === "SEARCH_LEAD") {
     return createTelegramLimitedActionsResponse();
   }
@@ -1593,8 +1726,15 @@ async function createTelegramCrmOrchestratorFallbackResponse(
     return createTelegramLimitedActionsResponse();
   }
 
-  if (decision.intent === "ATTACH_FILE") {
-    return createTelegramLimitedActionsResponse();
+  if (decision.intent === "SUPPORT_REQUEST") {
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: "I can help with CRM questions here. Right now Telegram actions are limited to creating leads and updating existing leads."
+    };
   }
 
   return null;
@@ -1621,6 +1761,10 @@ function shouldUseCrmOrchestratorFallback(
 
   if ((message.attachments?.length ?? 0) > 0) {
     return false;
+  }
+
+  if (isTelegramSearchOrFilterRequest(message.text)) {
+    return true;
   }
 
   return !looksLikeTelegramLeadSourceMaterial(message.text);

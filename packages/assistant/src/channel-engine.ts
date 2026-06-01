@@ -20,15 +20,25 @@ export function createAssistantChannelResponse(
   options: { lead?: LeadChatSnapshot | null } = {}
 ): AssistantChannelResponse {
   const intent = classifyIntent(message.content);
-  const capabilityResponse = createCapabilityResponse(message);
 
-  if (capabilityResponse) {
-    return capabilityResponse;
+  if (isHelpMessage(message.content, intent)) {
+    return {
+      intent: "help",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: createSharedCapabilityMessage(message.channel)
+    };
   }
 
-  const tableExportResponse = createTableExportResponse(message);
-  if (tableExportResponse) {
-    return tableExportResponse;
+  if (message.channel !== "telegram") {
+    const capabilityResponse = createCapabilityResponse(message);
+
+    if (capabilityResponse) {
+      return capabilityResponse;
+    }
+
   }
 
   const reminderResponse = createLeadReminderResponse(message);
@@ -51,18 +61,7 @@ export function createAssistantChannelResponse(
     return noteResponse;
   }
 
-  if (isHelpMessage(message.content, intent)) {
-    return {
-      intent: "help",
-      shouldPersistFeedback: false,
-      feedbackType: undefined,
-      buttons: [],
-      normalizedActions: [],
-      text: createSharedCapabilityMessage(message.channel)
-    };
-  }
-
-  if (isPersistedFeedbackIntent(intent)) {
+  if (message.channel !== "telegram" && isPersistedFeedbackIntent(intent)) {
     return {
       intent,
       shouldPersistFeedback: true,
@@ -115,6 +114,10 @@ export function createAssistantChannelResponse(
 
   if (leadChatResponse) {
     return leadChatResponse;
+  }
+
+  if (message.channel === "telegram") {
+    return createTelegramLimitedCrmActionsResponse();
   }
 
   const responseIntent = intent === "permission_blocked" ? "other" : intent;
@@ -177,11 +180,7 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     return null;
   }
 
-  if (decision.intent === "CREATE_LEAD" || decision.intent === "UPDATE_LEAD") {
-    return null;
-  }
-
-  if (decision.intent === "ATTACH_FILE" && getReferencedLeadId(message)) {
+  if (decision.intent === "CREATE_LEAD") {
     return null;
   }
 
@@ -196,6 +195,10 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     };
   }
 
+  if (decision.intent === "UPDATE_LEAD") {
+    return null;
+  }
+
   if (decision.intent === "SEARCH_LEAD") {
     return createTelegramLimitedCrmActionsResponse();
   }
@@ -204,8 +207,17 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
     return createTelegramLimitedCrmActionsResponse();
   }
 
-  if (decision.intent === "ATTACH_FILE") {
-    return createTelegramLimitedCrmActionsResponse();
+  if (decision.intent === "SUPPORT_REQUEST") {
+    const leadId = getReferencedLeadId(message);
+
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: createLeadCrmButtons(leadId),
+      normalizedActions: leadId ? ["open_crm"] : [],
+      text: createSupportResponseText(message.channel, leadId)
+    };
   }
 
   return null;
@@ -292,66 +304,6 @@ function createLeadReminderResponse(message: AssistantChannelMessage): Assistant
     normalizedActions: ["open_crm"],
     text: createReminderUserResponse(leadId, message.content, { now: new Date(message.receivedAt) })
   };
-}
-
-function createTableExportResponse(message: AssistantChannelMessage): AssistantChannelResponse | null {
-  const exportKind = detectTableExportKind(message.content, message.context.module);
-  if (!exportKind) {
-    return null;
-  }
-
-  return {
-    intent: "support_request",
-    shouldPersistFeedback: false,
-    feedbackType: undefined,
-    buttons: [{ label: "Download CSV", action: "download_csv", url: `/exports/${exportKind}` }],
-    normalizedActions: [],
-    text: `Готово, подготовил CSV export для таблицы ${getExportKindLabel(exportKind)}. Его можно открыть в Excel.`
-  };
-}
-
-function detectTableExportKind(content: string, moduleContext?: string): "leads" | "clients" | "projects" | "cold-targets" | null {
-  const text = content.toLowerCase();
-  const asksForExport = /\b(csv|excel|xlsx|spreadsheet|export|download)\b/i.test(text) || /(csv|excel|СЌРєСЃРµР»|СЌРєСЃРїРѕСЂС‚|СЃРєРёРЅСЊ|СЃРєР°С‡Р°Р№|С‚Р°Р±Р»РёС†)/i.test(text);
-  if (!asksForExport) {
-    return null;
-  }
-
-  if (/\bclients?\b|РєР»РёРµРЅС‚/i.test(text)) {
-    return "clients";
-  }
-
-  if (/\bprojects?\b|РїСЂРѕРµРєС‚/i.test(text)) {
-    return "projects";
-  }
-
-  if (/\bcold[-\s]?targets?\b|\boutreach\b|С…РѕР»РѕРґРЅ|cold target/i.test(text)) {
-    return "cold-targets";
-  }
-
-  if (/\bleads?\b|Р»РёРґ|Р·Р°СЏРІРє/i.test(text)) {
-    return "leads";
-  }
-
-  if (moduleContext === "clients" || moduleContext === "projects" || moduleContext === "leads") {
-    return moduleContext;
-  }
-
-  if (moduleContext === "outreach") {
-    return "cold-targets";
-  }
-
-  return null;
-}
-
-function getExportKindLabel(kind: "leads" | "clients" | "projects" | "cold-targets"): string {
-  const labels = {
-    leads: "leads",
-    clients: "clients",
-    projects: "projects",
-    "cold-targets": "cold targets"
-  };
-  return labels[kind];
 }
 
 function isHelpMessage(content: string, intent: string): boolean {
