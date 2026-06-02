@@ -23,6 +23,7 @@ export * from "./lead-action-orchestrator";
 export * from "./lead-draft-flow";
 export * from "./lead-flow-decision";
 export * from "./lead-interaction-note";
+export * from "./lead-display-name";
 export * from "./lead-reminder";
 export * from "./lead-match-decision";
 export * from "./lead-search-filter-agent";
