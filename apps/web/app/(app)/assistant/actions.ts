@@ -17,9 +17,12 @@ import {
   createInboundMessageChannelEvents,
   createAssistantThreadDraft,
   createOpenAIAssistantSubmissionResult,
+  createOpenAiCrmEntityExtractor,
   createOpenAiCrmOrchestrator,
+  createCrmEntityPersistencePlan,
   createLeadSearchFilterSubmissionResult,
   createExecutionChannelEvents,
+  createWebLeadEntityExtractionRequest,
   enrichLeadIntakeSubmissionResult,
   createOnboardingConversationFeedbackContent,
   createRussianOnboardingAssistantMessage,
@@ -48,6 +51,7 @@ import {
   type FeedbackTriageEvent,
   type PlatformFeedbackFilters
 } from "@app/assistant";
+import { createCrmEntityPrismaStore, prisma } from "@app/db";
 import { generateAssistantKpDocument, listAssistantGeneratedDocuments } from "./document-execution-store";
 import { createAssistantFollowup } from "./followup-execution-store";
 import {
@@ -62,7 +66,7 @@ import {
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
-import { getClientMaterialAnalysisSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
+import { getClientMaterialAnalysisSetting, getCrmEntityExtractorSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
 import { getAssistantLeadTargetId } from "./assistant-lead-target";
 
 export type SubmitAssistantMessageInput = {
@@ -491,12 +495,62 @@ export async function confirmAssistantActionAction({
       })
     )
   );
+  await saveWebLeadEntityExtractionAfterExecution({ workspaceId, action, execution });
 
   return {
     execution,
     action: updatedAction,
     leads: await listAssistantCreatedLeads(workspaceId)
   };
+}
+
+async function saveWebLeadEntityExtractionAfterExecution({
+  workspaceId,
+  action,
+  execution
+}: {
+  workspaceId: string;
+  action: Awaited<ReturnType<ReturnType<typeof getAssistantRepository>["listActions"]>>[number];
+  execution: Awaited<ReturnType<typeof executeAssistantAction>>;
+}) {
+  const request = createWebLeadEntityExtractionRequest({ action, execution });
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
+
+  if (!request || !openAiApiKey) {
+    return;
+  }
+
+  try {
+    const crmEntityExtractorSetting = await getCrmEntityExtractorSetting(workspaceId);
+    const extraction = await createOpenAiCrmEntityExtractor({
+      apiKey: openAiApiKey,
+      model: crmEntityExtractorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+      prompt: crmEntityExtractorSetting.prompt
+    }).extract({
+      channel: "web",
+      workspaceId,
+      messageId: request.messageId,
+      leadId: request.leadId,
+      text: request.text,
+      receivedAt: new Date().toISOString(),
+      attachments: []
+    });
+    const plan = createCrmEntityPersistencePlan({ leadId: request.leadId, extraction });
+
+    await createCrmEntityPrismaStore(prisma as never).saveLeadEntityExtraction({
+      workspaceId,
+      leadRecordId: request.leadRecordId,
+      leadId: request.leadId,
+      sourceChannel: "web",
+      sourceMessageId: `web:${request.threadId}:${request.messageId}`,
+      actorUserId: request.actorUserId,
+      entities: plan.entities,
+      calendarActions: plan.calendarActions,
+      summary: plan.historySummary
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
 }
 
 function createWebExecutionChannelEvents(threadId: string, execution: Awaited<ReturnType<typeof executeAssistantAction>>) {

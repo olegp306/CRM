@@ -41,3 +41,4 @@ export * from "./permission-blocked";
 export * from "./submission";
 export * from "./repository-contract";
 export * from "./thread-message";
+export * from "./web-lead-entity-extraction";
