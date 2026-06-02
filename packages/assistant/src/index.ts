@@ -29,6 +29,7 @@ export * from "./lead-search-filter-agent";
 export * from "./memory-repository";
 export * from "./openai-provider";
 export * from "./openai-client-material-analyzer";
+export * from "./openai-crm-entity-extractor";
 export * from "./openai-crm-orchestrator";
 export * from "./openai-lead-parser";
 export * from "./onboarding";
