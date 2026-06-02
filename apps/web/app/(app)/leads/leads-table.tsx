@@ -16,6 +16,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadContextItems,
   createLeadHistory,
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
@@ -33,6 +34,7 @@ import {
   resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
+  type LeadContextPanelItem,
   type LeadHistoryItem,
   type LeadSummaryInfoItem,
   type LeadLoopStepMode,
@@ -554,6 +556,7 @@ function LeadEditor({
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
   const leadSummaryInfo = createLeadSummaryInfo(lead.rawInput);
+  const leadContextItems = createLeadContextItems(lead);
   const history = createLeadHistory(lead);
   const timeline = createLeadLoopTimelineViewModel(lead);
   const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
@@ -630,6 +633,7 @@ function LeadEditor({
       </section>
 
       <LeadSummaryInfoPanel items={leadSummaryInfo} />
+      <LeadContextPanel items={leadContextItems} />
       <LeadHistoryPanel history={history} />
       <ActionPlanPanel actionPlan={actionPlan} />
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
@@ -900,6 +904,32 @@ function ExpandableLeadText({
         </button>
       ) : null}
     </div>
+  );
+}
+
+function LeadContextPanel({ items }: { items: LeadContextPanelItem[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <LeadCardAccordion title="CRM context" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
+      <div className="grid min-w-0 gap-2 px-3 pb-3">
+        {items.map((item, index) => (
+          <article key={`${item.title}-${index}`} className="min-w-0 rounded-lg bg-white p-3 text-sm">
+            <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] sm:items-start">
+              <div className="min-w-0">
+                <p className="break-words font-semibold text-foreground">{item.title}</p>
+                <p className="mt-1 text-[11px] font-semibold uppercase text-muted-foreground">{item.meta}</p>
+              </div>
+              <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{item.description}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </LeadCardAccordion>
   );
 }
 

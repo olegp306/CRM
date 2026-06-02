@@ -33,7 +33,18 @@ export default async function LeadsPage() {
       followupStatus: true,
       outcome: true,
       outcomeReason: true,
-      projectRecordId: true
+      projectRecordId: true,
+      contextEntities: {
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        select: {
+          entityType: true,
+          label: true,
+          value: true,
+          confidence: true,
+          normalizedKey: true
+        }
+      }
     }
   });
   const leadBusinessIds = leadRecords.map((lead) => lead.leadId);
