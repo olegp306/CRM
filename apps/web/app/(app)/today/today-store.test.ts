@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTodayFollowupViewModel } from "./today-store";
+import { createTodayCalendarActionViewModel, createTodayFollowupViewModel } from "./today-store";
 
 describe("createTodayFollowupViewModel", () => {
   it("maps assistant follow-ups into due follow-up rows", () => {
@@ -23,7 +23,42 @@ describe("createTodayFollowupViewModel", () => {
         dueDateLabel: "2026-05-20",
         rawInput: "Follow up with lead L-2026-001",
         requestedByUserId: "user-1",
-        status: "pending"
+        status: "pending",
+        source: "assistant_followup"
+      }
+    ]);
+  });
+});
+
+describe("createTodayCalendarActionViewModel", () => {
+  it("maps extracted CRM calendar actions into due follow-up rows", () => {
+    expect(
+      createTodayCalendarActionViewModel(
+        [
+          {
+            id: "calendar-action-1",
+            workspaceId: "workspace-1",
+            leadRecordId: "lead-record-1",
+            lead: { leadId: "L-2026-001" },
+            title: "Call Artem",
+            description: "Ask for investor update",
+            dueAt: new Date("2026-05-20T09:00:00.000Z"),
+            recurrence: "none",
+            actorUserId: "telegram:12345"
+          }
+        ],
+        { workspaceId: "workspace-1", today: new Date("2026-05-21T12:00:00.000Z") }
+      )
+    ).toEqual([
+      {
+        id: "calendar-action-1",
+        followupId: "Call Artem",
+        dueDateLabel: "2026-05-20",
+        rawInput: "Ask for investor update",
+        requestedByUserId: "telegram:12345",
+        status: "pending",
+        leadId: "L-2026-001",
+        source: "crm_entity_extractor"
       }
     ]);
   });
