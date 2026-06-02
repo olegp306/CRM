@@ -31,7 +31,7 @@ export function createCrmEntityPersistencePlan(input: {
     type: entity.type,
     label: entity.label,
     value: entity.value,
-    normalizedKey: "normalizedKey" in entity ? entity.normalizedKey : null,
+    normalizedKey: "normalizedKey" in entity && typeof entity.normalizedKey === "string" ? entity.normalizedKey : null,
     sourceText: entity.sourceText,
     confidence: entity.confidence
   }));

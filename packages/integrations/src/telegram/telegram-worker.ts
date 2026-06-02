@@ -10,6 +10,8 @@ import {
   createLeadNaturalContextSummary,
   createLeadSearchFilterResponse,
   createMessageReceivedEvent,
+  createCrmEntityPersistencePlan,
+  createOpenAiCrmEntityExtractor,
   createOpenAiCrmOrchestrator,
   createLeadReminderDraft,
   createReminderHistorySummary,
@@ -22,6 +24,7 @@ import {
   type AssistantAuditEventDraft,
   type AssistantChannelEvent,
   type AssistantChannelMessage,
+  type CrmEntityExtractorClient,
   type CrmOrchestratorDecision,
   type CrmOrchestratorClient,
   type LeadSearchRecord
@@ -31,10 +34,11 @@ import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storag
 import {
   createAssistantGeneratedDocumentPrismaStore,
   createAssistantPrismaRepository,
+  createCrmEntityPrismaStore,
   createWorkspaceAiSettingPrismaStore,
   prisma as defaultPrisma
 } from "@app/db";
-import type { WorkspaceAiSettingRecord, WorkspaceAiSettingStore } from "@app/db";
+import type { SaveLeadEntityExtractionInput, WorkspaceAiSettingRecord, WorkspaceAiSettingStore } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
@@ -159,6 +163,8 @@ export type TelegramWorkerConfig = {
   saveSourceAttachment?: (input: TelegramSourceAttachmentInput) => Promise<TelegramSourceAttachmentRecord>;
   audioTranscriber?: TelegramAudioTranscriber;
   crmOrchestrator?: CrmOrchestratorClient;
+  crmEntityExtractor?: CrmEntityExtractorClient;
+  saveLeadEntityExtraction?: (input: SaveLeadEntityExtractionInput) => Promise<void>;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
 };
@@ -616,6 +622,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         where: { id: repliedLead.id },
         data: createTelegramLeadUpdateData(repliedLead, draft, message)
       });
+      await saveTelegramLeadEntityExtraction(config, message, repliedLead, draft.rawInput);
       await saveTelegramChannelEvent(
         config,
         message,
@@ -700,6 +707,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           where: { id: lead.id },
           data: createTelegramLeadUpdateData(lead, draft, message)
         });
+        await saveTelegramLeadEntityExtraction(config, message, lead, draft.rawInput);
         await saveTelegramChannelEvent(
           config,
           message,
@@ -807,6 +815,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           }),
           fetchImpl
         });
+        await saveTelegramLeadEntityExtraction(config, message, updated, session.draft.rawInput);
         if (templateAwareMissingData.length > 0) {
           await telegramDraftStore.save({ ...session, leadId: activeSession.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
         } else {
@@ -865,6 +874,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           missingData: templateAwareMissingData
         })
       );
+      await saveTelegramLeadEntityExtraction(config, message, created, session.draft.rawInput);
       const sent = await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -926,6 +936,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         missingData: templateAwareMissingData
       })
     );
+    await saveTelegramLeadEntityExtraction(config, message, created, session.draft.rawInput);
     let generatedDocument: TelegramGeneratedKpDocumentRecord | null = null;
     let generatedDocumentError: string | undefined;
     if (config.generateKpDocument) {
@@ -1150,6 +1161,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
   const workspaceId = env.TELEGRAM_WORKSPACE_ID ?? "workspace-demo";
   const aiSettings = await resolveTelegramAiSettings(createWorkspaceAiSettingPrismaStore(defaultPrisma as never), workspaceId);
   const clientMaterialAnalysisSetting = aiSettings.clientMaterialAnalysis;
+  const crmEntityStore = createCrmEntityPrismaStore(defaultPrisma as never);
   const config = {
     allowedChatIds: parseAllowedChatIds(env.TELEGRAM_ALLOWED_CHAT_IDS),
     botToken,
@@ -1171,6 +1183,12 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       model: aiSettings.crmOrchestrator.model || env.OPENAI_MODEL || "gpt-4o-mini",
       prompt: aiSettings.crmOrchestrator.prompt
     }),
+    crmEntityExtractor: createOpenAiCrmEntityExtractor({
+      apiKey,
+      model: aiSettings.crmEntityExtractor.model || env.OPENAI_MODEL || "gpt-4o-mini",
+      prompt: aiSettings.crmEntityExtractor.prompt
+    }),
+    saveLeadEntityExtraction: crmEntityStore.saveLeadEntityExtraction,
     parser: createOpenAiLeadParserClient({
       apiKey,
       model: clientMaterialAnalysisSetting.model || env.OPENAI_MODEL || "gpt-4o-mini",
@@ -1189,13 +1207,15 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
 export async function resolveTelegramAiSettings(store: WorkspaceAiSettingStore, workspaceId: string): Promise<{
   clientMaterialAnalysis: WorkspaceAiSettingRecord;
   crmOrchestrator: WorkspaceAiSettingRecord;
+  crmEntityExtractor: WorkspaceAiSettingRecord;
 }> {
-  const [clientMaterialAnalysis, crmOrchestrator] = await Promise.all([
+  const [clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor] = await Promise.all([
     store.getClientMaterialAnalysis(workspaceId),
-    store.getCrmOrchestrator(workspaceId)
+    store.getCrmOrchestrator(workspaceId),
+    store.getCrmEntityExtractor(workspaceId)
   ]);
 
-  return { clientMaterialAnalysis, crmOrchestrator };
+  return { clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor };
 }
 
 export async function runTelegramWorkerLoop({
@@ -2044,6 +2064,52 @@ async function saveTelegramChannelEvent(
     targetId: createTelegramChannelEventTargetId(event),
     metadata: event
   });
+}
+
+async function saveTelegramLeadEntityExtraction(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "crmEntityExtractor" | "saveLeadEntityExtraction">,
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "sourceMessageIds" | "receivedAt" | "attachments">,
+  lead: { id?: string; leadId: string },
+  text: string
+): Promise<void> {
+  if (!config.crmEntityExtractor || !config.saveLeadEntityExtraction || !lead.id) {
+    return;
+  }
+
+  try {
+    const extraction = await config.crmEntityExtractor.extract({
+      channel: "telegram",
+      workspaceId: config.workspaceId,
+      messageId: createTelegramSourceMessageId(message),
+      leadId: lead.leadId,
+      text,
+      receivedAt: message.receivedAt,
+      attachments: (message.attachments ?? []).map((attachment) => ({
+        kind: attachment.kind,
+        fileName: attachment.fileName ?? attachment.fileId,
+        summary: null
+      }))
+    });
+    const plan = createCrmEntityPersistencePlan({ leadId: lead.leadId, extraction });
+
+    await config.saveLeadEntityExtraction({
+      workspaceId: config.workspaceId,
+      leadRecordId: lead.id,
+      leadId: lead.leadId,
+      sourceChannel: "telegram",
+      sourceMessageId: createTelegramSourceMessageId(message),
+      actorUserId: `telegram:${message.chatId}`,
+      entities: plan.entities,
+      calendarActions: plan.calendarActions,
+      summary: plan.historySummary
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
+}
+
+function createTelegramSourceMessageId(message: Pick<AllowedTelegramMessageBatch, "chatId" | "sourceMessageIds">): string {
+  return `telegram:${message.chatId}:${message.sourceMessageIds.join(",")}`;
 }
 
 function createTelegramChannelEventTargetId(event: AssistantChannelEvent): string {
