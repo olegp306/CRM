@@ -59,8 +59,32 @@ export const CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT = [
 ].join("\n");
 export const CRM_ORCHESTRATOR_ROLE = "crm_orchestrator" as const;
 export const CRM_ORCHESTRATOR_DEFAULT_MODEL = "gpt-4.1-mini";
+export const CRM_ENTITY_EXTRACTOR_ROLE = "crm_entity_extractor" as const;
+export const CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL = "gpt-4.1-mini";
+export const CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT = [
+  "# CRM Entity Extractor Agent",
+  "",
+  "You are a CRM analyst for an architecture bureau.",
+  "Your task is to transform natural human messages into structured CRM entities.",
+  "Do not mutate CRM data. Do not invent facts. Extract only what is present.",
+  "",
+  "Extract these entity types:",
+  "- FACT: stable information about a lead/client/project",
+  "- EVENT: dated or recurring real-world event",
+  "- FOLLOW_UP: future action that someone should perform",
+  "- PERSON: person mentioned in the message",
+  "- ORGANIZATION: company, bureau, institution, contractor, authority",
+  "- TAG: normalized searchable label",
+  "",
+  "Preserve the original language for names, places, and project labels.",
+  "For project/location names, use the language of the recognized location when clear.",
+  "Return strictly valid JSON matching the provided schema."
+].join("\n");
 
-export type WorkspaceAiSettingRole = typeof CLIENT_MATERIAL_ANALYSIS_ROLE | typeof CRM_ORCHESTRATOR_ROLE;
+export type WorkspaceAiSettingRole =
+  | typeof CLIENT_MATERIAL_ANALYSIS_ROLE
+  | typeof CRM_ORCHESTRATOR_ROLE
+  | typeof CRM_ENTITY_EXTRACTOR_ROLE;
 
 type WorkspaceAiSettingRow = {
   id: string;
@@ -92,6 +116,12 @@ export type UpsertCrmOrchestratorSettingInput = {
   prompt: string;
 };
 
+export type UpsertCrmEntityExtractorSettingInput = {
+  workspaceId: string;
+  model: string;
+  prompt: string;
+};
+
 export type WorkspaceAiSettingPrismaClientLike = {
   workspaceAiSetting: {
     findUnique(args: unknown): Promise<WorkspaceAiSettingRow | null>;
@@ -104,6 +134,8 @@ export type WorkspaceAiSettingStore = {
   upsertClientMaterialAnalysis(input: UpsertClientMaterialAnalysisSettingInput): Promise<WorkspaceAiSettingRecord>;
   getCrmOrchestrator(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
   upsertCrmOrchestrator(input: UpsertCrmOrchestratorSettingInput): Promise<WorkspaceAiSettingRecord>;
+  getCrmEntityExtractor(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
+  upsertCrmEntityExtractor(input: UpsertCrmEntityExtractorSettingInput): Promise<WorkspaceAiSettingRecord>;
 };
 
 export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPrismaClientLike): WorkspaceAiSettingStore {
@@ -178,6 +210,42 @@ export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPr
       });
 
       return toWorkspaceAiSettingRecord(row);
+    },
+
+    async getCrmEntityExtractor(workspaceId) {
+      const row = await client.workspaceAiSetting.findUnique({
+        where: {
+          workspaceId_role: {
+            workspaceId,
+            role: CRM_ENTITY_EXTRACTOR_ROLE
+          }
+        }
+      });
+
+      return row ? toWorkspaceAiSettingRecord(row) : createDefaultCrmEntityExtractorSetting(workspaceId);
+    },
+
+    async upsertCrmEntityExtractor(input) {
+      const row = await client.workspaceAiSetting.upsert({
+        where: {
+          workspaceId_role: {
+            workspaceId: input.workspaceId,
+            role: CRM_ENTITY_EXTRACTOR_ROLE
+          }
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          role: CRM_ENTITY_EXTRACTOR_ROLE,
+          model: input.model,
+          prompt: input.prompt
+        },
+        update: {
+          model: input.model,
+          prompt: input.prompt
+        }
+      });
+
+      return toWorkspaceAiSettingRecord(row);
     }
   };
 }
@@ -202,10 +270,25 @@ export function createDefaultCrmOrchestratorSetting(workspaceId: string): Worksp
   };
 }
 
+export function createDefaultCrmEntityExtractorSetting(workspaceId: string): WorkspaceAiSettingRecord {
+  return {
+    workspaceId,
+    role: CRM_ENTITY_EXTRACTOR_ROLE,
+    model: CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL,
+    prompt: CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
+    updatedAt: null
+  };
+}
+
 function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSettingRecord {
   return {
     workspaceId: row.workspaceId,
-    role: row.role === CRM_ORCHESTRATOR_ROLE ? CRM_ORCHESTRATOR_ROLE : CLIENT_MATERIAL_ANALYSIS_ROLE,
+    role:
+      row.role === CRM_ORCHESTRATOR_ROLE
+        ? CRM_ORCHESTRATOR_ROLE
+        : row.role === CRM_ENTITY_EXTRACTOR_ROLE
+          ? CRM_ENTITY_EXTRACTOR_ROLE
+          : CLIENT_MATERIAL_ANALYSIS_ROLE,
     model: row.model,
     prompt: row.prompt,
     updatedAt: row.updatedAt

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_MODEL,
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT,
+  CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL,
+  CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
   createWorkspaceAiSettingPrismaStore
@@ -145,5 +147,75 @@ describe("workspace ai setting prisma store", () => {
     });
     expect(setting.model).toBe("gpt-5.2");
     expect(setting.prompt).toContain("specialized agents");
+  });
+
+  it("returns the built-in CRM entity extractor defaults when no row exists", async () => {
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn()
+      }
+    });
+
+    const setting = await store.getCrmEntityExtractor("workspace-demo");
+
+    expect(setting).toEqual({
+      workspaceId: "workspace-demo",
+      role: "crm_entity_extractor",
+      model: CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL,
+      prompt: CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
+      updatedAt: null
+    });
+    expect(setting.prompt).toContain("CRM Entity Extractor Agent");
+    expect(setting.prompt).toContain("FACT");
+    expect(setting.prompt).toContain("FOLLOW_UP");
+    expect(setting.prompt).toContain("PERSON");
+    expect(setting.prompt).toContain("TAG");
+    expect(setting.prompt).toContain("Return strictly valid JSON");
+  });
+
+  it("upserts the CRM entity extractor prompt and model for one workspace", async () => {
+    const upsert = vi.fn(async (args: unknown) => ({
+      id: "setting-3",
+      workspaceId: "workspace-demo",
+      role: "crm_entity_extractor",
+      model: "gpt-5.2",
+      prompt: "Extract CRM entities from incoming lead messages and return JSON.",
+      createdAt: new Date("2026-06-02T08:00:00.000Z"),
+      updatedAt: new Date("2026-06-02T08:05:00.000Z")
+    }));
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(),
+        upsert
+      }
+    });
+
+    const setting = await store.upsertCrmEntityExtractor({
+      workspaceId: "workspace-demo",
+      model: "gpt-5.2",
+      prompt: "Extract CRM entities from incoming lead messages and return JSON."
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: {
+        workspaceId_role: {
+          workspaceId: "workspace-demo",
+          role: "crm_entity_extractor"
+        }
+      },
+      create: {
+        workspaceId: "workspace-demo",
+        role: "crm_entity_extractor",
+        model: "gpt-5.2",
+        prompt: "Extract CRM entities from incoming lead messages and return JSON."
+      },
+      update: {
+        model: "gpt-5.2",
+        prompt: "Extract CRM entities from incoming lead messages and return JSON."
+      }
+    });
+    expect(setting.model).toBe("gpt-5.2");
+    expect(setting.role).toBe("crm_entity_extractor");
   });
 });
