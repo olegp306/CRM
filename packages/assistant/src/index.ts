@@ -13,6 +13,7 @@ export * from "./confirmation-state";
 export * from "./conversation";
 export * from "./context";
 export * from "./crm-entity-extractor";
+export * from "./crm-entity-router";
 export * from "./crm-orchestrator-agent";
 export * from "./execution-channel-events";
 export * from "./feedback-item";
