@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.4.0`
+Current stable version: `0.4.1`
 
 Stable tag format:
 
@@ -25,6 +25,7 @@ v0.3.7
 v0.3.8
 v0.3.9
 v0.4.0
+v0.4.1
 ```
 
 ## Branch Workflow
@@ -151,6 +152,17 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.4.1
+
+Telegram CRM orchestration and lead search release:
+
+- Telegram and Web Assistant use updated default prompts for CRM orchestration, CRM entity extraction, and reminder handling.
+- Lead cards and Telegram confirmations now use clearer lead names built from the client and project context.
+- Telegram lead search can find leads by human title fragments, client names, tags, and recent-list requests, then returns CRM buttons with readable lead titles.
+- Lead list URLs can open filtered CRM results for searches by date, temperature, status, or free-text lead title.
+- Telegram sends an early processing acknowledgement for larger batches of files/messages and returns a generic server-error message if heavy intake fails.
+- Web lead cards surface next action/calendar context and keep lead search/filter state available from shared table-store logic.
 
 ## 0.4.0
 

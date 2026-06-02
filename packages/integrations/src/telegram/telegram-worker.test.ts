@@ -156,6 +156,7 @@ describe("telegram worker", () => {
     ];
     const sendBody = JSON.parse(String(sendCall[1]?.body));
     expect(sendBody.text).toContain("<b>L-2026-002</b> created in CRM.");
+    expect(sendBody.text).toContain("Lead name: <b>Fam. Schneider - new_build in Chiemseeufer 7</b>");
     expect(sendBody.text).toContain("Pricing: <b>standard</b>");
     expect(sendBody.text).not.toContain("Lead: <b>L-2026-002</b>");
     expect(sendBody.text).toContain("Standard EFH lead");
@@ -475,13 +476,13 @@ describe("telegram worker", () => {
     expect(String(parseLeadMock.mock.calls[0]?.[0].text)).toContain("self storage");
     expect(String(parseLeadMock.mock.calls[0]?.[0].text)).toContain("1300-1400");
     expect(created).toHaveLength(1);
-    const sendCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendMessage")) as unknown as [
-      string,
-      { body?: unknown }
-    ];
-    const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("<b>L-2026-007</b> created in CRM.");
-    expect(body.text).not.toContain("Nocturne");
+    const sendMessageCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/sendMessage")) as unknown as Array<
+      [string, { body?: unknown }]
+    >;
+    const sendBodies = sendMessageCalls.map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("I received several files/messages");
+    expect(sendBodies.at(-1).text).toContain("<b>L-2026-007</b> created in CRM.");
+    expect(sendBodies.at(-1).text).not.toContain("Nocturne");
   });
 
   it("routes Telegram table export requests through the lead search/filter agent", async () => {
@@ -558,7 +559,187 @@ describe("telegram worker", () => {
     expect(body.text).toContain("L-2026-001");
     expect(body.text).not.toContain("L-2026-002");
     expect(body.reply_markup).toEqual({
-      inline_keyboard: [[{ text: "Download CSV", url: "https://crm.example.com/exports/leads?date=last_month&temperature=warm" }]]
+      inline_keyboard: [
+        [
+          { text: "L-2026-001 · Anna Meyer", url: "https://crm.example.com/leads?leadId=L-2026-001" },
+          { text: "Open results in CRM", url: "https://crm.example.com/leads?date=last_month&temperature=warm" }
+        ],
+        [{ text: "Download CSV", url: "https://crm.example.com/exports/leads?date=last_month&temperature=warm" }]
+      ]
+    });
+  });
+
+  it("returns compact Telegram lead search results with CRM buttons", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-1",
+            leadId: "L-2026-010",
+            displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+            searchTags: ["chiemsee", "new_build"],
+            createdDate: new Date("2026-06-02T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "Neubau EFH",
+            projectAddress: "Bad Aibling",
+            client: { name: "Frau Schneider" },
+            rawInput: "telegram"
+          },
+          {
+            id: "lead-record-2",
+            leadId: "L-2026-011",
+            displayName: "Buro GmbH - Office renovation in Berlin",
+            searchTags: ["office_renovation", "berlin"],
+            createdDate: new Date("2026-06-01T10:00:00.000Z"),
+            status: "needs_data",
+            temperature: "cold",
+            requestType: "Office renovation",
+            projectAddress: "Berlin",
+            client: { name: "Buro GmbH" },
+            rawInput: "telegram"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 24,
+            message: {
+              message_id: 14,
+              date: 1779296520,
+              chat: { id: 12345 },
+              text: "Покажи последние 10 лидов"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 24 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Found 2 leads");
+    expect(body.text).toContain("Frau Schneider - Neubau EFH am Chiemsee");
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [
+        [
+          { text: "L-2026-010 · Frau Schneider - Neubau EFH...", url: "https://crm.example.com/leads?leadId=L-2026-010" },
+          { text: "L-2026-011 · Buro GmbH - Office renovation...", url: "https://crm.example.com/leads?leadId=L-2026-011" }
+        ],
+        [{ text: "Open results in CRM", url: "https://crm.example.com/leads" }]
+      ]
+    });
+  });
+
+  it("finds Telegram leads by human lead title fragments and shows title buttons", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-1",
+            leadId: "L-2026-010",
+            displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+            searchTags: ["schneider", "chiemsee", "efh", "haus", "lake"],
+            createdDate: new Date("2026-06-02T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "Neubau EFH",
+            projectAddress: "Bad Aibling",
+            client: { name: "Frau Schneider" },
+            rawInput: "telegram"
+          },
+          {
+            id: "lead-record-2",
+            leadId: "L-2026-011",
+            displayName: "Buro GmbH - Office renovation in Berlin",
+            searchTags: ["office_renovation", "berlin"],
+            createdDate: new Date("2026-06-01T10:00:00.000Z"),
+            status: "needs_data",
+            temperature: "cold",
+            requestType: "Office renovation",
+            projectAddress: "Berlin",
+            client: { name: "Buro GmbH" },
+            rawInput: "telegram"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 25,
+            message: {
+              message_id: 15,
+              date: 1779296520,
+              chat: { id: 12345 },
+              text: "Find lead Schneider house lake"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 25 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Found 1 leads");
+    expect(body.text).toContain("Frau Schneider - Neubau EFH am Chiemsee");
+    expect(body.text).not.toContain("Buro GmbH");
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [
+        [
+          { text: "L-2026-010 · Frau Schneider - Neubau EFH...", url: "https://crm.example.com/leads?leadId=L-2026-010" },
+          { text: "Open results in CRM", url: "https://crm.example.com/leads?leadSearch=Schneider+house+lake" }
+        ]
+      ]
     });
   });
 
@@ -4542,6 +4723,151 @@ describe("telegram worker", () => {
     const sendBody = JSON.parse(String(sendCall[1]?.body));
     expect(sendBody.text).toBe("Server error occurred. Please try again later.");
     expect(sendBody.text).not.toContain("Database connection lost");
+  });
+
+  it("sends an early processing acknowledgement for batched Telegram files", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async () => ({ id: "lead-record-heavy", leadId: "L-2026-001", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Fam. Audio",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "warm" as const,
+        bgfM2: 180,
+        projectAddress: "Chiemseeufer 7",
+        email: "audio@example.com",
+        phone: "+49 170 123456",
+        missingData: [],
+        summary: "PDF and audio describe a house project.",
+        suggestedReply: "Danke."
+      }))
+    };
+    const audioTranscriber = {
+      transcribe: vi.fn(async () => ({ text: "Client asks for a new build proposal." }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 900 } }) };
+      }
+      if (url.includes("/getFile") && url.includes("pdf-file")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "documents/brief.pdf" } }) };
+      }
+      if (url.includes("/getFile") && url.includes("voice-file")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "voice/brief.ogg" } }) };
+      }
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 81,
+            message: {
+              message_id: 801,
+              date: 1780254616,
+              chat: { id: 12345 },
+              document: { file_id: "pdf-file", file_name: "brief.pdf", mime_type: "application/pdf" }
+            }
+          },
+          {
+            update_id: 82,
+            message: {
+              message_id: 802,
+              date: 1780254617,
+              chat: { id: 12345 },
+              voice: { file_id: "voice-file", mime_type: "audio/ogg" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          batchWindowMs: 30_000,
+          audioTranscriber,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 82 });
+
+    const sendMessageCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/sendMessage")) as unknown as Array<
+      [string, { body?: unknown }]
+    >;
+    const sendBodies = sendMessageCalls.map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("I received several files");
+    expect(sendBodies[0].text).toContain("This can take a little time");
+    expect(sendBodies.at(-1).text).toContain("<b>L-2026-001</b> created in CRM.");
+  });
+
+  it("sends a server error after the early processing acknowledgement when heavy intake fails", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => {
+        throw new Error("OpenAI timeout");
+      })
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 901 } }) };
+      }
+      if (url.includes("/getFile")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { file_path: "documents/brief.pdf" } }) };
+      }
+      if (url.includes("/file/")) {
+        return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 83,
+            message: {
+              message_id: 803,
+              date: 1780254616,
+              chat: { id: 12345 },
+              document: { file_id: "pdf-file", file_name: "brief.pdf", mime_type: "application/pdf" }
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 83 });
+
+    const sendMessageCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/sendMessage")) as unknown as Array<
+      [string, { body?: unknown }]
+    >;
+    const sendBodies = sendMessageCalls.map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("I received your file");
+    expect(sendBodies.at(-1).text).toBe("Server error occurred while processing your materials. Please try again later.");
+    expect(sendBodies.at(-1).text).not.toContain("OpenAI timeout");
   });
 
   it("runs worker iterations in loop mode with injectable sleep", async () => {

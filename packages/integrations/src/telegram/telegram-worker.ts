@@ -270,6 +270,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
   for (const message of messageBatches) {
     let telegramReplySent = false;
+    let processingAcknowledgementSent = false;
     const sendWorkerTelegramMessage: typeof sendTelegramMessage = async (input) => {
       const sent = await sendTelegramMessage(input);
       telegramReplySent = true;
@@ -535,6 +536,13 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    processingAcknowledgementSent = await sendTelegramProcessingAcknowledgement({
+      botToken: config.botToken,
+      chatId: message.chatId,
+      message,
+      fetchImpl
+    });
+
     const hydratedMessage = await hydrateTelegramLeadMessage(message, config);
     if (hasAudioTranscriptionFailure(hydratedMessage)) {
       await sendWorkerTelegramMessage({
@@ -572,12 +580,21 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       draft = await createLeadDraftFromTelegramMessage(hydratedMessage, config.parser);
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
-      await sendWorkerTelegramMessage({
-        botToken: config.botToken,
-        chatId: message.chatId,
-        text: createTelegramLeadParseFailureMessage(),
-        fetchImpl
-      });
+      if (processingAcknowledgementSent) {
+        await sendTelegramServerErrorFallbackMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          processingMaterials: true,
+          fetchImpl
+        });
+      } else {
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: createTelegramLeadParseFailureMessage(),
+          fetchImpl
+        });
+      }
       skipped += message.sourceMessageIds.length;
       continue;
     }
@@ -1030,6 +1047,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         await sendTelegramServerErrorFallbackMessage({
           botToken: config.botToken,
           chatId: message.chatId,
+          processingMaterials: processingAcknowledgementSent,
           fetchImpl
         });
       }
@@ -1077,18 +1095,66 @@ function isPrismaRecordNotFoundError(error: unknown): boolean {
 async function sendTelegramServerErrorFallbackMessage(input: {
   botToken: string;
   chatId: string;
+  processingMaterials?: boolean;
   fetchImpl: typeof fetch;
 }): Promise<void> {
   try {
     await sendTelegramMessage({
       botToken: input.botToken,
       chatId: input.chatId,
-      text: "Server error occurred. Please try again later.",
+      text: input.processingMaterials
+        ? "Server error occurred while processing your materials. Please try again later."
+        : "Server error occurred. Please try again later.",
       fetchImpl: input.fetchImpl
     });
   } catch (error) {
     console.warn(error instanceof Error ? error.message : error);
   }
+}
+
+async function sendTelegramProcessingAcknowledgement(input: {
+  botToken: string;
+  chatId: string;
+  message: Pick<AllowedTelegramMessageBatch, "attachments" | "sourceMessageIds" | "text">;
+  fetchImpl: typeof fetch;
+}): Promise<boolean> {
+  const text = createTelegramProcessingAcknowledgementText(input.message);
+  if (!text) {
+    return false;
+  }
+
+  try {
+    await sendTelegramMessage({
+      botToken: input.botToken,
+      chatId: input.chatId,
+      text,
+      fetchImpl: input.fetchImpl
+    });
+    return true;
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+function createTelegramProcessingAcknowledgementText(
+  message: Pick<AllowedTelegramMessageBatch, "attachments" | "sourceMessageIds" | "text">
+): string | null {
+  const attachmentCount = message.attachments?.length ?? 0;
+  const isLongText = message.text.trim().length >= 1200;
+
+  if (attachmentCount <= 0 && message.sourceMessageIds.length <= 1 && !isLongText) {
+    return null;
+  }
+
+  const materialLabel =
+    attachmentCount > 1 || message.sourceMessageIds.length > 1
+      ? "several files/messages"
+      : attachmentCount === 1
+        ? "your file"
+        : "your message";
+
+  return `I received ${materialLabel}. I am reading and extracting the important CRM/KP fields now. This can take a little time.`;
 }
 
 function createTelegramInteractionSummary(messageText: string, changedFields: string[]): string {
@@ -1701,7 +1767,9 @@ async function createTelegramSearchFilterResponse(
     }
   });
 
-  return createLeadSearchFilterResponse(message.text, records.map(toTelegramLeadSearchRecord));
+  return createLeadSearchFilterResponse(message.text, records.map(toTelegramLeadSearchRecord), {
+    includeCrmButtons: true
+  });
 }
 
 function toTelegramLeadSearchRecord(record: {
@@ -1932,8 +2000,16 @@ function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?:
   }
 
   return {
-    inline_keyboard: [linkButtons.map((button) => ({ text: button.label, url: button.url }))]
+    inline_keyboard: chunkTelegramButtons(linkButtons, 2).map((row) => row.map((button) => ({ text: button.label, url: button.url })))
   };
+}
+
+function chunkTelegramButtons<T>(buttons: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let index = 0; index < buttons.length; index += size) {
+    rows.push(buttons.slice(index, index + size));
+  }
+  return rows;
 }
 
 function createTelegramAbsoluteButtonUrl(url: string | undefined, crmBaseUrl: string | undefined): string | null {
@@ -1969,7 +2045,15 @@ function createTelegramLeadConfirmation({
 }): string {
   const missingData = Array.isArray(draft.missingData) ? draft.missingData : [];
   const kpReady = missingData.length === 0;
+  const summary = truncateTelegramLeadSummary(createTelegramLeadSummary(draft, generatedDocumentId, generatedDocumentDelivered));
+  const leadDisplayName = createLeadDisplayMetadata({
+    clientName: draft.clientName,
+    requestType: draft.requestType,
+    projectAddress: draft.projectAddress,
+    leadSummary: summary
+  }).displayName;
   const fields = [
+    ["Lead name", leadDisplayName],
     ["Status", status],
     ["KP fields ready", kpReady ? "yes" : "no"],
     ["KP generation", generatedDocumentError],
@@ -1980,7 +2064,6 @@ function createTelegramLeadConfirmation({
     ["Standard", draft.isStandard === undefined ? "" : draft.isStandard ? "yes" : "no"],
     ["Missing for KP", missingData.length > 0 ? missingData.join(", ") : ""]
   ].filter(([, value]) => String(value ?? "").trim() !== "");
-  const summary = truncateTelegramLeadSummary(createTelegramLeadSummary(draft, generatedDocumentId, generatedDocumentDelivered));
 
   return [
     `<b>${escapeHtml(leadId)}</b> created in CRM.`,

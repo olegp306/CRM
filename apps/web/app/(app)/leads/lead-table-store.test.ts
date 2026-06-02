@@ -4,6 +4,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadCalendarViewModel,
   createLeadHistory,
   createLeadContextItems,
   createLeadKpMailtoHref,
@@ -11,6 +12,7 @@ import {
   createLeadLoopTimelineViewModel,
   createLeadSummaryInfo,
   createLeadTableRows,
+  filterLeadRowsForUrlSearch,
   getLeadSourceMaterials,
   inlineEditableLeadFields,
   isInlineEditableLeadField,
@@ -28,6 +30,7 @@ describe("lead table model", () => {
   it("defines all recommended lead fields as sortable table columns", () => {
     expect(leadTableColumns.map((column) => column.key)).toEqual([
       "leadId",
+      "leadName",
       "loopStage",
       "clientRecordId",
       "createdDate",
@@ -357,6 +360,7 @@ describe("lead table model", () => {
         {
           id: "lead-record-1",
           leadId: "L-2026-001",
+          displayName: "Irina Schneider - Neubau EFH in Bad Aibling",
           clientRecordId: "client-record-1",
           createdDate: new Date("2026-05-21T10:00:00.000Z"),
           temperature: "warm",
@@ -387,6 +391,7 @@ describe("lead table model", () => {
     expect(row).toMatchObject({
       id: "lead-record-1",
       leadId: "L-2026-001",
+      leadName: "Irina Schneider - Neubau EFH in Bad Aibling",
       loopStage: "5. Standard vs custom branch",
       createdDate: "2026-05-21",
       desiredStart: "2026-06-01",
@@ -402,6 +407,39 @@ describe("lead table model", () => {
       kpDocxAttachmentId: "attachment-docx-1",
       kpPdfAttachmentId: "attachment-pdf-1"
     });
+  });
+
+  it("falls back to the lead id when a lead name is not available", () => {
+    const [row] = createLeadTableRows([
+      {
+        id: "lead-record-no-name",
+        leadId: "L-2026-099",
+        clientRecordId: null,
+        createdDate: "2026-05-21",
+        temperature: "warm",
+        requestType: null,
+        urgency: null,
+        budgetEur: null,
+        desiredStart: null,
+        desiredMoveIn: null,
+        bgfM2: null,
+        wohnflaecheM2: null,
+        projectAddress: null,
+        isStandard: null,
+        status: "new",
+        rawInput: "",
+        missingData: [],
+        kpGeneratedDocumentId: null,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        outcome: null,
+        outcomeReason: null,
+        projectRecordId: null
+      }
+    ]);
+
+    expect(row.leadName).toBe("L-2026-099");
   });
 
   it("attaches persisted channel events to serialized lead rows", () => {
@@ -537,6 +575,115 @@ describe("lead table model", () => {
         projectRecordId: ""
       }).map((item) => item.title)
     ).toEqual(["Follow up", "Capture outcome"]);
+  });
+
+  it("builds a lead action calendar with the next scheduled follow-up", () => {
+    const calendar = createLeadCalendarViewModel({
+      followup1Date: "2026-05-28",
+      followupStatus: "planned",
+      outcome: ""
+    });
+
+    expect(calendar.nextSummary).toBe("Next: 2026-05-28 - Follow up with client reaction and update outcome.");
+    expect(calendar.items).toEqual([
+      {
+        id: "followup-2026-05-28",
+        title: "Follow up",
+        date: "2026-05-28",
+        status: "planned",
+        description: "Check client reaction and update outcome."
+      }
+    ]);
+    expect(calendar.monthLabel).toBe("May 2026");
+    expect(calendar.weeks).toHaveLength(5);
+    expect(calendar.weeks.flat().find((day) => day.date === "2026-05-28")).toMatchObject({
+      day: 28,
+      isCurrentMonth: true,
+      itemCount: 1
+    });
+  });
+
+  it("filters lead rows from Telegram CRM search URL parameters", () => {
+    const rows = createLeadTableRows([
+      {
+        id: "lead-1",
+        leadId: "L-2026-001",
+        displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+        clientRecordId: null,
+        createdDate: "2026-06-02T10:00:00.000Z",
+        temperature: "warm",
+        requestType: "Neubau EFH",
+        urgency: null,
+        budgetEur: null,
+        desiredStart: null,
+        desiredMoveIn: null,
+        bgfM2: null,
+        wohnflaecheM2: null,
+        projectAddress: "Bad Aibling",
+        isStandard: true,
+        status: "new",
+        rawInput: null,
+        missingData: [],
+        kpGeneratedDocumentId: null,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        outcome: null,
+        outcomeReason: null,
+        projectRecordId: null,
+        contextEntities: [{ entityType: "TAG", label: "region", value: "chiemsee", confidence: "high", normalizedKey: "chiemsee" }]
+      },
+      {
+        id: "lead-2",
+        leadId: "L-2026-002",
+        displayName: "Buro GmbH - Office renovation in Berlin",
+        clientRecordId: null,
+        createdDate: "2026-05-20T10:00:00.000Z",
+        temperature: "cold",
+        requestType: "Office renovation",
+        urgency: null,
+        budgetEur: null,
+        desiredStart: null,
+        desiredMoveIn: null,
+        bgfM2: null,
+        wohnflaecheM2: null,
+        projectAddress: "Berlin",
+        isStandard: false,
+        status: "needs_data",
+        rawInput: null,
+        missingData: ["budgetEur"],
+        kpGeneratedDocumentId: null,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        outcome: null,
+        outcomeReason: null,
+        projectRecordId: null,
+        contextEntities: []
+      }
+    ]);
+
+    const filtered = filterLeadRowsForUrlSearch(rows, {
+      leadSearch: "chiemsee",
+      temperature: "warm",
+      status: null,
+      date: "current_month",
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(filtered.map((row) => row.leadId)).toEqual(["L-2026-001"]);
+  });
+
+  it("returns an empty lead action calendar when no future action is scheduled", () => {
+    const calendar = createLeadCalendarViewModel({
+      followup1Date: "",
+      followupStatus: "",
+      outcome: "contract"
+    });
+
+    expect(calendar.nextSummary).toBe("No scheduled future actions yet.");
+    expect(calendar.items).toEqual([]);
+    expect(calendar.weeks).toEqual([]);
   });
 
   it("builds a collapsed-card history from the lead workflow state", () => {

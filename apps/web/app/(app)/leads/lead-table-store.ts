@@ -1,5 +1,6 @@
 export type LeadTableColumnKey =
   | "leadId"
+  | "leadName"
   | "loopStage"
   | "clientRecordId"
   | "createdDate"
@@ -40,6 +41,7 @@ export type LeadMobileViewMode = "cards" | "table";
 export type LeadTableRecord = {
   id: string;
   leadId: string;
+  displayName?: string | null;
   clientRecordId: string | null;
   createdDate: Date | string | null;
   temperature: string | null;
@@ -86,6 +88,28 @@ export type LeadActionPlanItem = {
   dueDate: string;
   status: "due" | "planned" | "waiting" | "done";
   description: string;
+};
+
+export type LeadCalendarItem = {
+  id: string;
+  title: string;
+  date: string;
+  status: string;
+  description: string;
+};
+
+export type LeadCalendarDay = {
+  date: string;
+  day: number;
+  isCurrentMonth: boolean;
+  itemCount: number;
+};
+
+export type LeadCalendarViewModel = {
+  nextSummary: string;
+  monthLabel: string;
+  items: LeadCalendarItem[];
+  weeks: LeadCalendarDay[][];
 };
 
 export type LeadHistoryItem = {
@@ -149,6 +173,7 @@ export type LeadSummaryInfoItem = {
 
 export const leadTableColumns: LeadTableColumn[] = [
   { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
+  { key: "leadName", label: "Lead name", enableSorting: true, defaultSize: 240, maxSize: 420 },
   { key: "loopStage", label: "Loop stage", enableSorting: true, defaultSize: 132 },
   { key: "clientRecordId", label: "Client ID", enableSorting: true, defaultSize: 160 },
   { key: "createdDate", label: "Created", enableSorting: true, defaultSize: 124 },
@@ -515,6 +540,7 @@ export function createLeadTableRows(
   return records.map((record) => ({
     id: record.id,
     leadId: record.leadId,
+    leadName: record.displayName ?? record.leadId,
     loopStage: formatLeadLoopStage(record),
     clientRecordId: record.clientRecordId ?? "",
     createdDate: formatDate(record.createdDate),
@@ -544,6 +570,91 @@ export function createLeadTableRows(
     channelEvents: channelEventsByLeadId[record.leadId] ?? undefined,
     contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? [])
   }));
+}
+
+export type LeadUrlSearchFilters = {
+  leadSearch: string | null;
+  temperature: string | null;
+  status: string | null;
+  date: string | null;
+  now?: Date;
+};
+
+export function filterLeadRowsForUrlSearch(rows: LeadTableRow[], filters: LeadUrlSearchFilters): LeadTableRow[] {
+  const normalizedQuery = normalizeLeadUrlSearchText(filters.leadSearch ?? "");
+  const temperature = (filters.temperature ?? "").trim().toLowerCase();
+  const status = (filters.status ?? "").trim().toLowerCase();
+  const dateRange = createLeadUrlDateRange(filters.date, filters.now ?? new Date());
+
+  if (!normalizedQuery && !temperature && !status && !dateRange) {
+    return rows;
+  }
+
+  return rows.filter((row) => {
+    if (normalizedQuery && !createLeadRowSearchText(row).includes(normalizedQuery)) {
+      return false;
+    }
+
+    if (temperature && row.temperature.toLowerCase() !== temperature) {
+      return false;
+    }
+
+    if (status && row.status.toLowerCase() !== status) {
+      return false;
+    }
+
+    if (dateRange) {
+      const created = new Date(`${row.createdDate}T00:00:00.000Z`);
+      if (Number.isNaN(created.getTime()) || created < dateRange.from || created >= dateRange.to) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+function createLeadRowSearchText(row: LeadTableRow): string {
+  return normalizeLeadUrlSearchText(
+    [
+      row.leadId,
+      row.leadName,
+      row.clientRecordId,
+      row.temperature,
+      row.requestType,
+      row.urgency,
+      row.projectAddress,
+      row.status,
+      row.rawInput,
+      row.missingData,
+      ...(row.contextEntities ?? []).flatMap((entity) => [entity.label, entity.value, entity.normalizedKey ?? ""])
+    ].join(" ")
+  );
+}
+
+function normalizeLeadUrlSearchText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, "_").trim();
+}
+
+function createLeadUrlDateRange(datePreset: string | null, now: Date): { from: Date; to: Date } | null {
+  if (datePreset !== "current_month" && datePreset !== "last_month") {
+    return null;
+  }
+
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+
+  if (datePreset === "current_month") {
+    return {
+      from: new Date(Date.UTC(year, month, 1)),
+      to: new Date(Date.UTC(year, month + 1, 1))
+    };
+  }
+
+  return {
+    from: new Date(Date.UTC(year, month - 1, 1)),
+    to: new Date(Date.UTC(year, month, 1))
+  };
 }
 
 export function createLeadContextItems(lead: Pick<LeadTableRow, "contextEntities">): LeadContextPanelItem[] {
@@ -626,6 +737,35 @@ export function createLeadActionPlan(lead: Pick<LeadTableRow, "missingData" | "i
   }
 
   return plan;
+}
+
+export function createLeadCalendarViewModel(
+  lead: Pick<LeadTableRow, "followup1Date" | "followupStatus" | "outcome">
+): LeadCalendarViewModel {
+  const followupDate = normalizeCalendarDate(lead.followup1Date);
+  const items: LeadCalendarItem[] = followupDate && !lead.outcome
+    ? [
+        {
+          id: `followup-${followupDate}`,
+          title: "Follow up",
+          date: followupDate,
+          status: lead.followupStatus || "planned",
+          description: "Check client reaction and update outcome."
+        }
+      ]
+    : [];
+
+  const nextItem = items[0];
+  const monthDate = nextItem ? new Date(`${nextItem.date}T00:00:00.000Z`) : null;
+
+  return {
+    nextSummary: nextItem
+      ? `Next: ${nextItem.date} - Follow up with client reaction and update outcome.`
+      : "No scheduled future actions yet.",
+    monthLabel: monthDate ? formatCalendarMonthLabel(monthDate) : "",
+    items,
+    weeks: monthDate ? createCalendarWeeks(monthDate, items) : []
+  };
 }
 
 export function createLeadHistory(
@@ -1098,6 +1238,48 @@ function formatLeadLoopStage(record: LeadTableRecord): string {
   const title = leadLoopTimelineSteps.find((step) => step.id === stageId)?.title ?? "Unknown";
 
   return `${stageId}. ${title}`;
+}
+
+function normalizeCalendarDate(value: Date | string | null): string | null {
+  const formatted = formatDate(value);
+  return formatted || null;
+}
+
+function formatCalendarMonthLabel(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+function createCalendarWeeks(monthDate: Date, items: LeadCalendarItem[]): LeadCalendarDay[][] {
+  const firstOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1));
+  const lastOfMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 0));
+  const startOffset = (firstOfMonth.getUTCDay() + 6) % 7;
+  const start = new Date(firstOfMonth);
+  start.setUTCDate(firstOfMonth.getUTCDate() - startOffset);
+  const endOffset = (7 - ((lastOfMonth.getUTCDay() + 6) % 7) - 1) % 7;
+  const end = new Date(lastOfMonth);
+  end.setUTCDate(lastOfMonth.getUTCDate() + endOffset);
+  const itemCounts = new Map<string, number>();
+  for (const item of items) {
+    itemCounts.set(item.date, (itemCounts.get(item.date) ?? 0) + 1);
+  }
+
+  const days: LeadCalendarDay[] = [];
+  for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const date = cursor.toISOString().slice(0, 10);
+    days.push({
+      date,
+      day: cursor.getUTCDate(),
+      isCurrentMonth: cursor.getUTCMonth() === monthDate.getUTCMonth(),
+      itemCount: itemCounts.get(date) ?? 0
+    });
+  }
+
+  const weeks: LeadCalendarDay[][] = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+
+  return weeks;
 }
 
 function formatDate(value: Date | string | null): string {

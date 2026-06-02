@@ -16,12 +16,14 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadCalendarViewModel,
   createLeadContextItems,
   createLeadHistory,
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
   createLeadSummaryInfo,
+  filterLeadRowsForUrlSearch,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadTableColumns,
@@ -34,6 +36,7 @@ import {
   resolveInitialSelectedLeadId,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
+  type LeadCalendarViewModel,
   type LeadContextPanelItem,
   type LeadHistoryItem,
   type LeadSummaryInfoItem,
@@ -66,6 +69,17 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedLeadId = searchParams.get("leadId");
+  const filteredRows = useMemo(
+    () =>
+      filterLeadRowsForUrlSearch(rows, {
+        leadSearch: searchParams.get("leadSearch"),
+        temperature: searchParams.get("temperature"),
+        status: searchParams.get("status"),
+        date: searchParams.get("date")
+      }),
+    [rows, searchParams]
+  );
+  const isUrlFiltered = filteredRows.length !== rows.length;
   const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
@@ -133,7 +147,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
   );
 
   const table = useReactTable({
-    data: rows,
+    data: filteredRows,
     columns,
     state: { sorting, columnVisibility, columnSizing: clampedColumnSizing },
     columnResizeMode: "onChange",
@@ -215,7 +229,9 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-3">
           <div>
             <h2 className="text-base font-semibold">Leads</h2>
-            <p className="text-xs text-muted-foreground">Card view for mobile, table when you need all columns.</p>
+            <p className="text-xs text-muted-foreground">
+              {isUrlFiltered ? `${filteredRows.length} leads from Telegram search.` : "Card view for mobile, table when you need all columns."}
+            </p>
           </div>
           <div className="inline-flex rounded-lg border border-border bg-muted p-1">
             {leadMobileViewModes.map((mode) => (
@@ -235,9 +251,9 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
         </div>
 
         {mobileViewMode === "cards" ? (
-          rows.length > 0 ? (
+          filteredRows.length > 0 ? (
             <div className="grid gap-2">
-              {rows.map((lead) => (
+              {filteredRows.map((lead) => (
                 <button
                   key={lead.id}
                   type="button"
@@ -246,8 +262,8 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] leading-none text-muted-foreground">Lead</p>
-                      <h3 className="mt-0.5 text-sm font-semibold leading-tight">{lead.leadId}</h3>
+                      <p className="text-[11px] leading-none text-muted-foreground">{lead.leadId}</p>
+                      <h3 className="mt-0.5 text-sm font-semibold leading-tight">{lead.leadName || lead.leadId}</h3>
                     </div>
                     <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold leading-5 text-muted-foreground">
                       {lead.status || "new"}
@@ -267,7 +283,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">No leads found yet.</div>
+            <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">No leads matched this search.</div>
           )
         ) : null}
       </section>
@@ -277,7 +293,11 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
           <div>
             <h2 className="text-base font-semibold">Lead table</h2>
             <p className="text-sm text-muted-foreground">
-              {viewMode === "inline" ? "Sort, resize, hide columns, then edit safe fields directly." : "Sort, resize, hide columns, then click a row to edit."}
+              {isUrlFiltered
+                ? `${filteredRows.length} of ${rows.length} leads match the Telegram search link.`
+                : viewMode === "inline"
+                  ? "Sort, resize, hide columns, then edit safe fields directly."
+                  : "Sort, resize, hide columns, then click a row to edit."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -558,6 +578,7 @@ function LeadEditor({
   const leadSummaryInfo = createLeadSummaryInfo(lead.rawInput);
   const leadContextItems = createLeadContextItems(lead);
   const history = createLeadHistory(lead);
+  const calendar = createLeadCalendarViewModel(lead);
   const timeline = createLeadLoopTimelineViewModel(lead);
   const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
   const nextAction = actionPlan[0];
@@ -584,7 +605,10 @@ function LeadEditor({
         <div className="-mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
           <div className="grid min-w-0 gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
-            <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadId}</h2>
+            <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadName || lead.leadId}</h2>
+            <p className="text-xs text-muted-foreground">
+              Lead ID <span className="font-semibold text-foreground">{lead.leadId}</span>
+            </p>
             <p className="text-xs text-muted-foreground">
               Created <span className="font-semibold text-foreground">{lead.createdDate || "No data"}</span>
             </p>
@@ -632,6 +656,7 @@ function LeadEditor({
         </div>
       </section>
 
+      <LeadActionCalendarPanel calendar={calendar} />
       <LeadSummaryInfoPanel items={leadSummaryInfo} />
       <LeadContextPanel items={leadContextItems} />
       <LeadHistoryPanel history={history} />
@@ -761,6 +786,80 @@ function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextActio
         <div className="hidden sm:block" aria-hidden="true" />
       )}
     </div>
+  );
+}
+
+function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <LeadCardAccordion
+      title="Action calendar"
+      isOpen={isOpen}
+      onToggle={() => setIsOpen((current) => !current)}
+      headerActions={
+        <span className="max-w-[11rem] truncate rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground sm:max-w-xs">
+          {calendar.items.length > 0 ? `${calendar.items.length} planned` : "No dates"}
+        </span>
+      }
+    >
+      <div className="grid min-w-0 gap-3 px-3 pb-3">
+        <div className="rounded-lg bg-white p-3 text-sm">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Next scheduled action</p>
+          <p className="mt-1 break-words text-sm font-semibold text-foreground">{calendar.nextSummary}</p>
+        </div>
+        {calendar.items.length > 0 ? (
+          <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+            <div className="min-w-0 rounded-lg bg-white p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-semibold text-foreground">{calendar.monthLabel}</p>
+                <span className="text-[11px] text-muted-foreground">Mon-Sun</span>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-muted-foreground">
+                {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
+                  <span key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+              <div className="mt-1 grid gap-1">
+                {calendar.weeks.map((week, weekIndex) => (
+                  <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                    {week.map((day) => (
+                      <div
+                        key={day.date}
+                        title={day.itemCount > 0 ? `${day.itemCount} action on ${day.date}` : day.date}
+                        className={`grid aspect-square min-h-8 place-items-center rounded-md border text-[11px] ${
+                          day.itemCount > 0
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : day.isCurrentMonth
+                              ? "border-border bg-muted/40 text-foreground"
+                              : "border-transparent bg-transparent text-muted-foreground/50"
+                        }`}
+                      >
+                        <span>{day.day}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid min-w-0 gap-2">
+              {calendar.items.map((item) => (
+                <article key={item.id} className="min-w-0 rounded-lg bg-white p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-foreground">{item.title}</h4>
+                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">{item.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-muted-foreground">{item.date}</p>
+                  <p className="mt-1 break-words text-sm text-foreground">{item.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No future follow-ups or events are scheduled for this lead yet.</p>
+        )}
+      </div>
+    </LeadCardAccordion>
   );
 }
 

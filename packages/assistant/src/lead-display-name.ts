@@ -79,7 +79,7 @@ function detectCountry(value: string): string | null {
     return "Germany";
   }
 
-  if (/\b(Россия|Russia|Москва|Сочи|Санкт-Петербург)\b/i.test(value)) {
+  if (/(Россия|Russia|Москва|Сочи|Санкт-Петербург|Казань|Екатеринбург|Новосибирск|Краснодар|Ростов-на-Дону)/i.test(value)) {
     return "Russia";
   }
 

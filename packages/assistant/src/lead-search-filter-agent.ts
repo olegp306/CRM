@@ -21,6 +21,7 @@ export type LeadSearchDatePreset = "last_month" | "current_month" | null;
 export type LeadSearchFilterRequest = {
   kind: "leads";
   wantsCsv: boolean;
+  limit?: number;
   filters: {
     datePreset: LeadSearchDatePreset;
     temperature?: "hot" | "warm" | "cold";
@@ -38,11 +39,13 @@ export function parseLeadSearchFilterRequest(
   const datePreset = detectDatePreset(text);
   const temperature = detectTemperature(text);
   const status = detectStatus(text);
+  const limit = detectResultLimit(content);
   const query = detectSearchQuery(content, { hasStructuredFilters: Boolean(datePreset || temperature || status) });
 
   return {
     kind: "leads",
     wantsCsv,
+    ...(limit ? { limit } : {}),
     filters: {
       datePreset,
       ...(temperature ? { temperature } : {}),
@@ -88,11 +91,11 @@ export function filterLeadSearchRecords(
 export function createLeadSearchFilterResponse(
   content: string,
   records: LeadSearchRecord[],
-  options: { now?: Date; limit?: number } = {}
+  options: { now?: Date; limit?: number; includeCrmButtons?: boolean } = {}
 ): AssistantChannelResponse {
   const request = parseLeadSearchFilterRequest(content, options);
   const matches = filterLeadSearchRecords(records, request, options);
-  const limit = options.limit ?? 5;
+  const limit = options.limit ?? request.limit ?? 5;
   const shown = matches.slice(0, limit);
   const lines = shown.map(formatLeadSearchLine);
   const extraCount = Math.max(matches.length - shown.length, 0);
@@ -106,9 +109,68 @@ export function createLeadSearchFilterResponse(
     shouldPersistFeedback: false,
     feedbackType: undefined,
     normalizedActions: [],
-    buttons: request.wantsCsv ? [{ label: "Download CSV", action: "download_csv", url: createLeadCsvUrl(request) }] : [],
+    buttons: createLeadSearchButtons(request, shown, {
+      includeCrmButtons: options.includeCrmButtons,
+      wantsCsv: request.wantsCsv,
+      hasMatches: matches.length > 0
+    }),
     text
   };
+}
+
+export function createLeadSearchCrmResultsUrl(request: LeadSearchFilterRequest): string {
+  const params = new URLSearchParams();
+
+  if (request.filters.datePreset) {
+    params.set("date", request.filters.datePreset);
+  }
+
+  if (request.filters.temperature) {
+    params.set("temperature", request.filters.temperature);
+  }
+
+  if (request.filters.status) {
+    params.set("status", request.filters.status);
+  }
+
+  if (request.filters.query) {
+    params.set("leadSearch", request.filters.query);
+  }
+
+  const query = params.toString();
+  return `/leads${query ? `?${query}` : ""}`;
+}
+
+function createLeadSearchButtons(
+  request: LeadSearchFilterRequest,
+  shown: LeadSearchRecord[],
+  options: { includeCrmButtons?: boolean; wantsCsv: boolean; hasMatches: boolean }
+): AssistantChannelResponse["buttons"] {
+  const buttons: AssistantChannelResponse["buttons"] = [];
+
+  if (options.includeCrmButtons) {
+    buttons.push(
+      ...shown.map((record) => ({
+        label: createLeadCrmButtonLabel(record),
+        action: "open_crm" as const,
+        url: `/leads?leadId=${encodeURIComponent(record.leadId)}`
+      }))
+    );
+
+    if (options.hasMatches) {
+      buttons.push({
+        label: "Open results in CRM",
+        action: "open_crm",
+        url: createLeadSearchCrmResultsUrl(request)
+      });
+    }
+  }
+
+  if (options.wantsCsv) {
+    buttons.push({ label: "Download CSV", action: "download_csv", url: createLeadCsvUrl(request) });
+  }
+
+  return buttons;
 }
 
 export function createLeadSearchFilterSubmissionResult(
@@ -156,7 +218,7 @@ function formatLeadSearchLine(record: LeadSearchRecord): string {
 
 function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
   const normalizedQuery = normalizeSearchText(query);
-  const haystack = [
+  const haystackValues = [
     record.leadId,
     record.displayName,
     record.clientName,
@@ -168,8 +230,48 @@ function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
   ]
     .filter((value): value is string => Boolean(value))
     .map(normalizeSearchText);
+  const haystack = haystackValues.join("_");
 
-  return haystack.some((value) => value.includes(normalizedQuery));
+  if (haystack.includes(normalizedQuery)) {
+    return true;
+  }
+
+  const queryTokens = tokenizeSearchText(query);
+  if (queryTokens.length === 0) {
+    return false;
+  }
+
+  const matchedTokens = queryTokens.filter((token) => doesSearchTokenMatch(token, haystackValues));
+  const requiredMatches = queryTokens.length === 1 ? 1 : Math.max(2, Math.ceil(queryTokens.length * 0.6));
+  return matchedTokens.length >= requiredMatches;
+}
+
+function createLeadCrmButtonLabel(record: LeadSearchRecord): string {
+  const title = (record.displayName || record.clientName || record.requestType || record.projectAddress || "").trim();
+  if (!title) {
+    return `CRM ${record.leadId}`;
+  }
+
+  return `${record.leadId} · ${truncateButtonTitle(title)}`;
+}
+
+function truncateButtonTitle(title: string): string {
+  if (title.length <= 32) {
+    return title;
+  }
+
+  const head = title.slice(0, 29).trimEnd();
+  const lastSpace = head.lastIndexOf(" ");
+  const trimmedHead = lastSpace >= 20 ? head.slice(0, lastSpace) : head;
+  return `${trimmedHead.trimEnd()}...`;
+}
+
+function doesSearchTokenMatch(token: string, haystackValues: string[]): boolean {
+  if (token.length <= 1) {
+    return false;
+  }
+
+  return haystackValues.some((value) => value.includes(token) || token.includes(value));
 }
 
 function createLeadCsvUrl(request: LeadSearchFilterRequest): string {
@@ -233,6 +335,10 @@ function detectStatus(text: string): string | null {
 
 function detectSearchQuery(content: string, options: { hasStructuredFilters: boolean }): string | null {
   const trimmed = content.trim();
+  if (isLatestListRequest(trimmed)) {
+    return null;
+  }
+
   const explicit =
     /\b(?:find|search|show|list)\s+(?:leads?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about)\s+)?([A-Za-z0-9_ -]{3,80})/i.exec(trimmed) ??
     /(?:найди|покажи|найти|ищи)\s+(?:лид[а-яё]*\s+)?(?:(по\s+тегу|с\s+тегом|про)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{3,80})/i.exec(trimmed) ??
@@ -252,8 +358,65 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
     .trim() || null;
 }
 
+function detectResultLimit(content: string): number | null {
+  const match =
+    /\b(?:latest|last|recent|top)\s+(\d{1,2})\b/i.exec(content) ??
+    /\b(\d{1,2})\s+(?:latest|last|recent)\b/i.exec(content) ??
+    /(?:\u043f\u043e\u0441\u043b\u0435\u0434\u043d[\p{L}\p{N}_-]*|\u0441\u0432\u0435\u0436[\p{L}\p{N}_-]*)\s+(\d{1,2})/iu.exec(content) ??
+    /(\d{1,2})\s+(?:\u043f\u043e\u0441\u043b\u0435\u0434\u043d[\p{L}\p{N}_-]*|\u0441\u0432\u0435\u0436[\p{L}\p{N}_-]*)/iu.exec(content);
+
+  if (!match) {
+    return null;
+  }
+
+  const limit = Number(match[1]);
+  return Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 10) : null;
+}
+
+function isLatestListRequest(content: string): boolean {
+  return (
+    /\b(?:latest|last|recent|top)\s+\d{1,2}\b/i.test(content) ||
+    /(?:\u043f\u043e\u0441\u043b\u0435\u0434\u043d[\p{L}\p{N}_-]*|\u0441\u0432\u0435\u0436[\p{L}\p{N}_-]*)\s+\d{1,2}/iu.test(content)
+  );
+}
+
 function normalizeSearchText(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, "_").trim();
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .trim();
+}
+
+function tokenizeSearchText(value: string): string[] {
+  return normalizeSearchText(value)
+    .split("_")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !isSearchStopWord(token));
+}
+
+function isSearchStopWord(token: string): boolean {
+  return new Set([
+    "find",
+    "search",
+    "show",
+    "list",
+    "lead",
+    "leads",
+    "client",
+    "clients",
+    "project",
+    "projects",
+    "by",
+    "for",
+    "about",
+    "the",
+    "a",
+    "an"
+  ]).has(token);
 }
 
 function createDateRange(preset: LeadSearchDatePreset, now: Date): { from: Date; to: Date } | null {

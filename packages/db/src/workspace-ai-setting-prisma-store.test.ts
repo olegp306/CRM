@@ -32,6 +32,11 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("projectAddress");
     expect(setting.prompt).toContain("bgfM2");
     expect(setting.prompt).toContain("documentSummaries");
+    expect(setting.prompt).toContain("PROJECT-LOCATION LANGUAGE RULE");
+    expect(setting.prompt).toContain("Munich");
+    expect(setting.prompt).toContain("German");
+    expect(setting.prompt).toContain("Russia");
+    expect(setting.prompt).toContain("Russian");
     expect(setting.prompt).toContain("Return strictly valid JSON");
     expect(setting.prompt).toContain("Do not invent missing fields");
   });
@@ -176,6 +181,8 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain('"leadNaming"');
     expect(setting.prompt).toContain('"dueAt"');
     expect(setting.prompt).toContain('Do not return a generic "entities" array');
+    expect(setting.prompt).toContain("PROJECT-LOCATION LANGUAGE RULE");
+    expect(setting.prompt).toContain("summary, label, and value");
     expect(setting.prompt).toContain("Return strictly valid JSON");
   });
 

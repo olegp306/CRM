@@ -39,6 +39,10 @@ describe("leads page layout", () => {
   });
 
   it("shows lead summary info before history and keeps source blocks mobile-safe", () => {
+    expect(tableSource.indexOf("<LeadActionCalendarPanel")).toBeGreaterThan(-1);
+    expect(tableSource.indexOf("<LeadActionCalendarPanel")).toBeLessThan(tableSource.indexOf("<LeadSummaryInfoPanel"));
+    expect(tableSource).toContain("Action calendar");
+    expect(tableSource).toContain("Next scheduled action");
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeGreaterThan(-1);
     expect(tableSource.indexOf("<LeadSummaryInfoPanel")).toBeLessThan(tableSource.indexOf("<LeadHistoryPanel"));
     expect(tableSource).toContain("Lead summary info");

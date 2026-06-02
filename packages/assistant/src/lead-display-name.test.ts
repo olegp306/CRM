@@ -26,4 +26,29 @@ describe("lead display name", () => {
       }).displayName
     ).toBe("Артем - дом 120 метров в Сочи");
   });
+
+  it("uses client plus service as the lead name before place fallback", () => {
+    expect(
+      createLeadDisplayMetadata({
+        clientName: "Irina Schneider",
+        projectAddress: "Gartenweg 9, München, Deutschland",
+        requestType: "LP1-4 commercial proposal"
+      }).displayName
+    ).toBe("Irina Schneider - LP1-4 commercial proposal in München");
+  });
+
+  it("keeps multilingual search tags for name, service, and local place context", () => {
+    expect(
+      createLeadDisplayMetadata({
+        clientName: "Ирина Шнайдер",
+        projectAddress: "Сочи, улица Морская 12",
+        requestType: "консультация по реконструкции"
+      })
+    ).toEqual({
+      displayName: "Ирина Шнайдер - консультация по реконструкции в Сочи",
+      language: "ru",
+      country: "Russia",
+      searchTags: ["ирина_шнаидер", "консультация_по_реконструкции", "сочи", "russia"]
+    });
+  });
 });

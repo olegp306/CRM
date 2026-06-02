@@ -12,6 +12,7 @@ export default async function LeadsPage() {
     select: {
       id: true,
       leadId: true,
+      displayName: true,
       clientRecordId: true,
       createdDate: true,
       temperature: true,

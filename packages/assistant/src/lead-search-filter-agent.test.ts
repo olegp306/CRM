@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createLeadSearchCrmResultsUrl,
   createLeadSearchFilterSubmissionResult,
   createLeadSearchFilterResponse,
   filterLeadSearchRecords,
@@ -89,6 +90,51 @@ describe("lead search/filter agent", () => {
     expect(filterLeadSearchRecords(records, request)).toEqual([records[2]]);
   });
 
+  it("finds leads by human title fragments instead of exact full names", () => {
+    const titleLead: LeadSearchRecord = {
+      id: "lead-5",
+      leadId: "L-2026-005",
+      createdDate: "2026-06-03T10:00:00.000Z",
+      status: "new",
+      displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+      requestType: "Neubau Einfamilienhaus",
+      projectAddress: "Bad Aibling",
+      searchTags: ["schneider", "chiemsee", "efh", "haus", "lake"]
+    };
+    const request = parseLeadSearchFilterRequest("Find lead Schneider house lake", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(request.filters.query).toBe("Schneider house lake");
+    expect(filterLeadSearchRecords([...records, titleLead], request)).toEqual([titleLead]);
+  });
+
+  it("filters leads by multilingual lead names from Telegram-style search", () => {
+    const russianLead: LeadSearchRecord = {
+      id: "lead-4",
+      leadId: "L-2026-004",
+      createdDate: "2026-06-02T10:00:00.000Z",
+      status: "new",
+      displayName: "Ирина Шнайдер - консультация по реконструкции в Сочи",
+      searchTags: ["ирина_шнаидер", "консультация_по_реконструкции", "сочи", "russia"]
+    };
+    const request = parseLeadSearchFilterRequest("Найди лид Ирина Шнайдер", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(request.filters.query).toBe("Ирина Шнайдер");
+    expect(filterLeadSearchRecords([...records, russianLead], request)).toEqual([russianLead]);
+  });
+
+  it("parses latest lead list requests with a result limit", () => {
+    const request = parseLeadSearchFilterRequest("Покажи последние 10 лидов", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(request.limit).toBe(10);
+    expect(request.filters).toMatchObject({ datePreset: null });
+  });
+
   it("returns a compact lead list and a CSV action when requested", () => {
     const response = createLeadSearchFilterResponse("Send me CSV export of leads from last month", records, {
       now: new Date("2026-06-10T12:00:00.000Z")
@@ -99,6 +145,52 @@ describe("lead search/filter agent", () => {
     expect(response.text).toContain("L-2026-001");
     expect(response.text).toContain("L-2026-003");
     expect(response.buttons).toEqual([{ label: "Download CSV", action: "download_csv", url: "/exports/leads?date=last_month" }]);
+  });
+
+  it("returns CRM buttons for visible search results when requested", () => {
+    const response = createLeadSearchFilterResponse("Find leads tagged hobby_jazz", records, {
+      now: new Date("2026-06-10T12:00:00.000Z"),
+      includeCrmButtons: true
+    });
+
+    expect(response.text).toContain("Found 1 leads");
+    expect(response.buttons).toEqual([
+      { label: "L-2026-003 · Buro GmbH - Office renovation...", action: "open_crm", url: "/leads?leadId=L-2026-003" },
+      { label: "Open results in CRM", action: "open_crm", url: "/leads?leadSearch=hobby_jazz" }
+    ]);
+  });
+
+  it("formats CRM buttons with a short lead title for Telegram selection", () => {
+    const response = createLeadSearchFilterResponse(
+      "Find lead Schneider house lake",
+      [
+        {
+          id: "lead-5",
+          leadId: "L-2026-005",
+          createdDate: "2026-06-03T10:00:00.000Z",
+          status: "new",
+          displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+          searchTags: ["schneider", "chiemsee", "efh", "haus", "lake"]
+        }
+      ],
+      {
+        includeCrmButtons: true
+      }
+    );
+
+    expect(response.buttons[0]).toEqual({
+      label: "L-2026-005 · Frau Schneider - Neubau EFH...",
+      action: "open_crm",
+      url: "/leads?leadId=L-2026-005"
+    });
+  });
+
+  it("creates a CRM results URL from structured filters", () => {
+    const request = parseLeadSearchFilterRequest("Send me CSV export of warm leads from last month", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(createLeadSearchCrmResultsUrl(request)).toBe("/leads?date=last_month&temperature=warm");
   });
 
   it("creates a submission result for web assistant search/filter requests without feedback or action preview", () => {
