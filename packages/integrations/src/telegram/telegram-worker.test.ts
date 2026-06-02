@@ -4,7 +4,7 @@ import { createTelegramTestUpdateFromEnv, processTelegramUpdates, resolveTelegra
 import { createMemoryTelegramLeadDraftSessionStore } from "./telegram-lead-draft-session";
 
 describe("telegram worker", () => {
-  it("loads both client material and CRM orchestrator AI settings for Telegram runtime", async () => {
+  it("loads client material, CRM orchestrator, and CRM entity extractor AI settings for Telegram runtime", async () => {
     const store = {
       getClientMaterialAnalysis: vi.fn(async () => ({
         workspaceId: "workspace-demo",
@@ -21,7 +21,15 @@ describe("telegram worker", () => {
         prompt: "Route CRM requests.",
         updatedAt: null
       })),
-      upsertCrmOrchestrator: vi.fn()
+      upsertCrmOrchestrator: vi.fn(),
+      getCrmEntityExtractor: vi.fn(async () => ({
+        workspaceId: "workspace-demo",
+        role: "crm_entity_extractor" as const,
+        model: "gpt-5.1",
+        prompt: "Extract CRM entities.",
+        updatedAt: null
+      })),
+      upsertCrmEntityExtractor: vi.fn()
     };
 
     await expect(resolveTelegramAiSettings(store, "workspace-demo")).resolves.toEqual({
@@ -34,10 +42,16 @@ describe("telegram worker", () => {
         role: "crm_orchestrator",
         model: "gpt-5.2",
         prompt: "Route CRM requests."
+      }),
+      crmEntityExtractor: expect.objectContaining({
+        role: "crm_entity_extractor",
+        model: "gpt-5.1",
+        prompt: "Extract CRM entities."
       })
     });
     expect(store.getClientMaterialAnalysis).toHaveBeenCalledWith("workspace-demo");
     expect(store.getCrmOrchestrator).toHaveBeenCalledWith("workspace-demo");
+    expect(store.getCrmEntityExtractor).toHaveBeenCalledWith("workspace-demo");
   });
 
   it("creates a synthetic Telegram update from local test env", () => {
@@ -127,6 +141,10 @@ describe("telegram worker", () => {
           temperature: "hot",
           requestType: "new_build",
           projectAddress: "Chiemseeufer 7",
+          displayName: "Fam. Schneider - new_build in Chiemseeufer 7",
+          language: "de",
+          country: null,
+          searchTags: ["fam_schneider", "new_build", "chiemseeufer_7"],
           bgfM2: 160,
           rawInput: expect.stringContaining("Telegram sources: telegram:12345:5")
         })
@@ -151,6 +169,119 @@ describe("telegram worker", () => {
     expect(sendBody.text).not.toContain("Done, I created a lead in CRM.");
     expect(sendBody.text).not.toContain("<b>KP document</b>");
     expect(sendBody.reply_markup.inline_keyboard[0]).toEqual([{ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" }]);
+  });
+
+  it("runs CRM entity extraction after creating a Telegram lead and persists extracted context", async () => {
+    const savedExtractions: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async () => ({ id: "lead-record-1", leadId: "L-2026-001", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Artem",
+        requestType: "renovation",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        bgfM2: 140,
+        projectAddress: "Sochi",
+        email: "artem@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Renovation lead in Sochi.",
+        suggestedReply: "Danke."
+      }))
+    };
+    const crmEntityExtractor = {
+      extract: vi.fn(async () => ({
+        facts: [{ type: "FACT" as const, label: "Preference", value: "Likes jazz", sourceText: "loves jazz", confidence: "high" as const }],
+        events: [],
+        followups: [
+          {
+            type: "FOLLOW_UP" as const,
+            label: "Follow up",
+            value: "Call Artem tomorrow",
+            sourceText: "call tomorrow",
+            confidence: "high" as const,
+            title: "Call Artem",
+            dueAt: "2026-06-03T09:00:00.000Z",
+            recurrence: "none" as const,
+            assigneeHint: null
+          }
+        ],
+        people: [],
+        organizations: [],
+        tags: [{ type: "TAG" as const, label: "jazz", value: "jazz", sourceText: "jazz", confidence: "high" as const, normalizedKey: "hobby_jazz" }],
+        leadNaming: { displayName: null, projectPlace: "Sochi", language: "ru", country: "Russia" },
+        confidence: { overall: "high" as const },
+        summary: "Found client preference and one follow-up."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 10,
+          message: {
+            message_id: 5,
+            date: 1779296400,
+            chat: { id: 12345 },
+            text: "Need renovation offer for Artem in Sochi, he loves jazz and we should call tomorrow."
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        parser,
+        prisma: client,
+        crmEntityExtractor,
+        saveLeadEntityExtraction: async (input) => {
+          savedExtractions.push(input);
+        },
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(client.lead.create).toHaveBeenCalled();
+    expect(crmEntityExtractor.extract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        leadId: "L-2026-001",
+        text: expect.stringContaining("Need renovation offer")
+      })
+    );
+    expect(savedExtractions).toEqual([
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        leadRecordId: "lead-record-1",
+        leadId: "L-2026-001",
+        sourceChannel: "telegram",
+        sourceMessageId: "telegram:12345:5",
+        actorUserId: "telegram:12345",
+        entities: expect.arrayContaining([
+          expect.objectContaining({ type: "FACT", label: "Preference", value: "Likes jazz" }),
+          expect.objectContaining({ type: "TAG", normalizedKey: "hobby_jazz" })
+        ]),
+        calendarActions: [
+          expect.objectContaining({
+            title: "Call Artem",
+            dueAt: new Date("2026-06-03T09:00:00.000Z")
+          })
+        ],
+        summary: expect.stringContaining("Found client preference")
+      })
+    ]);
   });
 
   it("keeps Telegram lead confirmation summaries compact and unbolded before fields", async () => {
@@ -2971,6 +3102,118 @@ describe("telegram worker", () => {
     expect(sendBody.text).toContain("Email: <b>katya@example.com</b>");
     expect(sendBody.text).not.toContain("Client: <b>unknown</b>");
     expect(sendBody.text).not.toContain("Request type: <b>unknown</b>");
+  });
+
+  it("runs CRM entity extraction after updating a Telegram lead by reply", async () => {
+    const savedExtractions: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Initial lead\nTelegram lead card: telegram-bot:12345:900",
+                missingData: ["email"],
+                requestType: "renovation",
+                projectAddress: "Sochi"
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: undefined,
+        bgfM2: undefined,
+        email: "artem@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Email and context update",
+        suggestedReply: "Updated."
+      }))
+    };
+    const crmEntityExtractor = {
+      extract: vi.fn(async () => ({
+        facts: [{ type: "FACT" as const, label: "Preference", value: "Likes jazz", sourceText: "likes jazz", confidence: "high" as const }],
+        events: [],
+        followups: [],
+        people: [],
+        organizations: [],
+        tags: [],
+        leadNaming: { displayName: null, projectPlace: null, language: "en", country: null },
+        confidence: { overall: "high" as const },
+        summary: "Found one new client preference."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 212,
+          message: {
+            message_id: 312,
+            date: 1779297000,
+            chat: { id: 12345 },
+            reply_to_message: { message_id: 900 },
+            text: "email artem@example.com and remember that he likes jazz"
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        parser,
+        prisma: client,
+        crmEntityExtractor,
+        saveLeadEntityExtraction: async (input) => {
+          savedExtractions.push(input);
+        },
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(crmEntityExtractor.extract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        leadId: "L-2026-002",
+        messageId: "telegram:12345:312",
+        text: expect.stringContaining("artem@example.com")
+      })
+    );
+    expect(savedExtractions).toEqual([
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        leadRecordId: "lead-record-2",
+        leadId: "L-2026-002",
+        sourceChannel: "telegram",
+        sourceMessageId: "telegram:12345:312",
+        actorUserId: "telegram:12345",
+        entities: [expect.objectContaining({ type: "FACT", label: "Preference", value: "Likes jazz" })],
+        summary: expect.stringContaining("Found one new client preference")
+      })
+    ]);
   });
 
   it("updates an existing lead when replying to a lead card text that contains the lead id", async () => {

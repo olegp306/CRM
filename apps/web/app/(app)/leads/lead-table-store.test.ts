@@ -5,6 +5,7 @@ import {
   clampLeadColumnSizing,
   createLeadActionPlan,
   createLeadHistory,
+  createLeadContextItems,
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
   createLeadLoopTimelineViewModel,
@@ -119,6 +120,62 @@ describe("lead table model", () => {
       missingData: 360,
       leadId: 180
     });
+  });
+
+  it("keeps extracted CRM entities available for the lead card context panel", () => {
+    const [row] = createLeadTableRows([
+      {
+        id: "lead-record-1",
+        leadId: "L-2026-001",
+        clientRecordId: null,
+        createdDate: "2026-05-21",
+        temperature: "warm",
+        requestType: "renovation",
+        urgency: null,
+        budgetEur: null,
+        desiredStart: null,
+        desiredMoveIn: null,
+        bgfM2: null,
+        wohnflaecheM2: null,
+        projectAddress: "Sochi",
+        isStandard: null,
+        status: "new",
+        rawInput: "Initial",
+        missingData: [],
+        kpGeneratedDocumentId: null,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        outcome: null,
+        outcomeReason: null,
+        projectRecordId: null,
+        contextEntities: [
+          {
+            entityType: "FACT",
+            label: "Preference",
+            value: "Likes jazz",
+            confidence: "high",
+            normalizedKey: null
+          },
+          {
+            entityType: "TAG",
+            label: "jazz",
+            value: "jazz",
+            confidence: "high",
+            normalizedKey: "hobby_jazz"
+          }
+        ]
+      }
+    ]);
+
+    expect(row.contextEntities).toEqual([
+      expect.objectContaining({ type: "FACT", label: "Preference", value: "Likes jazz" }),
+      expect.objectContaining({ type: "TAG", label: "jazz", normalizedKey: "hobby_jazz" })
+    ]);
+    expect(createLeadContextItems(row)).toEqual([
+      { title: "Preference", description: "Likes jazz", meta: "FACT · high" },
+      { title: "jazz", description: "jazz", meta: "TAG · high · hobby_jazz" }
+    ]);
   });
 
   it("extracts source materials from saved Telegram raw input", () => {

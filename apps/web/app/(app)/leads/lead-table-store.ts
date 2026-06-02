@@ -62,6 +62,15 @@ export type LeadTableRecord = {
   outcome: string | null;
   outcomeReason: string | null;
   projectRecordId: string | null;
+  contextEntities?: LeadContextEntityRecord[];
+};
+
+export type LeadContextEntityRecord = {
+  entityType: string;
+  label: string;
+  value: string;
+  confidence: string;
+  normalizedKey?: string | null;
 };
 
 export type LeadTableRow = Record<LeadTableColumnKey, string> & {
@@ -69,6 +78,7 @@ export type LeadTableRow = Record<LeadTableColumnKey, string> & {
   kpDocxAttachmentId?: string;
   kpPdfAttachmentId?: string;
   channelEvents?: LeadChannelHistoryEvent[];
+  contextEntities?: LeadContextItem[];
 };
 
 export type LeadActionPlanItem = {
@@ -84,6 +94,20 @@ export type LeadHistoryItem = {
   actor: "Telegram" | "CRM" | "Operator";
   stageLabel: string;
   description: string;
+};
+
+export type LeadContextItem = {
+  type: string;
+  label: string;
+  value: string;
+  confidence: string;
+  normalizedKey: string | null;
+};
+
+export type LeadContextPanelItem = {
+  title: string;
+  description: string;
+  meta: string;
 };
 
 export type LeadChannelHistoryEvent = {
@@ -517,8 +541,31 @@ export function createLeadTableRows(
     projectRecordId: record.projectRecordId ?? "",
     kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
     kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined,
-    channelEvents: channelEventsByLeadId[record.leadId] ?? undefined
+    channelEvents: channelEventsByLeadId[record.leadId] ?? undefined,
+    contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? [])
   }));
+}
+
+export function createLeadContextItems(lead: Pick<LeadTableRow, "contextEntities">): LeadContextPanelItem[] {
+  return (lead.contextEntities ?? []).map((entity) => ({
+    title: entity.label,
+    description: entity.value,
+    meta: [entity.type, entity.confidence, entity.normalizedKey].filter(Boolean).join(" · ")
+  }));
+}
+
+function createLeadContextItemsFromRecords(records: LeadContextEntityRecord[]): LeadContextItem[] | undefined {
+  const items = records
+    .map((record) => ({
+      type: record.entityType,
+      label: record.label,
+      value: record.value,
+      confidence: record.confidence,
+      normalizedKey: record.normalizedKey ?? null
+    }))
+    .filter((item) => item.label.trim().length > 0 || item.value.trim().length > 0);
+
+  return items.length > 0 ? items : undefined;
 }
 
 export function createLeadActionPlan(lead: Pick<LeadTableRow, "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate" | "followup1Date" | "outcome" | "projectRecordId">): LeadActionPlanItem[] {

@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.3.9`
+Current stable version: `0.4.0`
 
 Stable tag format:
 
@@ -24,6 +24,7 @@ v0.3.6
 v0.3.7
 v0.3.8
 v0.3.9
+v0.4.0
 ```
 
 ## Branch Workflow
@@ -150,6 +151,16 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.4.0
+
+CRM entity extractor agent release:
+
+- Settings now include a CRM Entity Extractor agent prompt and model selector.
+- Telegram and Web Assistant lead create/update flows extract CRM facts, follow-ups, people, organizations, events, and tags from user input.
+- Extracted CRM context is persisted on leads and shown in lead cards as a compact CRM context section.
+- Extracted future actions can appear in Today alongside assistant follow-ups.
+- Lead search can use generated display names and extracted search tags.
 
 ## 0.3.9
 

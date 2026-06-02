@@ -36,7 +36,9 @@ const records: LeadSearchRecord[] = [
     temperature: "cold",
     requestType: "Office renovation",
     projectAddress: "Berlin",
-    clientName: "Buro GmbH"
+    clientName: "Buro GmbH",
+    displayName: "Buro GmbH - Office renovation in Berlin",
+    searchTags: ["office_renovation", "berlin", "hobby_jazz"]
   }
 ];
 
@@ -76,6 +78,15 @@ describe("lead search/filter agent", () => {
     });
 
     expect(filterLeadSearchRecords(records, request)).toEqual([records[0]]);
+  });
+
+  it("filters leads by display names and normalized search tags", () => {
+    const request = parseLeadSearchFilterRequest("Find leads tagged hobby_jazz", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(request.filters.query).toBe("hobby_jazz");
+    expect(filterLeadSearchRecords(records, request)).toEqual([records[2]]);
   });
 
   it("returns a compact lead list and a CSV action when requested", () => {

@@ -1,13 +1,17 @@
 import {
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_MODEL,
   CLIENT_MATERIAL_ANALYSIS_DEFAULT_PROMPT,
+  CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL,
+  CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
   createDefaultClientMaterialAnalysisSetting,
+  createDefaultCrmEntityExtractorSetting,
   createDefaultCrmOrchestratorSetting,
   createWorkspaceAiSettingPrismaStore,
   prisma,
   type UpsertClientMaterialAnalysisSettingInput,
+  type UpsertCrmEntityExtractorSettingInput,
   type UpsertCrmOrchestratorSettingInput,
   type WorkspaceAiSettingRecord,
   type WorkspaceAiSettingStore
@@ -32,6 +36,15 @@ export const CLIENT_MATERIAL_ANALYSIS_MODEL_OPTIONS = [
 ] as const;
 
 export const CRM_ORCHESTRATOR_MODEL_OPTIONS = [
+  { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+  { id: "gpt-4.1", label: "GPT-4.1" },
+  { id: "gpt-5", label: "GPT-5" },
+  { id: "gpt-5.1", label: "GPT-5.1" },
+  { id: "gpt-5.2", label: "GPT-5.2" },
+  { id: "gpt-5.2-pro", label: "GPT-5.2 pro" }
+] as const;
+
+export const CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS = [
   { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
   { id: "gpt-4.1", label: "GPT-4.1" },
   { id: "gpt-5", label: "GPT-5" },
@@ -102,6 +115,32 @@ export function createMemoryWorkspaceAiSettingStore(settings = getMemorySettings
       }
 
       return record;
+    },
+
+    async getCrmEntityExtractor(workspaceId) {
+      return (
+        settings.find((setting) => setting.workspaceId === workspaceId && setting.role === "crm_entity_extractor") ??
+        createDefaultCrmEntityExtractorSetting(workspaceId)
+      );
+    },
+
+    async upsertCrmEntityExtractor(input: UpsertCrmEntityExtractorSettingInput) {
+      const existingIndex = settings.findIndex((setting) => setting.workspaceId === input.workspaceId && setting.role === "crm_entity_extractor");
+      const record: WorkspaceAiSettingRecord = {
+        workspaceId: input.workspaceId,
+        role: "crm_entity_extractor",
+        model: input.model || CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL,
+        prompt: input.prompt || CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
+        updatedAt: new Date()
+      };
+
+      if (existingIndex >= 0) {
+        settings[existingIndex] = record;
+      } else {
+        settings.push(record);
+      }
+
+      return record;
     }
   };
 }
@@ -157,4 +196,14 @@ export async function getCrmOrchestratorSetting(workspaceId: string): Promise<Wo
 
 export async function saveCrmOrchestratorSetting(input: UpsertCrmOrchestratorSettingInput): Promise<WorkspaceAiSettingRecord> {
   return getWorkspaceAiSettingStore().upsertCrmOrchestrator(input);
+}
+
+export async function getCrmEntityExtractorSetting(workspaceId: string): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().getCrmEntityExtractor(workspaceId);
+}
+
+export async function saveCrmEntityExtractorSetting(
+  input: UpsertCrmEntityExtractorSettingInput
+): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().upsertCrmEntityExtractor(input);
 }

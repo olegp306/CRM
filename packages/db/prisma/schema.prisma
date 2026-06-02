@@ -80,6 +80,8 @@ model Workspace {
   feedbackItems      FeedbackItem[]
   integrationAccounts IntegrationAccount[]
   aiSettings         WorkspaceAiSetting[]
+  leadContextEntities LeadContextEntity[]
+  crmCalendarActions  CrmCalendarAction[]
 
   @@index([createdAt])
 }
@@ -170,6 +172,10 @@ model Lead {
   bgfM2               Decimal?
   wohnflaecheM2       Decimal?
   projectAddress      String?
+  displayName         String?
+  language            String?
+  country             String?
+  searchTags          Json?
   isStandard          Boolean?
   status              String
   rawInput            String?
@@ -185,6 +191,8 @@ model Lead {
 
   workspace           Workspace @relation(fields: [workspaceId], references: [id])
   client              Client?   @relation(fields: [clientRecordId], references: [id])
+  contextEntities     LeadContextEntity[]
+  calendarActions     CrmCalendarAction[]
 
   @@unique([workspaceId, leadId])
   @@index([workspaceId, status])
@@ -617,4 +625,49 @@ model WorkspaceAiSetting {
 
   @@unique([workspaceId, role])
   @@index([workspaceId])
+}
+
+model LeadContextEntity {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  leadRecordId    String
+  sourceChannel   String
+  sourceMessageId String?
+  entityType      String
+  label           String
+  value           String
+  normalizedKey   String?
+  sourceText      String?  @db.Text
+  confidence      String
+  actorUserId     String?
+  createdAt       DateTime @default(now())
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  lead            Lead      @relation(fields: [leadRecordId], references: [id])
+
+  @@index([workspaceId, entityType])
+  @@index([leadRecordId, createdAt])
+  @@index([workspaceId, normalizedKey])
+}
+
+model CrmCalendarAction {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  leadRecordId    String?
+  title           String
+  description     String?  @db.Text
+  dueAt           DateTime?
+  recurrence      String?
+  status          String   @default("planned")
+  sourceChannel   String?
+  sourceMessageId String?
+  actorUserId     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  lead            Lead?     @relation(fields: [leadRecordId], references: [id])
+
+  @@index([workspaceId, status, dueAt])
+  @@index([leadRecordId, createdAt])
 }

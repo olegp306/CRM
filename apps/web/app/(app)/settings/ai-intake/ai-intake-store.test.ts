@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createMemoryWorkspaceAiSettingStore,
+  CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS,
   CRM_ORCHESTRATOR_MODEL_OPTIONS,
   selectWorkspaceAiSettingStoreRuntime
 } from "./ai-intake-store";
@@ -12,7 +13,9 @@ describe("ai intake store", () => {
       getClientMaterialAnalysis: vi.fn(),
       upsertClientMaterialAnalysis: vi.fn(),
       getCrmOrchestrator: vi.fn(),
-      upsertCrmOrchestrator: vi.fn()
+      upsertCrmOrchestrator: vi.fn(),
+      getCrmEntityExtractor: vi.fn(),
+      upsertCrmEntityExtractor: vi.fn()
     };
 
     const store = selectWorkspaceAiSettingStoreRuntime({
@@ -65,6 +68,28 @@ describe("ai intake store", () => {
         role: "crm_orchestrator",
         model: "gpt-5.2",
         prompt: "Route CRM requests through specialized agents."
+      })
+    );
+  });
+
+  it("persists CRM entity extractor prompt and stronger model choices in memory runtime", async () => {
+    const store = createMemoryWorkspaceAiSettingStore();
+
+    expect(CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS.map((option) => option.id)).toContain("gpt-5.2");
+    expect(CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS.map((option) => option.id)).toContain("gpt-5.2-pro");
+
+    await store.upsertCrmEntityExtractor({
+      workspaceId: "workspace-demo",
+      model: "gpt-5.2",
+      prompt: "Extract facts, events, follow-ups, people, organizations, and tags."
+    });
+
+    await expect(store.getCrmEntityExtractor("workspace-demo")).resolves.toEqual(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        role: "crm_entity_extractor",
+        model: "gpt-5.2",
+        prompt: "Extract facts, events, follow-ups, people, organizations, and tags."
       })
     );
   });

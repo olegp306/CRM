@@ -8,6 +8,7 @@ import type {
   UndoKpSentFromAssistantInput,
   UndoneKpSentLeadRecord
 } from "@app/assistant";
+import { createLeadDisplayMetadata } from "@app/assistant";
 import type { LeadMissingField } from "@app/core";
 
 type LeadRow = {
@@ -19,6 +20,10 @@ type LeadRow = {
   clientName?: string | null;
   requestType?: string | null;
   projectAddress?: string | null;
+  displayName?: string | null;
+  language?: string | null;
+  country?: string | null;
+  searchTags?: unknown;
   bgfM2?: { toString(): string } | number | null;
   email?: string | null;
   phone?: string | null;
@@ -55,8 +60,20 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
     },
 
     async create(input) {
+      const displayMetadata = createLeadDisplayMetadata({
+        clientName: input.clientName,
+        requestType: input.requestType,
+        projectAddress: input.projectAddress,
+        leadSummary: input.rawInput
+      });
       const row = await client.lead.create({
-        data: input
+        data: {
+          ...input,
+          displayName: displayMetadata.displayName,
+          language: displayMetadata.language,
+          country: displayMetadata.country,
+          searchTags: displayMetadata.searchTags
+        }
       });
 
       return toCreatedLeadRecord(row);
@@ -150,6 +167,21 @@ export function createAssistantLeadPrismaStore(client: AssistantLeadPrismaClient
 
 function createLeadUpdateData(input: UpdateLeadFromAssistantInput, rawInput: string): Record<string, unknown> {
   const data: Record<string, unknown> = { rawInput };
+  const shouldRefreshDisplayMetadata =
+    input.clientName !== undefined || input.requestType !== undefined || input.projectAddress !== undefined;
+
+  if (shouldRefreshDisplayMetadata) {
+    const displayMetadata = createLeadDisplayMetadata({
+      clientName: input.clientName,
+      requestType: input.requestType,
+      projectAddress: input.projectAddress,
+      leadSummary: rawInput
+    });
+    data.displayName = displayMetadata.displayName;
+    data.language = displayMetadata.language;
+    data.country = displayMetadata.country;
+    data.searchTags = displayMetadata.searchTags;
+  }
   const optionalFields: Array<keyof Pick<
     UpdateLeadFromAssistantInput,
     "clientName" | "requestType" | "projectAddress" | "bgfM2" | "email" | "phone" | "missingData" | "isStandard" | "temperature"
