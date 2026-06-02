@@ -4,6 +4,7 @@ import {
   createLeadChatActions,
   createLeadCreatedEvent,
   createLeadDraftUpdatedEvent,
+  createLeadDisplayMetadata,
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
@@ -845,6 +846,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           rawInput: session.draft.rawInput,
           requestType: session.draft.requestType,
           projectAddress: session.draft.projectAddress,
+          ...createTelegramLeadDisplayData(session.draft),
           bgfM2: session.draft.bgfM2,
           isStandard: session.draft.isStandard,
           missingData: templateAwareMissingData,
@@ -905,6 +907,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         rawInput: session.draft.rawInput,
         requestType: session.draft.requestType,
         projectAddress: session.draft.projectAddress,
+        ...createTelegramLeadDisplayData(session.draft),
         bgfM2: session.draft.bgfM2,
         isStandard: session.draft.isStandard,
         missingData: templateAwareMissingData,
@@ -2273,12 +2276,38 @@ function createTelegramLeadUpdateData(
   addUpdateValue(update, "projectAddress", draft.projectAddress);
   addUpdateValue(update, "bgfM2", draft.bgfM2);
   update.missingData = mergeLeadMissingData(lead, draft, update);
+  if (
+    isMeaningfulTelegramFieldValue(draft.clientName) ||
+    isMeaningfulTelegramFieldValue(draft.requestType) ||
+    isMeaningfulTelegramFieldValue(draft.projectAddress)
+  ) {
+    Object.assign(update, createTelegramLeadDisplayData(draft, lead));
+  }
 
   if ((update.missingData as string[]).length === 0 && lead.status === "needs_data") {
     update.status = "new";
   }
 
   return update;
+}
+
+function createTelegramLeadDisplayData(
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  lead?: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]
+): Record<string, unknown> {
+  const displayMetadata = createLeadDisplayMetadata({
+    clientName: draft.clientName ?? (lead ? getLeadClientName(lead) : null),
+    requestType: draft.requestType ?? lead?.requestType ?? null,
+    projectAddress: draft.projectAddress ?? lead?.projectAddress ?? null,
+    leadSummary: draft.rawInput || lead?.rawInput || ""
+  });
+
+  return {
+    displayName: displayMetadata.displayName,
+    language: displayMetadata.language,
+    country: displayMetadata.country,
+    searchTags: displayMetadata.searchTags
+  };
 }
 
 function addUpdateValue(update: Record<string, unknown>, key: string, value: string | number | null | undefined): void {

@@ -127,6 +127,10 @@ describe("telegram worker", () => {
           temperature: "hot",
           requestType: "new_build",
           projectAddress: "Chiemseeufer 7",
+          displayName: "Fam. Schneider - new_build in Chiemseeufer 7",
+          language: "de",
+          country: null,
+          searchTags: ["fam_schneider", "new_build", "chiemseeufer_7"],
           bgfM2: 160,
           rawInput: expect.stringContaining("Telegram sources: telegram:12345:5")
         })
