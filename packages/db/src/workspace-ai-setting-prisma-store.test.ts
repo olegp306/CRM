@@ -171,6 +171,11 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("FOLLOW_UP");
     expect(setting.prompt).toContain("PERSON");
     expect(setting.prompt).toContain("TAG");
+    expect(setting.prompt).toContain('"facts"');
+    expect(setting.prompt).toContain('"followups"');
+    expect(setting.prompt).toContain('"leadNaming"');
+    expect(setting.prompt).toContain('"dueAt"');
+    expect(setting.prompt).toContain('Do not return a generic "entities" array');
     expect(setting.prompt).toContain("Return strictly valid JSON");
   });
 

@@ -20,8 +20,12 @@ const baseMessage = {
 describe("CRM orchestrator agent", () => {
   it("keeps the default routing prompt available for workspace settings", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("CRM Orchestrator Agent");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("BALANCED ROUTING MODE");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Creation Agent");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Update Agent");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"CREATE_REMINDER"');
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"SUPPORT_REQUEST"');
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain('"create_reminder"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("OUTPUT FORMAT");
   });
 
@@ -75,6 +79,32 @@ describe("CRM orchestrator agent", () => {
       ...baseMessage,
       content:
         "\u041d\u0430\u043f\u043e\u043c\u043d\u0438 \u0437\u0430\u0432\u0442\u0440\u0430 \u043f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c \u043b\u0438\u0434\u0443 L-2026-004"
+    });
+
+    expect(result).toMatchObject({
+      intent: "CREATE_REMINDER",
+      action: "Reminder Agent",
+      status: "ready"
+    });
+  });
+
+  it("routes conversational Russian follow-up wording to the reminder agent instead of lead creation", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Müller Bau, застройщик из Баварии, через неделю зафоллоуапить"
+    });
+
+    expect(result).toMatchObject({
+      intent: "CREATE_REMINDER",
+      action: "Reminder Agent",
+      status: "ready"
+    });
+  });
+
+  it("routes conditional public-authority callbacks as reminders", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Если Bauamt не ответит до пятницы, позвонить им"
     });
 
     expect(result).toMatchObject({

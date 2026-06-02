@@ -4,6 +4,8 @@ import { createLeadReminderDraft, createReminderHistorySummary, isReminderReques
 describe("lead reminder agent", () => {
   it("detects Russian reminder requests", () => {
     expect(isReminderRequest("Напомни завтра посмотреть LinkedIn у клиента")).toBe(true);
+    expect(isReminderRequest("Через неделю зафоллоуапить Müller Bau")).toBe(true);
+    expect(isReminderRequest("Если Bauamt не ответит до пятницы, позвонить им")).toBe(true);
   });
 
   it("extracts a dated CRM follow-up reminder from Russian text", () => {
@@ -67,6 +69,12 @@ describe("lead reminder agent", () => {
         now: new Date("2026-05-26T08:15:00.000Z")
       }).dueAt?.toISOString()
     ).toBe("2026-05-29T09:00:00.000Z");
+
+    expect(
+      createLeadReminderDraft("Через неделю зафоллоуапить Müller Bau", {
+        now: new Date("2026-05-26T08:15:00.000Z")
+      }).dueAt?.toISOString()
+    ).toBe("2026-06-02T09:00:00.000Z");
 
     expect(
       createLeadReminderDraft("Schedule next week to call the client", {
