@@ -12,6 +12,8 @@ export type LeadSearchRecord = {
   requestType?: string | null;
   projectAddress?: string | null;
   clientName?: string | null;
+  displayName?: string | null;
+  searchTags?: string[] | null;
 };
 
 export type LeadSearchDatePreset = "last_month" | "current_month" | null;
@@ -36,6 +38,7 @@ export function parseLeadSearchFilterRequest(
   const datePreset = detectDatePreset(text);
   const temperature = detectTemperature(text);
   const status = detectStatus(text);
+  const query = detectSearchQuery(content, { hasStructuredFilters: Boolean(datePreset || temperature || status) });
 
   return {
     kind: "leads",
@@ -43,7 +46,8 @@ export function parseLeadSearchFilterRequest(
     filters: {
       datePreset,
       ...(temperature ? { temperature } : {}),
-      ...(status ? { status } : {})
+      ...(status ? { status } : {}),
+      ...(query ? { query } : {})
     }
   };
 }
@@ -69,6 +73,10 @@ export function filterLeadSearchRecords(
       }
 
       if (request.filters.status && record.status !== request.filters.status) {
+        return false;
+      }
+
+      if (request.filters.query && !doesLeadMatchQuery(record, request.filters.query)) {
         return false;
       }
 
@@ -135,6 +143,7 @@ export function createLeadSearchFilterSubmissionResult(
 function formatLeadSearchLine(record: LeadSearchRecord): string {
   return [
     record.leadId,
+    record.displayName,
     record.clientName,
     record.temperature,
     record.status,
@@ -143,6 +152,24 @@ function formatLeadSearchLine(record: LeadSearchRecord): string {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query);
+  const haystack = [
+    record.leadId,
+    record.displayName,
+    record.clientName,
+    record.temperature,
+    record.status,
+    record.requestType,
+    record.projectAddress,
+    ...(record.searchTags ?? [])
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeSearchText);
+
+  return haystack.some((value) => value.includes(normalizedQuery));
 }
 
 function createLeadCsvUrl(request: LeadSearchFilterRequest): string {
@@ -202,6 +229,31 @@ function detectStatus(text: string): string | null {
   }
 
   return null;
+}
+
+function detectSearchQuery(content: string, options: { hasStructuredFilters: boolean }): string | null {
+  const trimmed = content.trim();
+  const explicit =
+    /\b(?:find|search|show|list)\s+(?:leads?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about)\s+)?([A-Za-z0-9_ -]{3,80})/i.exec(trimmed) ??
+    /(?:найди|покажи|найти|ищи)\s+(?:лид[а-яё]*\s+)?(?:(по\s+тегу|с\s+тегом|про)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{3,80})/i.exec(trimmed) ??
+    null;
+
+  if (!explicit) {
+    return null;
+  }
+
+  const marker = explicit[1];
+  if (options.hasStructuredFilters && !marker) {
+    return null;
+  }
+
+  return explicit[2]
+    .replace(/\b(?:leads?|tagged|with|tag|from|last|current|month|warm|hot|cold|new|needs data)\b/gi, "")
+    .trim() || null;
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, "_").trim();
 }
 
 function createDateRange(preset: LeadSearchDatePreset, now: Date): { from: Date; to: Date } | null {

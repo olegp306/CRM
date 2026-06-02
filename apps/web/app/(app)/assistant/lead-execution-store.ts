@@ -163,6 +163,8 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
       select: {
         id: true,
         leadId: true,
+        displayName: true,
+        searchTags: true,
         createdDate: true,
         status: true,
         temperature: true,
@@ -179,6 +181,8 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
     return records.map((record) => ({
       id: record.id,
       leadId: record.leadId,
+      displayName: record.displayName,
+      searchTags: normalizeLeadSearchTags(record.searchTags),
       createdDate: record.createdDate,
       status: record.status,
       temperature: record.temperature,
@@ -193,6 +197,8 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
     .map((lead) => ({
       id: lead.id,
       leadId: lead.leadId,
+      displayName: (lead as CreatedLeadRecord & { displayName?: string | null }).displayName ?? null,
+      searchTags: (lead as CreatedLeadRecord & { searchTags?: string[] | null }).searchTags ?? null,
       createdDate: (lead as CreatedLeadRecord & { createdDate?: string | Date }).createdDate ?? new Date(0),
       status: lead.status,
       temperature: lead.temperature,
@@ -200,6 +206,10 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
       projectAddress: lead.projectAddress,
       clientName: lead.clientName
     }));
+}
+
+function normalizeLeadSearchTags(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
 }
 
 export async function createAssistantLead(input: CreateLeadFromAssistantInput): Promise<CreatedLeadRecord> {

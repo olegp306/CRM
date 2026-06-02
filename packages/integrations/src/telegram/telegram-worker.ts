@@ -1686,6 +1686,8 @@ async function createTelegramSearchFilterResponse(
     select: {
       id: true,
       leadId: true,
+      displayName: true,
+      searchTags: true,
       createdDate: true,
       status: true,
       temperature: true,
@@ -1705,6 +1707,8 @@ async function createTelegramSearchFilterResponse(
 function toTelegramLeadSearchRecord(record: {
   id?: string;
   leadId: string;
+  displayName?: string | null;
+  searchTags?: unknown;
   createdDate?: Date | string | null;
   status?: string | null;
   temperature?: string | null;
@@ -1716,6 +1720,8 @@ function toTelegramLeadSearchRecord(record: {
   return {
     id: record.id ?? record.leadId,
     leadId: record.leadId,
+    displayName: record.displayName,
+    searchTags: normalizeTelegramLeadSearchTags(record.searchTags),
     createdDate: record.createdDate ?? new Date(0),
     status: record.status ?? "unknown",
     temperature: record.temperature,
@@ -1723,6 +1729,10 @@ function toTelegramLeadSearchRecord(record: {
     projectAddress: record.projectAddress,
     clientName: record.client?.name ?? record.clientName ?? null
   };
+}
+
+function normalizeTelegramLeadSearchTags(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
 }
 
 function hasDownloadCsvAction(response: { buttons?: Array<{ action?: string }> }): boolean {
