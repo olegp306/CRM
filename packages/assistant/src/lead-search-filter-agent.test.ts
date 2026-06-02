@@ -109,6 +109,11 @@ describe("lead search/filter agent", () => {
     expect(filterLeadSearchRecords([...records, titleLead], request)).toEqual([titleLead]);
   });
 
+  it("parses human project-title search phrasing", () => {
+    expect(parseLeadSearchFilterRequest("Find project Schneider EFH").filters.query).toBe("Schneider EFH");
+    expect(parseLeadSearchFilterRequest("найди по названию Schneider EFH").filters.query).toBe("Schneider EFH");
+  });
+
   it("filters leads by multilingual lead names from Telegram-style search", () => {
     const russianLead: LeadSearchRecord = {
       id: "lead-4",

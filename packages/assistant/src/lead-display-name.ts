@@ -22,7 +22,7 @@ export function createLeadDisplayMetadata(input: LeadDisplayMetadataInput): Lead
   const inWord = language === "ru" ? "в" : "in";
   const titleParts = [client, request].filter(Boolean);
   const baseTitle = titleParts.join(" - ");
-  const displayName = baseTitle || place ? `${baseTitle}${place ? ` ${inWord} ${place}` : ""}`.trim() : null;
+  const displayName = baseTitle || place ? truncateDisplayName(`${baseTitle}${place ? ` ${inWord} ${place}` : ""}`.trim()) : null;
 
   return {
     displayName,
@@ -107,4 +107,16 @@ function slugify(value: string): string {
 
 function clean(value: string | null | undefined): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function truncateDisplayName(value: string): string {
+  const maxLength = 80;
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  const head = value.slice(0, maxLength - 3).trimEnd();
+  const lastSpace = head.lastIndexOf(" ");
+  const trimmedHead = lastSpace >= 48 ? head.slice(0, lastSpace) : head;
+  return `${trimmedHead.trimEnd()}...`;
 }

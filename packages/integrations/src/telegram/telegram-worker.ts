@@ -1742,7 +1742,7 @@ async function createTelegramSearchFilterResponse(
   }
 
   const decision = routeCrmOrchestratorRequest(createTelegramAssistantChannelMessage(config.workspaceId, message));
-  if (decision.intent !== "SEARCH_LEAD" || decision.status !== "ready") {
+  if (decision.intent !== "SEARCH_LEAD" && !isTelegramSearchOrFilterRequest(message.text)) {
     return null;
   }
 
@@ -1841,7 +1841,10 @@ function isTelegramSearchOrFilterRequest(text: string): boolean {
   if (isTelegramTableExportRequest(text)) {
     return true;
   }
-  return /\b(find|search|look up|show|open|list|filter|get)\b/i.test(text) || /(покажи|найди|выведи|дай|фильтр|отфильтруй)/i.test(text);
+  return (
+    /\b(find|search|look up|pull up|show|open|list|filter|get)\b/i.test(text) ||
+    /(покажи|найди|найти|ищи|выведи|дай|фильтр|отфильтруй|по\s+названию|по\s+имени)/iu.test(text)
+  );
 }
 
 async function createTelegramCrmOrchestratorFallbackResponse(

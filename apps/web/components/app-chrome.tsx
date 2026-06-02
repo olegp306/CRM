@@ -9,17 +9,25 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { getRoutePendingPresentation, getRoutePendingPreview } from "@/components/app-transition";
 import { cn } from "@app/ui";
 
+type AppChromeChangelog = {
+  version: string;
+  title: string;
+  items: string[];
+};
+
 type AppChromeProps = {
   children: ReactNode;
   primaryStyle: CSSProperties;
   workspaceName: string;
   userName: string;
   appVersion: string;
+  changelog: AppChromeChangelog;
 };
 
-export function AppChrome({ children, primaryStyle, workspaceName, userName, appVersion }: AppChromeProps) {
+export function AppChrome({ children, primaryStyle, workspaceName, userName, appVersion, changelog }: AppChromeProps) {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const isPending = pendingHref !== null;
   const pendingPresentation = getRoutePendingPresentation(isPending);
   const pendingPreview = getRoutePendingPreview(pendingHref);
@@ -33,12 +41,25 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
       className="grid min-h-screen grid-cols-1 bg-background text-foreground lg:grid-cols-[248px_minmax(0,1fr)]"
       style={primaryStyle}
     >
-      <AppSidebar pathname={pathname} pendingHref={pendingHref} brandName={workspaceName} appVersion={appVersion} onNavigate={setPendingHref} locale="en" />
+      <AppSidebar
+        pathname={pathname}
+        pendingHref={pendingHref}
+        brandName={workspaceName}
+        appVersion={appVersion}
+        onVersionClick={() => setIsChangelogOpen(true)}
+        onNavigate={setPendingHref}
+        locale="en"
+      />
       <div className="min-w-0">
         <header className="flex h-14 items-center justify-between border-b border-border bg-white px-4 lg:justify-end lg:px-6">
-          <span className="lg:hidden rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground" aria-label={`Mobile version marker v${appVersion}`}>
+          <button
+            type="button"
+            onClick={() => setIsChangelogOpen(true)}
+            className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:text-foreground lg:hidden"
+            aria-label={`Mobile version marker v${appVersion}. Open changelog for version ${appVersion}`}
+          >
             v{appVersion}
-          </span>
+          </button>
           <p className="text-xs font-semibold text-muted-foreground">{userName}</p>
         </header>
         <AppMobileTabs pathname={pathname} pendingHref={pendingHref} onNavigate={setPendingHref} locale="en" />
@@ -49,6 +70,7 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
         </main>
       </div>
       <AssistantDrawer />
+      {isChangelogOpen ? <ChangelogDialog changelog={changelog} onClose={() => setIsChangelogOpen(false)} /> : null}
     </div>
   );
 }
@@ -62,5 +84,42 @@ function RoutePendingPreview({ title, description }: { title: string; descriptio
       </div>
       <div className="min-h-32 rounded-lg border border-border bg-white" />
     </section>
+  );
+}
+
+function ChangelogDialog({ changelog, onClose }: { changelog: AppChromeChangelog; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/35 px-4" role="presentation" onClick={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="app-changelog-title"
+        className="w-full max-w-lg rounded-lg border border-border bg-white p-5 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">v{changelog.version}</p>
+            <h2 id="app-changelog-title" className="mt-1 text-lg font-semibold text-foreground">
+              {changelog.title}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700"
+          >
+            Close
+          </button>
+        </div>
+        <ul className="mt-4 grid gap-2 text-sm text-muted-foreground">
+          {changelog.items.map((item) => (
+            <li key={item} className="rounded-md border border-border bg-muted/40 px-3 py-2">
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 }

@@ -1,5 +1,12 @@
 type LeadTablePrismaLike = {
+  leadContextEntity: {
+    deleteMany(args: { where: { workspaceId: string; leadRecordId: { in: string[] } } }): Promise<{ count: number }>;
+  };
+  crmCalendarAction: {
+    deleteMany(args: { where: { workspaceId: string; leadRecordId: { in: string[] } } }): Promise<{ count: number }>;
+  };
   lead: {
+    findMany(args: { where: { workspaceId: string }; select: { id: true } }): Promise<Array<{ id: string }>>;
     deleteMany(args: { where: { workspaceId: string } }): Promise<{ count: number }>;
   };
   auditLog: {
@@ -10,7 +17,7 @@ type LeadTablePrismaLike = {
         action: string;
         targetType: string;
         targetId: string | null;
-        metadata: { deletedCount: number };
+        metadata: { deletedCount: number; deletedContextEntityCount: number; deletedCalendarActionCount: number };
       };
     }): Promise<unknown>;
   };
@@ -26,6 +33,23 @@ export async function clearWorkspaceLeadTable(
     throw new Error("Invalid confirmation password.");
   }
 
+  const leads = await client.lead.findMany({
+    where: { workspaceId: input.workspaceId },
+    select: { id: true }
+  });
+  const leadRecordIds = leads.map((lead) => lead.id);
+  const deletedContextEntities =
+    leadRecordIds.length > 0
+      ? await client.leadContextEntity.deleteMany({
+          where: { workspaceId: input.workspaceId, leadRecordId: { in: leadRecordIds } }
+        })
+      : { count: 0 };
+  const deletedCalendarActions =
+    leadRecordIds.length > 0
+      ? await client.crmCalendarAction.deleteMany({
+          where: { workspaceId: input.workspaceId, leadRecordId: { in: leadRecordIds } }
+        })
+      : { count: 0 };
   const result = await client.lead.deleteMany({ where: { workspaceId: input.workspaceId } });
   await client.auditLog.create({
     data: {
@@ -34,7 +58,11 @@ export async function clearWorkspaceLeadTable(
       action: "settings.leads.clear_table",
       targetType: "Lead",
       targetId: null,
-      metadata: { deletedCount: result.count }
+      metadata: {
+        deletedCount: result.count,
+        deletedContextEntityCount: deletedContextEntities.count,
+        deletedCalendarActionCount: deletedCalendarActions.count
+      }
     }
   });
 

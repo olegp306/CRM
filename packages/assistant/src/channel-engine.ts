@@ -200,7 +200,14 @@ function createTelegramCrmOrchestratorResponse(message: AssistantChannelMessage)
   }
 
   if (decision.intent === "SEARCH_LEAD") {
-    return createTelegramLimitedCrmActionsResponse();
+    return {
+      intent: "support_request",
+      shouldPersistFeedback: false,
+      feedbackType: undefined,
+      buttons: [],
+      normalizedActions: [],
+      text: "Search is recognized. I will look for matching CRM leads."
+    };
   }
 
   if (decision.intent === "CREATE_REMINDER") {

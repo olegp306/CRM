@@ -340,8 +340,8 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
   }
 
   const explicit =
-    /\b(?:find|search|show|list)\s+(?:leads?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about)\s+)?([A-Za-z0-9_ -]{3,80})/i.exec(trimmed) ??
-    /(?:найди|покажи|найти|ищи)\s+(?:лид[а-яё]*\s+)?(?:(по\s+тегу|с\s+тегом|про)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{3,80})/i.exec(trimmed) ??
+    /\b(?:find|search|show|list|open|pull\s+up)\s+(?:leads?|projects?|clients?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about|named|by\s+name|by\s+title)\s+)?([A-Za-z0-9_ -]{3,80})/i.exec(trimmed) ??
+    /(?:найди|покажи|найти|ищи|открой)\s+(?:лид[а-яё]*|проект[а-яё]*|клиент[а-яё]*)?\s*(?:(по\s+тегу|с\s+тегом|про|по\s+названию|по\s+имени)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{3,80})/i.exec(trimmed) ??
     null;
 
   if (!explicit) {
@@ -354,7 +354,8 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
   }
 
   return explicit[2]
-    .replace(/\b(?:leads?|tagged|with|tag|from|last|current|month|warm|hot|cold|new|needs data)\b/gi, "")
+    .replace(/\b(?:leads?|projects?|clients?|tagged|with|tag|from|last|current|month|warm|hot|cold|new|needs data)\b/gi, "")
+    .replace(/(?:лид[а-яё]*|проект[а-яё]*|клиент[а-яё]*|по\s+названию|по\s+имени|по\s+тегу|с\s+тегом)/gi, "")
     .trim() || null;
 }
 

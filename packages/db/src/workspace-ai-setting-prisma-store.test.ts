@@ -106,6 +106,9 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("CRM Orchestrator Agent");
     expect(setting.prompt).toContain("Lead Creation Agent");
     expect(setting.prompt).toContain("Lead Update Agent");
+    expect(setting.prompt).toContain("Lead Search Agent");
+    expect(setting.prompt).toContain("lead display name / project title");
+    expect(setting.prompt).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
     expect(setting.prompt).toContain("OUTPUT FORMAT");
   });
 

@@ -23,6 +23,10 @@ describe("CRM orchestrator agent", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("BALANCED ROUTING MODE");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Creation Agent");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Update Agent");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Search Agent");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("lead display name / project title");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("search by tag residential");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"CREATE_REMINDER"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"SUPPORT_REQUEST"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain('"create_reminder"');
@@ -159,6 +163,32 @@ describe("CRM orchestrator agent", () => {
     const result = routeCrmOrchestratorRequest({
       ...baseMessage,
       content: "Покажи всех warm лидов за прошлый месяц"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SEARCH_LEAD",
+      action: "Lead Search Agent",
+      status: "ready"
+    });
+  });
+
+  it("routes human project-title search phrasing to the lead search agent", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "Find project Schneider EFH near the lake"
+    });
+
+    expect(result).toMatchObject({
+      intent: "SEARCH_LEAD",
+      action: "Lead Search Agent",
+      status: "ready"
+    });
+  });
+
+  it("routes existing CRM context questions to search instead of support", () => {
+    const result = routeCrmOrchestratorRequest({
+      ...baseMessage,
+      content: "What do we have about the house in Munich?"
     });
 
     expect(result).toMatchObject({

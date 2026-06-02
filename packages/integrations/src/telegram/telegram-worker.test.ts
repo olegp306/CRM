@@ -882,7 +882,7 @@ describe("telegram worker", () => {
               message_id: 9,
               date: 1779296400,
               chat: { id: 12345 },
-              text: "Can you pull up what we know about the person from yesterday?"
+              text: "Can you retrieve what we know about the person from yesterday?"
             }
           }
         ],
@@ -902,7 +902,7 @@ describe("telegram worker", () => {
     expect(crmOrchestrator.route).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: "telegram",
-        content: "Can you pull up what we know about the person from yesterday?"
+        content: "Can you retrieve what we know about the person from yesterday?"
       })
     );
     expect(parser.parseLead).not.toHaveBeenCalled();
@@ -918,6 +918,74 @@ describe("telegram worker", () => {
     const body = JSON.parse(String(sendCall[1]?.body));
     expect(body.text).toContain("I can only create a lead or update an existing lead.");
     expect(body.text).not.toContain("Lead Search Agent");
+  });
+
+  it("runs explicit Telegram search even when the local orchestrator would ask a clarification", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-1",
+            leadId: "L-2026-777",
+            displayName: "Schneider - EFH Neubau in Bad Aibling",
+            searchTags: ["schneider", "efh", "bad_aibling"],
+            createdDate: new Date("2026-06-02T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "EFH Neubau",
+            projectAddress: "Bad Aibling",
+            client: { name: "Schneider" },
+            rawInput: "telegram"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 151,
+            message: {
+              message_id: 91,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Find project Schneider EFH"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 151 });
+
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(body.text).toContain("Found 1 leads");
+    expect(body.text).not.toContain("Telegram actions are limited right now.");
+    expect(body.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "L-2026-777 · Schneider - EFH Neubau in...",
+      url: "https://crm.example.com/leads?leadId=L-2026-777"
+    });
   });
 
   it("asks the CRM orchestrator clarification instead of creating a lead", async () => {

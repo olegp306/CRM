@@ -111,6 +111,33 @@ Finds leads.
 
 Use when the user searches for a client, asks for client information, wants to open a lead card, asks for filtered lead lists, asks for current-month/last-month leads, or asks to export leads/clients as CSV/Excel.
 
+Use SEARCH_LEAD when the user wants to find, show, open, list, filter, or export existing CRM leads/clients/projects.
+
+Natural search phrases include:
+
+- "find lead by title"
+- "show the last 10 leads"
+- "find project Schneider house lake"
+- "show lead by client name"
+- "what do we have about the house in Munich"
+- "find the lead about Neubau EFH"
+- "show warm leads from last month"
+- "search by tag residential"
+
+Lead search can use fuzzy human wording and any of these fields:
+
+- lead id
+- lead display name / project title
+- client name
+- project address or location
+- tags
+- phone or email
+- date, status, or temperature filters
+
+If the user asks to search existing CRM data, do not classify it as SUPPORT_REQUEST.
+When the message contains "find", "search", "show", "list", "open", "get", "recent", "last", "filter", "export" together with leads, clients, projects, a project title, a client name, tags, phone, email, or location, prefer SEARCH_LEAD over SUPPORT_REQUEST.
+If the user asks "show me what we have about ..." or "what do we have on ..." and the object looks like a client/project/location, route to SEARCH_LEAD.
+
 ### Reminder Agent
 
 Creates tasks, reminders, meetings, callbacks, and follow-ups.
@@ -328,9 +355,11 @@ function isCreateLeadRequest(text: string): boolean {
 
 function isSearchLeadRequest(text: string): boolean {
   return (
-    /\b(find|search|look up|show|open|list|filter|get|send|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts|phone|email|csv|excel|xlsx)\b/i.test(
+    /\b(find|search|look up|show|open|list|filter|get|send|export|pull up)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts|project|projects|title|name|tag|tags|phone|email|csv|excel|xlsx)\b/i.test(
       text
     ) ||
+    /\b(what do we have|show me what we have)\b.*\b(about|on|for)\b/i.test(text) ||
+    /\b(find|search|look up|show|open|pull up)\b.*\b[A-Z][\p{L}\d.-]+(?:\s+[\p{L}\d.-]+){1,6}\b/iu.test(text) ||
     /\b(csv|excel|xlsx|spreadsheet|export)\b.*\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
     /(покажи|найди|выведи|дай|скинь|экспорт|экспортируй|фильтр|отфильтруй).*(лид|лиды|клиент|клиенты|заявк)/i.test(text)
   );
@@ -361,7 +390,7 @@ function hasSearchablePersonSignal(text: string): boolean {
 
 function hasCollectionSearchSignal(text: string): boolean {
   return (
-    /\b(lead|leads|client|clients|customer|customers|contact|contacts)\b/i.test(text) ||
+    /\b(lead|leads|client|clients|customer|customers|contact|contacts|project|projects|title|name|tag|tags)\b/i.test(text) ||
     /\b(csv|excel|xlsx|spreadsheet|export)\b/i.test(text) ||
     /\b(last|this|current|previous)\s+(month|week|year)\b/i.test(text) ||
     /\b(hot|warm|cold|new|needs_data|sent|signed)\b/i.test(text) ||

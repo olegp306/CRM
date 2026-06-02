@@ -12,10 +12,11 @@ type AppSidebarProps = {
   pendingHref: string | null;
   brandName: string;
   appVersion: string;
+  onVersionClick?: () => void;
   onNavigate: (href: string) => void;
 };
 
-export function AppSidebar({ locale = "en", pathname, pendingHref, brandName, appVersion, onNavigate }: AppSidebarProps) {
+export function AppSidebar({ locale = "en", pathname, pendingHref, brandName, appVersion, onVersionClick, onNavigate }: AppSidebarProps) {
   const items = getAppNavigationItems(locale);
   const pendingItem = items.find((item) => item.href === pendingHref);
   const displayHref = getNavigationDisplayHref(pathname, pendingHref);
@@ -60,7 +61,14 @@ export function AppSidebar({ locale = "en", pathname, pendingHref, brandName, ap
           );
         })}
       </nav>
-      <div className="mt-6 border-t border-border pt-4 text-xs font-medium text-muted-foreground">v{appVersion}</div>
+      <button
+        type="button"
+        onClick={onVersionClick}
+        className="mt-6 border-t border-border pt-4 text-left text-xs font-medium text-muted-foreground transition hover:text-foreground"
+        aria-label={`Open changelog for version ${appVersion}`}
+      >
+        v{appVersion}
+      </button>
     </aside>
   );
 }

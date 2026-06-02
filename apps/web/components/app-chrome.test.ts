@@ -10,4 +10,11 @@ describe("AppChrome", () => {
     expect(source).toContain("lg:hidden");
     expect(source).toContain("v{appVersion}");
   });
+
+  it("opens a changelog dialog from the app version marker", () => {
+    expect(source).toContain("isChangelogOpen");
+    expect(source).toContain("Open changelog for version");
+    expect(source).toContain("ChangelogDialog");
+    expect(source).toContain("role=\"dialog\"");
+  });
 });

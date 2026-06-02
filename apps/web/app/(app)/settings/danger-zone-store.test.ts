@@ -7,9 +7,25 @@ function createClient() {
     calls,
     client: {
       lead: {
+        findMany: async (args: unknown) => {
+          calls.push({ model: "lead", method: "findMany", args });
+          return [{ id: "lead-record-1" }, { id: "lead-record-2" }, { id: "lead-record-3" }];
+        },
         deleteMany: async (args: unknown) => {
           calls.push({ model: "lead", method: "deleteMany", args });
           return { count: 3 };
+        }
+      },
+      leadContextEntity: {
+        deleteMany: async (args: unknown) => {
+          calls.push({ model: "leadContextEntity", method: "deleteMany", args });
+          return { count: 5 };
+        }
+      },
+      crmCalendarAction: {
+        deleteMany: async (args: unknown) => {
+          calls.push({ model: "crmCalendarAction", method: "deleteMany", args });
+          return { count: 2 };
         }
       },
       auditLog: {
@@ -51,6 +67,21 @@ describe("settings danger zone store", () => {
     expect(calls).toEqual([
       {
         model: "lead",
+        method: "findMany",
+        args: { where: { workspaceId: "workspace-1" }, select: { id: true } }
+      },
+      {
+        model: "leadContextEntity",
+        method: "deleteMany",
+        args: { where: { workspaceId: "workspace-1", leadRecordId: { in: ["lead-record-1", "lead-record-2", "lead-record-3"] } } }
+      },
+      {
+        model: "crmCalendarAction",
+        method: "deleteMany",
+        args: { where: { workspaceId: "workspace-1", leadRecordId: { in: ["lead-record-1", "lead-record-2", "lead-record-3"] } } }
+      },
+      {
+        model: "lead",
         method: "deleteMany",
         args: { where: { workspaceId: "workspace-1" } }
       },
@@ -64,7 +95,7 @@ describe("settings danger zone store", () => {
             action: "settings.leads.clear_table",
             targetType: "Lead",
             targetId: null,
-            metadata: { deletedCount: 3 }
+            metadata: { deletedCount: 3, deletedContextEntityCount: 5, deletedCalendarActionCount: 2 }
           }
         }
       }

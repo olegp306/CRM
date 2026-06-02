@@ -351,10 +351,9 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toContain("Telegram actions are limited right now.");
-    expect(result.text).toContain("I can only create a lead or update an existing lead");
+    expect(result.text).toContain("Search is recognized.");
+    expect(result.text).toContain("I will look for matching CRM leads.");
     expect(result.text).not.toContain("Lead Search Agent");
-    expect(result.text).not.toContain("Search is recognized");
     expect(result.buttons).toEqual([]);
   });
 
@@ -380,7 +379,8 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toContain("Telegram actions are limited right now.");
+    expect(result.text).toContain("Search is recognized.");
+    expect(result.text).toContain("I will look for matching CRM leads.");
     expect(result.text).not.toContain("CSV export");
     expect(result.buttons).toEqual([]);
   });

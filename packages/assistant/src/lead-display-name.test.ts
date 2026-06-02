@@ -51,4 +51,15 @@ describe("lead display name", () => {
       searchTags: ["ирина_шнаидер", "консультация_по_реконструкции", "сочи", "russia"]
     });
   });
+
+  it("keeps generated lead names within 80 characters", () => {
+    const metadata = createLeadDisplayMetadata({
+      clientName: "Dr. Katharina Elisabeth Schneider-Mueller",
+      projectAddress: "Gartenweg 9, Bad Aibling, Deutschland",
+      requestType: "vollstaendige architektonische Planung LP1-4 fuer sehr grosses Einfamilienhaus"
+    });
+
+    expect(metadata.displayName?.length).toBeLessThanOrEqual(80);
+    expect(metadata.displayName).toBe("Dr. Katharina Elisabeth Schneider-Mueller - vollstaendige architektonische...");
+  });
 });
