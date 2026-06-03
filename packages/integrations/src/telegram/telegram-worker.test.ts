@@ -5359,6 +5359,81 @@ describe("telegram worker", () => {
     });
   });
 
+  it("records a replied natural Russian two-day reminder without asking for a date", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 442,
+            message: {
+              message_id: 915,
+              date: 1779297400,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "\u0427\u0435\u0440\u0435\u0437 \u0434\u0432\u0430 \u0434\u043d\u044f \u043d\u0430\u043f\u043e\u043c\u043d\u0438 \u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u043c \u043e \u043f\u0440\u0435\u0434\u043e\u043f\u043b\u0430\u0442\u0435"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 442 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-2" },
+      data: {
+        followup1Date: new Date("2026-05-22T09:00:00.000Z"),
+        followupStatus: "planned"
+      }
+    });
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("Reminder scheduled");
+    expect(sendBody.text).toContain("2026-05-22 09:00");
+    expect(sendBody.text).not.toContain("need a date");
+    expect(sendBody.text).not.toContain("Server error");
+  });
+
   it("does not record an explicit lead-id reminder until the user replies to a lead card", async () => {
     const auditEvents: unknown[] = [];
     const client = {

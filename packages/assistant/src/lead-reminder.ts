@@ -64,10 +64,26 @@ export function formatReminderDateTime(date: Date): string {
 function extractReminderDueDate(text: string, now: Date): { date: Date | null; label: string | null; matchedText: string | null } {
   const time = extractReminderTime(text);
 
+  const nextWeekday = /на\s+следующей\s+неделе\s+(?:во?\s+)?(понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье)/i.exec(text);
+  if (nextWeekday) {
+    const weekday = getRussianWeekdayIndex(nextWeekday[1]);
+    return {
+      date: createDateAtTime(getDateInNextWeek(now, weekday), time.hour, time.minute),
+      label: nextWeekday[0].toLowerCase(),
+      matchedText: nextWeekday[0]
+    };
+  }
+
   const relativeDays = /(?:через\s+(\d{1,2})\s+(?:день|дня|дней)|\bin\s+(\d{1,2})\s+days?\b)/i.exec(text);
   if (relativeDays) {
     const days = Number(relativeDays[1] ?? relativeDays[2]);
     return { date: createDateAtTime(addDays(now, days), time.hour, time.minute), label: relativeDays[0], matchedText: relativeDays[0] };
+  }
+
+  const relativeDayWords = /через\s+(один|два|три|четыре|пять|пару)\s+(?:день|дня|дней)/i.exec(text);
+  if (relativeDayWords) {
+    const days = getRussianNumberWord(relativeDayWords[1]);
+    return { date: createDateAtTime(addDays(now, days), time.hour, time.minute), label: relativeDayWords[0], matchedText: relativeDayWords[0] };
   }
 
   if (/\b(next week)\b/i.test(text) || /(?:через\s+неделю|на\s+следующей\s+неделе)/i.test(text)) {
@@ -136,10 +152,13 @@ function normalizeReminderSummary(text: string, matchedDueText: string | null): 
 
   summary = summary
     .replace(/\b(?:today|tomorrow)\b|сегодня|завтра|послезавтра/gi, "")
-    .replace(/(?:через\s+\d{1,2}\s+(?:день|дня|дней)|\bin\s+\d{1,2}\s+days?\b|\bnext week\b|через\s+неделю|на\s+следующей\s+неделе)/gi, "")
-    .replace(/(?:\b(?:at)\s*|в\s*)?\d{1,2}:\d{2}\b|(?:в|at)\s+\d{1,2}(?:\s*(?:часов|часа|am|pm))?/gi, "")
+    .replace(/(?:через\s+(?:\d{1,2}|один|два|три|четыре|пять|пару)\s+(?:день|дня|дней)|\bin\s+\d{1,2}\s+days?\b|\bnext week\b|через\s+неделю|на\s+следующей\s+неделе(?:\s+(?:во?\s+)?(?:понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))?)/gi, "")
+    .replace(/(?:\b(?:at)\s*|в\s*)?\d{1,2}:\d{2}\b|(?:в|at)\s+\d{1,2}(?:\s*(?:часов|часа|am|pm))?|(?:утром|утро|в\s+обед|обедом|вечером|вечер)/gi, "")
     .replace(/\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\.\d{1,2}(?:\.\d{4})?\b/g, "")
     .replace(/(?:\d{1,2})\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/gi, "")
+    .replace(/^\s*(?:remind(?:\s+me)?|schedule|follow[-\s]?up|set\s+a\s+reminder)\b[:,\s-]*/i, "")
+    .replace(/^\s*(?:напомни|запланируй|поставь\s+напоминание|запомни)[:,\s-]*/i, "")
+    .replace(/^\s*(?:me|мне)\b[:,\s-]*/i, "")
     .replace(/^\s*(?:to|что|о том,? что|про|about)\s+/i, "")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -170,6 +189,18 @@ function createUtcDate(year: number, month: number, day: number, hour: number, m
 }
 
 function extractReminderTime(text: string): { hour: number; minute: number } {
+  if (/(?:утром|утро)/i.test(text)) {
+    return { hour: 10, minute: 0 };
+  }
+
+  if (/(?:в\s+обед|обедом)/i.test(text)) {
+    return { hour: 13, minute: 0 };
+  }
+
+  if (/(?:вечером|вечер)/i.test(text)) {
+    return { hour: 17, minute: 0 };
+  }
+
   const colon = /(?:\b(?:at|в)\s*)?(\d{1,2}):(\d{2})\b/i.exec(text);
   if (colon) {
     return { hour: normalizeHour(Number(colon[1]), text), minute: Number(colon[2]) };
@@ -199,6 +230,39 @@ function resolveMonthDayYear(now: Date, month: number, day: number): number {
   const currentYear = now.getUTCFullYear();
   const candidate = createUtcDate(currentYear, month, day, 9);
   return candidate.getTime() >= now.getTime() ? currentYear : currentYear + 1;
+}
+
+function getDateInNextWeek(now: Date, weekday: number): Date {
+  const currentWeekday = now.getUTCDay();
+  const daysUntilNextMonday = ((1 - currentWeekday + 7) % 7) || 7;
+  return addDays(now, daysUntilNextMonday + weekday - 1);
+}
+
+function getRussianWeekdayIndex(value: string): number {
+  const normalized = value.toLowerCase();
+  const weekdays = new Map([
+    ["понедельник", 1],
+    ["вторник", 2],
+    ["среду", 3],
+    ["четверг", 4],
+    ["пятницу", 5],
+    ["субботу", 6],
+    ["воскресенье", 7]
+  ]);
+  return weekdays.get(normalized) ?? 1;
+}
+
+function getRussianNumberWord(value: string): number {
+  const normalized = value.toLowerCase();
+  const numbers = new Map([
+    ["один", 1],
+    ["два", 2],
+    ["пару", 2],
+    ["три", 3],
+    ["четыре", 4],
+    ["пять", 5]
+  ]);
+  return numbers.get(normalized) ?? 1;
 }
 
 function getMonthIndex(value: string): number {
