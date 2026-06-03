@@ -3229,6 +3229,7 @@ async function findLeadByLeadId(
     select: {
       id: true,
       leadId: true,
+      displayName: true,
       status: true,
       rawInput: true,
       client: { select: { name: true, email: true, phone: true } },
@@ -3278,18 +3279,24 @@ function createTelegramLeadUpdateData(
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
   message: AllowedTelegramMessageBatch
 ): Record<string, unknown> {
+  const renameDisplayName = extractTelegramLeadRenameDisplayName(message.text);
   const update: Record<string, unknown> = {
     rawInput: mergeTelegramLeadRawInput(lead.rawInput ?? "", draft.rawInput, message.chatId, message.sourceMessageIds)
   };
 
-  addUpdateValue(update, "requestType", draft.requestType);
-  addUpdateValue(update, "projectAddress", draft.projectAddress);
+  if (renameDisplayName) {
+    update.displayName = renameDisplayName;
+  } else {
+    addUpdateValue(update, "requestType", draft.requestType);
+    addUpdateValue(update, "projectAddress", draft.projectAddress);
+  }
   addUpdateValue(update, "bgfM2", draft.bgfM2);
   update.missingData = mergeLeadMissingData(lead, draft, update);
   if (
-    isMeaningfulTelegramFieldValue(draft.clientName) ||
-    isMeaningfulTelegramFieldValue(draft.requestType) ||
-    isMeaningfulTelegramFieldValue(draft.projectAddress)
+    !renameDisplayName &&
+    (isMeaningfulTelegramFieldValue(draft.clientName) ||
+      isMeaningfulTelegramFieldValue(draft.requestType) ||
+      isMeaningfulTelegramFieldValue(draft.projectAddress))
   ) {
     Object.assign(update, createTelegramLeadDisplayData(draft, lead));
   }
@@ -3301,11 +3308,32 @@ function createTelegramLeadUpdateData(
   return update;
 }
 
+function extractTelegramLeadRenameDisplayName(text: string): string | null {
+  const trimmed = text.trim();
+  const match =
+    /\b(?:change|update|set)\s+(?:the\s+)?(?:lead|project)?\s*(?:name|title)\s+to\s+(.+)$/i.exec(trimmed) ??
+    /\brename\s+(?:the\s+)?(?:lead|project)?\s*(?:to|as)\s+(.+)$/i.exec(trimmed) ??
+    /(?:измени|поменяй|обнови|задай|установи)\s+(?:название|имя|заголовок)\s+(?:лида|проекта)?\s*на\s+(.+)$/iu.exec(trimmed) ??
+    /(?:переименуй|назови)\s+(?:лид|проект)?\s*(?:в|на)\s+(.+)$/iu.exec(trimmed);
+
+  return normalizeTelegramLeadRenameDisplayName(match?.[1]);
+}
+
+function normalizeTelegramLeadRenameDisplayName(value: string | undefined): string | null {
+  const normalized = value
+    ?.trim()
+    .replace(/^["'«“”]+|["'«“”.,;:!]+$/g, "")
+    .replace(/\s+/g, " ");
+
+  return normalized && normalized.length <= 120 ? normalized : null;
+}
+
 function createTelegramLeadRestoreSnapshot(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]
 ): Record<string, unknown> {
   return {
     status: lead.status ?? "new",
+    displayName: lead.displayName ?? null,
     rawInput: lead.rawInput ?? null,
     requestType: lead.requestType ?? null,
     projectAddress: lead.projectAddress ?? null,

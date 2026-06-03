@@ -4162,6 +4162,101 @@ describe("telegram worker", () => {
     });
   });
 
+  it("renames the lead display name without changing request type when replying to a lead card", async () => {
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Initial lead\nTelegram lead card: telegram-bot:12345:900",
+                displayName: "Katya - new_build in Chiemseeufer 7",
+                clientName: "Katya",
+                requestType: "new_build",
+                projectAddress: "Chiemseeufer 7",
+                bgfM2: 180,
+                email: null,
+                phone: null,
+                missingData: []
+              }
+            ];
+          }
+
+          return [{ leadId: "L-2026-001", rawInput: "old" }];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "rename project",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: "Germany",
+        bgfM2: undefined,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Client requested to change the project name.",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 212,
+            message: {
+              message_id: 312,
+              date: 1779297000,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text: "измени название на домик в деревне для бабули"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 212 });
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toEqual({
+      where: { id: "lead-record-2" },
+      data: expect.objectContaining({
+        displayName: "домик в деревне для бабули",
+        missingData: []
+      })
+    });
+    expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("requestType");
+    expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("projectAddress");
+  });
+
   it("undoes the last Telegram lead update and offers to create a new lead from the same source", async () => {
     const auditEvents: unknown[] = [];
     const updates: unknown[] = [];

@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.13",
-  title: "Telegram reply routing fix",
+  version: "0.4.14",
+  title: "Manual Telegram lead renaming",
   items: [
-    "Telegram replies to an opened lead card now stay attached to that lead even when the chat is still in search mode.",
-    "Reply updates, notes, and reminders no longer trigger a fresh search result list.",
-    "The regression test covers search mode, opening a lead card, and then replying to update the selected lead."
+    "Telegram replies like 'измени название на ...' now update the lead display name as its own field.",
+    "Manual lead renames no longer overwrite request type or project address with parser guesses like rename project.",
+    "Undo snapshots now keep the previous lead display name for Telegram update rollbacks."
   ]
 };
