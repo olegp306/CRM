@@ -342,7 +342,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    await answerTelegramCallbackQuery({
+    await safeAnswerTelegramCallbackQuery({
       botToken: config.botToken,
       callbackQueryId: callback.callbackQueryId,
       text: createTelegramLimitedActionsText(),
@@ -1300,6 +1300,14 @@ function createTelegramUndoOnlyReplyMarkup(leadId: string, actionId: string): un
   };
 }
 
+async function safeAnswerTelegramCallbackQuery(config: Parameters<typeof answerTelegramCallbackQuery>[0]): Promise<void> {
+  try {
+    await answerTelegramCallbackQuery(config);
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
+}
+
 async function processTelegramLeadUndoCallback(input: {
   callback: TelegramLeadRecordCallback;
   config: TelegramWorkerConfig;
@@ -1307,7 +1315,7 @@ async function processTelegramLeadUndoCallback(input: {
   fetchImpl: typeof fetch;
 }): Promise<void> {
   const { callback, config, client, fetchImpl } = input;
-  await answerTelegramCallbackQuery({
+  await safeAnswerTelegramCallbackQuery({
     botToken: config.botToken,
     callbackQueryId: callback.callbackQueryId,
     text: "Undo requested.",
@@ -1392,7 +1400,7 @@ async function processTelegramLeadRecreateCallback(input: {
   fetchImpl: typeof fetch;
 }): Promise<void> {
   const { callback, config, client, fetchImpl } = input;
-  await answerTelegramCallbackQuery({
+  await safeAnswerTelegramCallbackQuery({
     botToken: config.botToken,
     callbackQueryId: callback.callbackQueryId,
     text: "Creating a new lead from the same source.",
@@ -1478,7 +1486,7 @@ async function processTelegramLeadOpenCallback(input: {
   fetchImpl: typeof fetch;
 }): Promise<void> {
   const lead = await findLeadByLeadId(input.client, input.config.workspaceId, input.callback.leadId);
-  await answerTelegramCallbackQuery({
+  await safeAnswerTelegramCallbackQuery({
     botToken: input.config.botToken,
     callbackQueryId: input.callback.callbackQueryId,
     text: lead ? "Lead opened." : "Lead not found.",
@@ -1503,7 +1511,7 @@ async function processTelegramSearchNextCallback(input: {
   fetchImpl: typeof fetch;
 }): Promise<void> {
   const response = await createTelegramSearchModeStartedResponse(input.config, input.client, input.callback.offset);
-  await answerTelegramCallbackQuery({
+  await safeAnswerTelegramCallbackQuery({
     botToken: input.config.botToken,
     callbackQueryId: input.callback.callbackQueryId,
     text: "Showing next leads.",

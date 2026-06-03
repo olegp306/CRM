@@ -1234,6 +1234,97 @@ describe("telegram worker", () => {
     });
   });
 
+  it("keeps processing messages when Telegram rejects a stale callback acknowledgement", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const leadId = (args as { where?: { leadId?: string } }).where?.leadId;
+          if (leadId === "L-2026-999") {
+            return [];
+          }
+
+          return [{ leadId: "L-2026-001", rawInput: "old" }];
+        }),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        }),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Fam. Schneider",
+        requestType: "new_build",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: "Bad Aibling",
+        bgfM2: 195,
+        email: "fam@example.com",
+        phone: null,
+        missingData: [],
+        summary: "Standard EFH lead",
+        suggestedReply: "Danke."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/answerCallbackQuery")) {
+        return { ok: false, status: 400, statusText: "Bad Request" };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 901 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 250,
+            callback_query: {
+              id: "stale-callback",
+              data: "lead_open:L-2026-999",
+              message: {
+                message_id: 149,
+                date: 1779296580,
+                chat: { id: 12345 }
+              }
+            }
+          },
+          {
+            update_id: 251,
+            message: {
+              message_id: 150,
+              date: 1779296640,
+              chat: { id: 12345 },
+              text: "Need EFH offer in Bad Aibling, BGF 195, fam@example.com"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toMatchObject({ processed: 2, lastUpdateId: 251 });
+
+    expect(parser.parseLead).toHaveBeenCalled();
+    expect(created).toHaveLength(1);
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies.at(-1).text).toContain("<b>L-2026-002</b> created in CRM.");
+  });
+
   it("updates a lead when replying to a lead card opened from active Telegram search mode", async () => {
     let rawInput = "telegram";
     const updates: unknown[] = [];

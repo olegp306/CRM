@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.14",
-  title: "Manual Telegram lead renaming",
+  version: "0.4.15",
+  title: "Telegram callback resilience",
   items: [
-    "Telegram replies like 'измени название на ...' now update the lead display name as its own field.",
-    "Manual lead renames no longer overwrite request type or project address with parser guesses like rename project.",
-    "Undo snapshots now keep the previous lead display name for Telegram update rollbacks."
+    "Telegram callback acknowledgements are now best-effort, so a stale button response can no longer crash the worker.",
+    "The Telegram worker keeps processing normal messages after Telegram returns 400 for answerCallbackQuery.",
+    "A regression test covers stale callback failures followed by a regular lead message in the same polling batch."
   ]
 };
