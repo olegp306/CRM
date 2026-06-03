@@ -17,4 +17,9 @@ describe("AppChrome", () => {
     expect(source).toContain("ChangelogDialog");
     expect(source).toContain("role=\"dialog\"");
   });
+
+  it("keeps long changelog history scrollable inside the dialog", () => {
+    expect(source).toContain("max-h-[82vh]");
+    expect(source).toContain("overflow-y-auto");
+  });
 });

@@ -71,8 +71,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("Here is the simple Telegram flow");
-    expect(result.text).toContain("Use /new lead");
-    expect(result.text).toContain("Use /search lead");
+    expect(result.text).toContain("Use new lead");
+    expect(result.text).toContain("Use search lead");
     expect(result.text).toContain("reply to that card");
     expect(result.text).toContain("Find project Schneider EFH");
     expect(result.text).toContain("Show last 10 leads");
@@ -89,8 +89,8 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.text).toContain("Here is the simple Telegram flow");
-    expect(result.text).toContain("Use /new lead");
-    expect(result.text).toContain("Use /search lead");
+    expect(result.text).toContain("Use new lead");
+    expect(result.text).toContain("Use search lead");
     expect(result.text).toContain("reply to that card");
     expect(result.text).toContain("Search by tag residential");
     expect(result.text).not.toContain("mark KP as sent");
@@ -100,7 +100,7 @@ describe("assistant channel engine", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
       channel: "web",
-      content: "/new lead"
+      content: "new lead"
     });
 
     expect(result.intent).toBe("lead_intake");
@@ -372,7 +372,7 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toContain("/search lead");
+    expect(result.text).toContain("search lead");
     expect(result.text).not.toContain("Nocturne");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.buttons).toEqual([]);

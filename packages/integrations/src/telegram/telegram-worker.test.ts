@@ -5,7 +5,8 @@ import {
   processTelegramUpdates,
   resetTelegramWorkerMemoryForTests,
   resolveTelegramAiSettings,
-  runTelegramWorkerLoop
+  runTelegramWorkerLoop,
+  runTelegramWorkerOnce
 } from "./telegram-worker";
 import { createMemoryTelegramLeadDraftSessionStore } from "./telegram-lead-draft-session";
 
@@ -81,6 +82,40 @@ describe("telegram worker", () => {
         text: "Hallo, wir brauchen ein EFH Angebot."
       }
     });
+  });
+
+  it("registers the Telegram bot command menu before polling updates", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/setMyCommands")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      if (url.includes("/getUpdates")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: [] }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      runTelegramWorkerOnce({
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo",
+        parser: { parseLead: vi.fn() },
+        fetchImpl: fetchMock as unknown as typeof fetch
+      })
+    ).resolves.toEqual({ processed: 0, ignored: 0 });
+
+    const setCommandsCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/setMyCommands")) as
+      | [string, { body?: unknown }]
+      | undefined;
+    expect(setCommandsCall).toBeTruthy();
+    const body = JSON.parse(String(setCommandsCall?.[1]?.body));
+    expect(body.commands).toEqual([
+      { command: "newlead", description: "new lead" },
+      { command: "searchlead", description: "search lead" }
+    ]);
   });
 
   it("creates one CRM lead from an allowed Telegram message and sends a confirmation", async () => {
@@ -411,8 +446,8 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
     expect(body.text).not.toContain("Nocturne");
     expect(body.reply_markup).toBeUndefined();
   });
@@ -925,7 +960,7 @@ describe("telegram worker", () => {
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
     expect(body.text).toContain("Search works");
-    expect(body.text).toContain("/search");
+    expect(body.text).toContain("search lead");
     expect(body.text).toContain("show last 10 leads");
     expect(body.text).not.toContain("Telegram actions are limited right now.");
   });
@@ -961,7 +996,7 @@ describe("telegram worker", () => {
         projectAddress: undefined,
         missingData: ["clientName", "requestType", "projectAddress"],
         summary: "No lead source material detected.",
-        suggestedReply: "Send /search lead to search leads."
+        suggestedReply: "Send search lead to search leads."
       }))
     };
     const fetchMock = vi.fn(async (url: string) => {
@@ -1013,11 +1048,11 @@ describe("telegram worker", () => {
     const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
       .filter(([url]) => String(url).includes("/sendMessage"))
       .map(([, init]) => JSON.parse(String(init.body)));
-    expect(sendBodies[0].text).toContain("Use /search lead");
+    expect(sendBodies[0].text).toContain("search lead");
     expect(sendBodies.some((body) => String(body.text).includes("Found 1 leads"))).toBe(false);
   });
 
-  it("keeps a Telegram chat in search mode after /search lead and searches the next message as a query", async () => {
+  it("keeps a Telegram chat in search mode after search lead and searches the next message as a query", async () => {
     const client = {
       lead: {
         findMany: vi.fn(async () => [
@@ -1066,7 +1101,7 @@ describe("telegram worker", () => {
             message_id: 142,
             date: 1779296520,
             chat: { id: 12345 },
-              text: "/search lead"
+              text: "search lead"
           }
         }
       ],
@@ -1091,7 +1126,12 @@ describe("telegram worker", () => {
     const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
       .filter(([url]) => String(url).includes("/sendMessage"))
       .map(([, init]) => JSON.parse(String(init.body)));
-    expect(sendBodies[0].text).toContain("Search mode is on");
+    expect(sendBodies[0].text).toContain("Search mode.");
+    expect(sendBodies[0].text).toContain("Latest 5 leads");
+    expect(sendBodies[0].reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "Frau Schneider - Neubau EFH...",
+      callback_data: "lead_open:L-2026-010"
+    });
     expect(sendBodies[1].text).toContain("Found 1 leads");
     expect(sendBodies[1].text).toContain("<b>L-2026-010</b>");
     expect(sendBodies[1].reply_markup.inline_keyboard[0][0]).toEqual({
@@ -1247,8 +1287,8 @@ describe("telegram worker", () => {
     );
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
     expect(body.text).not.toContain("Lead Search Agent");
   });
 
@@ -1437,8 +1477,8 @@ describe("telegram worker", () => {
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
     expect(body.text).toContain("Telegram actions are limited right now.");
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
   });
 
   it("keeps obvious Telegram lead creation on the parser path without CRM orchestrator fallback", async () => {
@@ -2331,7 +2371,7 @@ describe("telegram worker", () => {
     expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("I received the audio, but I could not transcribe it");
   });
 
-  it("starts an empty lead draft from the /new lead command", async () => {
+  it("starts an empty lead draft from the new lead command", async () => {
     const client = {
       lead: {
         findMany: vi.fn(),
@@ -2359,7 +2399,7 @@ describe("telegram worker", () => {
               message_id: 7,
               date: 1779296500,
               chat: { id: 12345 },
-              text: "/new lead"
+              text: "new lead"
             }
           }
         ],
@@ -2385,7 +2425,7 @@ describe("telegram worker", () => {
     expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("New lead draft started");
   });
 
-  it("does not start a lead draft from the old /newlead command", async () => {
+  it("does not start a lead draft from the incomplete /new command", async () => {
     const client = {
       lead: {
         findMany: vi.fn(),
@@ -2413,7 +2453,7 @@ describe("telegram worker", () => {
               message_id: 71,
               date: 1779296500,
               chat: { id: 12345 },
-              text: "/newlead"
+              text: "/new"
             }
           }
         ],
@@ -2432,10 +2472,10 @@ describe("telegram worker", () => {
     await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
-    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("Use /new lead");
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("Use new lead");
   });
 
-  it("creates a fresh lead when the /new lead command includes source material even if an old lead looks similar", async () => {
+  it("creates a fresh lead when the new lead command includes source material even if an old lead looks similar", async () => {
     const created: unknown[] = [];
     const client = {
       lead: {
@@ -2498,7 +2538,7 @@ describe("telegram worker", () => {
               message_id: 77,
               date: 1779296510,
               chat: { id: 12345 },
-              text: "/new lead Katya, new build at Chiemseeufer 7, BGF 180, katya@example.com"
+              text: "new lead Katya, new build at Chiemseeufer 7, BGF 180, katya@example.com"
             }
           }
         ],
@@ -2522,7 +2562,7 @@ describe("telegram worker", () => {
     expect(created[0]).toEqual({
       data: expect.objectContaining({
         leadId: "L-2026-003",
-        rawInput: expect.stringContaining("/new lead Katya"),
+        rawInput: expect.stringContaining("new lead Katya"),
         projectAddress: "Chiemseeufer 7",
         bgfM2: 180
       })
@@ -3161,7 +3201,7 @@ describe("telegram worker", () => {
     expect(updates).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.telegram.org/bottelegram-token/answerCallbackQuery",
-      expect.objectContaining({ method: "POST", body: expect.stringContaining("Use /new lead") })
+      expect.objectContaining({ method: "POST", body: expect.stringContaining("Use new lead") })
     );
   });
 
@@ -5269,8 +5309,8 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
-    expect(sendBody.text).toContain("Use /new lead");
-    expect(sendBody.text).toContain("/search lead");
+    expect(sendBody.text).toContain("Use new lead");
+    expect(sendBody.text).toContain("search lead");
     expect(sendBody.text).toContain("reply to that card");
     expect(sendBody.text).not.toContain("I can create a follow-up reminder");
   });
@@ -5506,8 +5546,8 @@ describe("telegram worker", () => {
     expect(parser.parseLead).not.toHaveBeenCalled();
     expect(updates).toEqual([]);
     const lastBody = JSON.parse(String((fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }])[1].body));
-    expect(lastBody.text).toContain("Use /new lead");
-    expect(lastBody.text).toContain("/search lead");
+    expect(lastBody.text).toContain("Use new lead");
+    expect(lastBody.text).toContain("search lead");
   });
 
   it("answers capability questions without creating a lead", async () => {
@@ -5556,8 +5596,8 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
     expect(body.text).toContain("Find project Schneider EFH");
     expect(body.text).toContain("voice messages");
   });
@@ -5608,8 +5648,8 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
     expect(body.text).toContain("Show last 10 leads");
   });
 
@@ -5659,8 +5699,8 @@ describe("telegram worker", () => {
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
     const body = JSON.parse(String(sendCall[1]?.body));
-    expect(body.text).toContain("Use /new lead");
-    expect(body.text).toContain("/search lead");
+    expect(body.text).toContain("Use new lead");
+    expect(body.text).toContain("search lead");
   });
 
   it("skips duplicate Telegram source messages before parsing", async () => {

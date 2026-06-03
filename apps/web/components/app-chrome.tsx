@@ -94,10 +94,10 @@ function ChangelogDialog({ changelog, onClose }: { changelog: AppChromeChangelog
         role="dialog"
         aria-modal="true"
         aria-labelledby="app-changelog-title"
-        className="w-full max-w-lg rounded-lg border border-border bg-white p-5 shadow-xl"
+        className="flex max-h-[82vh] w-full max-w-lg flex-col rounded-lg border border-border bg-white p-5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex shrink-0 items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground">v{changelog.version}</p>
             <h2 id="app-changelog-title" className="mt-1 text-lg font-semibold text-foreground">
@@ -112,7 +112,7 @@ function ChangelogDialog({ changelog, onClose }: { changelog: AppChromeChangelog
             Close
           </button>
         </div>
-        <ul className="mt-4 grid gap-2 text-sm text-muted-foreground">
+        <ul className="mt-4 grid gap-2 overflow-y-auto pr-1 text-sm text-muted-foreground">
           {changelog.items.map((item) => (
             <li key={item} className="rounded-md border border-border bg-muted/40 px-3 py-2">
               {item}

@@ -58,6 +58,7 @@ import {
   parseAllowedChatIds,
   sendTelegramDocument,
   sendTelegramMessage,
+  setTelegramBotCommands,
   type AllowedTelegramMessage,
   type TelegramPendingAttachment,
   type TelegramUpdate
@@ -226,10 +227,20 @@ type AllowedTelegramLeadActionCallback = {
   chatId: string;
   messageId?: number;
   receivedAt: string;
-  action: "mark_kp_sent" | "undo_kp_sent" | "undo_lead_action" | "recreate_lead_from_undo" | "open_lead_card";
-  leadId: string;
+  action:
+    | "mark_kp_sent"
+    | "undo_kp_sent"
+    | "undo_lead_action"
+    | "recreate_lead_from_undo"
+    | "open_lead_card"
+    | "search_next";
+  leadId?: string;
   actionId?: string;
+  offset?: number;
 };
+
+type TelegramLeadRecordCallback = AllowedTelegramLeadActionCallback & { leadId: string };
+type TelegramSearchNextCallback = AllowedTelegramLeadActionCallback & { action: "search_next"; offset: number };
 
 type TelegramSourceAttachmentPrismaLike = {
   attachment?: {
@@ -242,6 +253,11 @@ const telegramUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>()
 const telegramCompletedUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>();
 const telegramUndoneActionMemory = new Set<string>();
 const telegramSearchModeMemory = new Set<string>();
+const telegramBotCommandMenuMemory = new Set<string>();
+const TELEGRAM_BOT_COMMANDS = [
+  { command: "newlead", description: "new lead" },
+  { command: "searchlead", description: "search lead" }
+];
 
 type TelegramLeadUndoActionType = "create_lead" | "update_lead";
 
@@ -266,6 +282,7 @@ export function resetTelegramWorkerMemoryForTests(): void {
   telegramCompletedUndoActionMemory.clear();
   telegramUndoneActionMemory.clear();
   telegramSearchModeMemory.clear();
+  telegramBotCommandMenuMemory.clear();
 }
 
 export function createTelegramTestUpdateFromEnv(env: TelegramTestEnv): TelegramUpdate | undefined {
@@ -301,19 +318,25 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   let skipped = 0;
 
   for (const callback of allowedCallbacks) {
-    if (callback.action === "undo_lead_action") {
+    if (isTelegramSearchNextCallback(callback)) {
+      await processTelegramSearchNextCallback({ callback, config, client, fetchImpl });
+      processed += 1;
+      continue;
+    }
+
+    if (callback.action === "undo_lead_action" && isTelegramLeadRecordCallback(callback)) {
       await processTelegramLeadUndoCallback({ callback, config, client, fetchImpl });
       processed += 1;
       continue;
     }
 
-    if (callback.action === "recreate_lead_from_undo") {
+    if (callback.action === "recreate_lead_from_undo" && isTelegramLeadRecordCallback(callback)) {
       await processTelegramLeadRecreateCallback({ callback, config, client, fetchImpl });
       processed += 1;
       continue;
     }
 
-    if (callback.action === "open_lead_card") {
+    if (callback.action === "open_lead_card" && isTelegramLeadRecordCallback(callback)) {
       await processTelegramLeadOpenCallback({ callback, config, client, fetchImpl });
       processed += 1;
       continue;
@@ -351,10 +374,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     if (isTelegramSearchModeStartCommand(message)) {
       telegramSearchModeMemory.add(createTelegramSearchModeKey(config.workspaceId, message.chatId));
+      const searchModeResponse = await createTelegramSearchModeStartedResponse(config, client);
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramSearchModeStartedMessage(),
+        text: searchModeResponse.text,
+        replyMarkup: createTelegramResponseReplyMarkup(searchModeResponse.buttons, config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -1277,7 +1302,7 @@ function createTelegramUndoOnlyReplyMarkup(leadId: string, actionId: string): un
 }
 
 async function processTelegramLeadUndoCallback(input: {
-  callback: AllowedTelegramLeadActionCallback;
+  callback: TelegramLeadRecordCallback;
   config: TelegramWorkerConfig;
   client: TelegramWorkerPrismaLike;
   fetchImpl: typeof fetch;
@@ -1362,7 +1387,7 @@ async function processTelegramLeadUndoCallback(input: {
 }
 
 async function processTelegramLeadRecreateCallback(input: {
-  callback: AllowedTelegramLeadActionCallback;
+  callback: TelegramLeadRecordCallback;
   config: TelegramWorkerConfig;
   client: TelegramWorkerPrismaLike;
   fetchImpl: typeof fetch;
@@ -1448,7 +1473,7 @@ async function processTelegramLeadRecreateCallback(input: {
 }
 
 async function processTelegramLeadOpenCallback(input: {
-  callback: AllowedTelegramLeadActionCallback;
+  callback: TelegramLeadRecordCallback;
   config: Pick<TelegramWorkerConfig, "botToken" | "workspaceId" | "crmBaseUrl">;
   client: TelegramWorkerPrismaLike;
   fetchImpl: typeof fetch;
@@ -1467,6 +1492,28 @@ async function processTelegramLeadOpenCallback(input: {
     text: lead ? createTelegramLeadCardMessage(lead) : `Lead <b>${escapeHtml(input.callback.leadId)}</b> was not found in CRM.`,
     parseMode: "HTML",
     replyMarkup: lead ? createTelegramCrmOnlyReplyMarkup(input.config.crmBaseUrl, lead.leadId) : undefined,
+    fetchImpl: input.fetchImpl
+  });
+}
+
+async function processTelegramSearchNextCallback(input: {
+  callback: TelegramSearchNextCallback;
+  config: Pick<TelegramWorkerConfig, "botToken" | "workspaceId" | "crmBaseUrl">;
+  client: TelegramWorkerPrismaLike;
+  fetchImpl: typeof fetch;
+}): Promise<void> {
+  const response = await createTelegramSearchModeStartedResponse(input.config, input.client, input.callback.offset);
+  await answerTelegramCallbackQuery({
+    botToken: input.config.botToken,
+    callbackQueryId: input.callback.callbackQueryId,
+    text: "Showing next leads.",
+    fetchImpl: input.fetchImpl
+  });
+  await sendTelegramMessage({
+    botToken: input.config.botToken,
+    chatId: input.callback.chatId,
+    text: response.text,
+    replyMarkup: createTelegramResponseReplyMarkup(response.buttons, input.config.crmBaseUrl),
     fetchImpl: input.fetchImpl
   });
 }
@@ -1611,13 +1658,14 @@ function createTelegramExistingLeadClarificationMessage(leadId: string, matchedF
   return [
     `This may belong to lead <b>${escapeHtml(leadId)}</b>.`,
     matchedFields.length > 0 ? `Matched: ${matchedFields.map(escapeHtml).join(", ")}.` : "",
-    "Please reply to that lead card if you want me to add this information there, or send /new lead to start a separate lead."
+    "Please reply to that lead card if you want me to add this information there, or send new lead to start a separate lead."
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 export async function runTelegramWorkerOnce(config: TelegramWorkerConfig & { offset?: number }): Promise<TelegramWorkerResult> {
+  await ensureTelegramBotCommandMenu(config);
   const updates = await fetchTelegramUpdates({
     botToken: config.botToken,
     offset: config.offset,
@@ -1634,6 +1682,23 @@ export async function runTelegramWorkerOnce(config: TelegramWorkerConfig & { off
   }
 
   return result;
+}
+
+async function ensureTelegramBotCommandMenu(config: Pick<TelegramWorkerConfig, "botToken" | "fetchImpl">): Promise<void> {
+  if (telegramBotCommandMenuMemory.has(config.botToken)) {
+    return;
+  }
+
+  try {
+    await setTelegramBotCommands({
+      botToken: config.botToken,
+      commands: TELEGRAM_BOT_COMMANDS,
+      fetchImpl: config.fetchImpl
+    });
+    telegramBotCommandMenuMemory.add(config.botToken);
+  } catch (error) {
+    console.error("[telegram-worker] failed to set bot command menu", error);
+  }
 }
 
 export async function runTelegramWorkerFromEnv(env = process.env): Promise<TelegramWorkerResult> {
@@ -1911,7 +1976,7 @@ function createTelegramLeadParseFailureMessage(): string {
 function createTelegramLimitedActionsText(leadId?: string): string {
   return [
     leadId ? `Lead <b>${escapeHtml(leadId)}</b> found.` : "Telegram actions are limited right now.",
-    "Use /new lead to create a lead, or /search lead to find one.",
+    "Use new lead to create a lead, or search lead to find one.",
     "After a lead card is shown, reply to that card to update the lead, add a note, or add a reminder."
   ].join("\n");
 }
@@ -2016,10 +2081,19 @@ function createAllowedTelegramLeadActionCallbacks(
         receivedAt: new Date((callback.message?.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
         action: parsed.action,
         leadId: parsed.leadId,
-        actionId: parsed.actionId
+        actionId: parsed.actionId,
+        offset: parsed.offset
       }
     ];
   });
+}
+
+function isTelegramLeadRecordCallback(callback: AllowedTelegramLeadActionCallback): callback is TelegramLeadRecordCallback {
+  return typeof callback.leadId === "string" && callback.leadId.length > 0;
+}
+
+function isTelegramSearchNextCallback(callback: AllowedTelegramLeadActionCallback): callback is TelegramSearchNextCallback {
+  return callback.action === "search_next" && typeof callback.offset === "number" && Number.isFinite(callback.offset);
 }
 
 function createAllowedTelegramMessageBatches(messages: AllowedTelegramMessage[], batchWindowMs = 120_000): AllowedTelegramMessageBatch[] {
@@ -2085,7 +2159,11 @@ function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "a
 
 function isTelegramSearchModeStartCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
   const text = message.text.trim();
-  return (message.attachments?.length ?? 0) === 0 && message.replyToMessageId === undefined && /^\/search(@\w+)?\s+lead\s*$/i.test(text);
+  return (
+    (message.attachments?.length ?? 0) === 0 &&
+    message.replyToMessageId === undefined &&
+    /^(?:\/searchlead(?:@\w+)?|\/search(?:@\w+)?\s+lead|search\s+lead)\s*$/i.test(text)
+  );
 }
 
 function createTelegramSearchModeKey(workspaceId: string, chatId: string): string {
@@ -2094,14 +2172,6 @@ function createTelegramSearchModeKey(workspaceId: string, chatId: string): strin
 
 function isTelegramSearchModeActive(workspaceId: string, chatId: string): boolean {
   return telegramSearchModeMemory.has(createTelegramSearchModeKey(workspaceId, chatId));
-}
-
-function createTelegramSearchModeStartedMessage(): string {
-  return [
-    "Search mode is on.",
-    "Send a lead name, client, address, tag, phone, email, or a phrase like \"show last 10 leads\".",
-    "I will show matching leads here. Use /new lead when you want to switch to creating a lead."
-  ].join("\n");
 }
 
 function isTelegramSearchCapabilityQuestion(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
@@ -2117,7 +2187,7 @@ function isTelegramSearchCapabilityQuestion(message: Pick<AllowedTelegramMessage
 function createTelegramSearchCapabilityMessage(): string {
   return [
     "Search works.",
-    "Use /search lead to enter search mode, then send a name, title, tag, phone, email, or location.",
+    "Use search lead to enter search mode, then send a name, title, tag, phone, email, or location.",
     "Examples: show last 10 leads; find Schneider lake; search by tag residential."
   ].join("\n");
 }
@@ -2222,6 +2292,45 @@ function createTelegramGeneralAssistantResponse(
   return null;
 }
 
+async function createTelegramSearchModeStartedResponse(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "crmBaseUrl">,
+  client: TelegramWorkerPrismaLike,
+  offset = 0
+) {
+  const records = (await findTelegramLeadSearchRecords(config, client)).map(toTelegramLeadSearchRecord);
+  const pageSize = 5;
+  const safeOffset = Math.max(0, offset);
+  const page = records.slice(safeOffset, safeOffset + pageSize);
+  const response = createLeadSearchFilterResponse("show last 5 leads", page, {
+    includeCrmButtons: true,
+    telegramLeadButtons: true,
+    limit: pageSize
+  });
+  const hasNext = records.length > safeOffset + pageSize;
+  const buttons = [
+    ...response.buttons,
+    ...(hasNext ? [{ label: "next 5", action: "search_next", value: String(safeOffset + pageSize) }] : [])
+  ];
+  const rangeLabel =
+    records.length === 0
+      ? "No leads found yet."
+      : safeOffset === 0
+        ? "Latest 5 leads:"
+        : `Leads ${safeOffset + 1}-${safeOffset + page.length}:`;
+
+  return {
+    text: [
+      "Search mode.",
+      rangeLabel,
+      response.text,
+      "",
+      "Send a lead name, project title, address, tag, phone, email, status, date, or a phrase like \"show last 10 leads\".",
+      "Use new lead when you want to switch to creating a lead."
+    ].join("\n"),
+    buttons
+  };
+}
+
 async function createTelegramSearchFilterResponse(
   config: Pick<TelegramWorkerConfig, "workspaceId" | "crmBaseUrl">,
   client: TelegramWorkerPrismaLike,
@@ -2233,12 +2342,23 @@ async function createTelegramSearchFilterResponse(
   }
 
   const searchText = isSearchMode && !isTelegramSearchOrFilterRequest(message.text) ? `search ${message.text}` : message.text;
-  const decision = routeCrmOrchestratorRequest(createTelegramAssistantChannelMessage(config.workspaceId, { ...message, text: searchText }));
-  if (decision.intent !== "SEARCH_LEAD" && !isTelegramSearchOrFilterRequest(message.text)) {
-    return null;
+  if (!isSearchMode) {
+    const decision = routeCrmOrchestratorRequest(createTelegramAssistantChannelMessage(config.workspaceId, { ...message, text: searchText }));
+    if (decision.intent !== "SEARCH_LEAD" && !isTelegramSearchOrFilterRequest(message.text)) {
+      return null;
+    }
   }
 
-  const records = await client.lead.findMany({
+  const records = await findTelegramLeadSearchRecords(config, client);
+
+  return createLeadSearchFilterResponse(searchText, records.map(toTelegramLeadSearchRecord), {
+    includeCrmButtons: true,
+    telegramLeadButtons: true
+  });
+}
+
+async function findTelegramLeadSearchRecords(config: Pick<TelegramWorkerConfig, "workspaceId">, client: TelegramWorkerPrismaLike) {
+  return client.lead.findMany({
     where: { workspaceId: config.workspaceId },
     orderBy: [{ createdDate: "desc" }, { leadId: "asc" }],
     select: {
@@ -2261,11 +2381,6 @@ async function createTelegramSearchFilterResponse(
         }
       }
     }
-  });
-
-  return createLeadSearchFilterResponse(searchText, records.map(toTelegramLeadSearchRecord), {
-    includeCrmButtons: true,
-    telegramLeadButtons: true
   });
 }
 
@@ -2496,6 +2611,10 @@ function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?:
     .map((button) => {
       if (button.action === "open_lead" && button.value) {
         return { text: button.label, callback_data: createTelegramLeadOpenCallbackData(button.value) };
+      }
+
+      if (button.action === "search_next" && button.value) {
+        return { text: button.label, callback_data: createTelegramSearchNextCallbackData(Number(button.value)) };
       }
 
       const url = createTelegramAbsoluteButtonUrl(button.url, crmBaseUrl);
@@ -2956,7 +3075,7 @@ function createTelegramPossibleDifferentLeadMessage(
     `Current draft: ${activeSession.draft.clientName ?? "unknown client"} / ${activeSession.draft.projectAddress ?? "unknown address"}`,
     `New message: ${draft.clientName ?? "unknown client"} / ${draft.projectAddress ?? "unknown address"}`,
     "",
-    "Please send /new lead to start a separate lead, or resend the details if they should continue the current draft."
+    "Please send new lead to start a separate lead, or resend the details if they should continue the current draft."
   ].join("\n");
 }
 
@@ -3311,7 +3430,7 @@ function createTelegramLeadUpdateClarificationMessage(
     `<b>Current</b>: ${escapeHtml(getLeadClientName(lead) ?? "unknown client")} / ${escapeHtml(lead.projectAddress ?? "unknown address")}`,
     `<b>Reply</b>: ${escapeHtml(draft.clientName ?? "unknown client")} / ${escapeHtml(draft.projectAddress ?? "unknown address")}`,
     "",
-    "Please reply with: update this lead, or /new lead to start a separate lead."
+    "Please reply with: update this lead, or new lead to start a separate lead."
   ].join("\n");
 }
 
@@ -3429,18 +3548,31 @@ function createTelegramLeadOpenCallbackData(leadId: string): string {
   return `lead_open:${leadId}`;
 }
 
+function createTelegramSearchNextCallbackData(offset: number): string {
+  return `lead_search_next:${Math.max(0, Math.floor(offset))}`;
+}
+
 function isBareTelegramNewLeadCommand(text: string): boolean {
   const normalized = text.trim();
-  return /^\/new(?:@\w+)?\s+lead\s*$/i.test(normalized);
+  return /^(?:\/newlead(?:@\w+)?|\/new(?:@\w+)?\s+lead|new\s+lead)\s*$/i.test(normalized);
 }
 
 function parseTelegramLeadActionCallbackData(
   data: string | undefined
 ): {
-  action: "mark_kp_sent" | "undo_kp_sent" | "undo_lead_action" | "recreate_lead_from_undo" | "open_lead_card";
-  leadId: string;
+  action: "mark_kp_sent" | "undo_kp_sent" | "undo_lead_action" | "recreate_lead_from_undo" | "open_lead_card" | "search_next";
+  leadId?: string;
   actionId?: string;
+  offset?: number;
 } | null {
+  const searchNextMatch = /^lead_search_next:(\d+)$/i.exec(data?.trim() ?? "");
+  if (searchNextMatch) {
+    return {
+      action: "search_next",
+      offset: Number(searchNextMatch[1])
+    };
+  }
+
   const openMatch = /^lead_open:(L-\d{4}-\d+)$/i.exec(data?.trim() ?? "");
   if (openMatch) {
     return {

@@ -187,6 +187,30 @@ export async function answerTelegramCallbackQuery(config: {
   }
 }
 
+export async function setTelegramBotCommands(config: {
+  botToken: string;
+  commands: Array<{ command: string; description: string }>;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const fetchImpl = config.fetchImpl ?? fetch;
+  const response = await fetchImpl(`https://api.telegram.org/bot${config.botToken}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      commands: config.commands
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram setMyCommands failed: ${response.status} ${response.statusText}`);
+  }
+
+  const body = (await response.json()) as { ok?: boolean };
+  if (!body.ok) {
+    throw new Error("Telegram setMyCommands returned ok=false");
+  }
+}
+
 export async function sendTelegramDocument(config: {
   botToken: string;
   chatId: string;

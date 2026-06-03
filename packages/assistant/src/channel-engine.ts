@@ -239,7 +239,7 @@ function createTelegramLimitedCrmActionsResponse(): AssistantChannelResponse {
     normalizedActions: [],
     text: [
       "Telegram actions are limited right now.",
-      "Use /new lead to create a lead, or /search lead to find one.",
+      "Use new lead to create a lead, or search lead to find one.",
       "After a lead card is shown, reply to that card to update the lead, add a note, or add a reminder."
     ].join("\n")
   };
@@ -252,7 +252,7 @@ export function createCrmOrchestratorRoutedButPausedResponse(decision: CrmOrches
     feedbackType: undefined,
     buttons: [],
     normalizedActions: [],
-  text: `${detail}\nRoute: ${decision.action}.\nUse /new lead to create a lead, or /search lead to find one. Reply to a lead card for updates and reminders.`
+  text: `${detail}\nRoute: ${decision.action}.\nUse new lead to create a lead, or search lead to find one. Reply to a lead card for updates and reminders.`
   };
 }
 
@@ -260,7 +260,7 @@ function createSupportResponseText(channel: AssistantChannelMessage["channel"], 
   if (channel === "telegram") {
     return leadId
       ? `I can help with lead ${leadId}. In Telegram, reply to the lead card to update it, add a note, or add a reminder.`
-      : "In Telegram, use /new lead to create a lead or /search lead to search by title, client, tag, location, status, date, phone, or email. Updates and reminders happen by replying to a lead card.";
+      : "In Telegram, use new lead to create a lead or search lead to search by title, client, tag, location, status, date, phone, or email. Updates and reminders happen by replying to a lead card.";
   }
 
   return leadId
@@ -372,8 +372,8 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
     channel === "telegram"
       ? [
           "Here is the simple Telegram flow:",
-          "1. Use /new lead to create a lead, then send the client text, photos, PDFs, voice messages, or audio files.",
-          "2. Use /search lead to find a lead, then describe what you are looking for: project name, client, address, tag, phone, email, status, or date.",
+          "1. Use new lead to create a lead, then send the client text, photos, PDFs, voice messages, or audio files.",
+          "2. Use search lead to find a lead, then describe what you are looking for: project name, client, address, tag, phone, email, status, or date.",
           "3. To change a lead, first find or create it, open its Telegram lead card, and reply to that card with the update, note, reminder, or extra files.",
           "Examples: \"Find project Schneider EFH\", \"Show last 10 leads\", \"Find warm leads from last month\", \"Search by tag residential\"."
         ].join("\n")
