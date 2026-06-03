@@ -5,12 +5,12 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.8",
-  title: "Telegram search and reply fixes",
+  version: "0.4.9",
+  title: "Telegram reply actions fix",
   items: [
-    "Telegram search mode now shows a compact one-line header and lead ID buttons.",
-    "Telegram search results render lead IDs in bold instead of showing raw HTML tags.",
-    "Reply-based lead reminders and notes stay resilient when audit or calendar side effects fail.",
-    "The CRM orchestrator default prompt now treats Oleg and Ekaterina as internal actors, not clients."
+    "Lead cards opened from Telegram search now remember their reply context.",
+    "Replies to those Telegram lead cards can update lead fields instead of falling into server errors.",
+    "Replies to opened lead cards can create reminder/history actions for the correct lead.",
+    "A regression test now covers the search-to-open-to-reply Telegram workflow."
   ]
 };

@@ -1485,7 +1485,7 @@ async function processTelegramLeadOpenCallback(input: {
     fetchImpl: input.fetchImpl
   });
 
-  await sendTelegramMessage({
+  const sent = await sendTelegramMessage({
     botToken: input.config.botToken,
     chatId: input.callback.chatId,
     text: lead ? createTelegramLeadCardMessage(lead) : `Lead <b>${escapeHtml(input.callback.leadId)}</b> was not found in CRM.`,
@@ -1493,6 +1493,7 @@ async function processTelegramLeadOpenCallback(input: {
     replyMarkup: lead ? createTelegramCrmOnlyReplyMarkup(input.config.crmBaseUrl, lead.leadId) : undefined,
     fetchImpl: input.fetchImpl
   });
+  await saveTelegramLeadCardReplyContext(input.config, input.client, input.callback.chatId, lead, sent.messageId);
 }
 
 async function processTelegramSearchNextCallback(input: {
@@ -1535,6 +1536,29 @@ async function trySyncTelegramReminderToCalendar(input: {
   } catch (error) {
     console.warn(error instanceof Error ? error.message : error);
     return null;
+  }
+}
+
+async function saveTelegramLeadCardReplyContext(
+  config: Pick<TelegramWorkerConfig, "workspaceId">,
+  client: TelegramWorkerPrismaLike,
+  chatId: string,
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] | null,
+  messageId: number | undefined
+): Promise<void> {
+  if (!lead?.id || messageId === undefined || !client.lead.update) {
+    return;
+  }
+
+  try {
+    await client.lead.update({
+      where: { id: lead.id },
+      data: {
+        rawInput: appendTelegramBotLeadMessageMarker(lead.rawInput ?? "", chatId, messageId)
+      }
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
   }
 }
 

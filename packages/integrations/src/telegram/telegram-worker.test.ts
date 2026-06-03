@@ -1172,15 +1172,20 @@ describe("telegram worker", () => {
             rawInput: "telegram"
           }
         ]),
-        create: vi.fn()
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-1", leadId: "L-2026-010", status: "new" }))
       }
     };
     const parser: OpenAiLeadParserClient = {
       parseLead: vi.fn()
     };
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.includes("/answerCallbackQuery") || url.includes("/sendMessage")) {
+      if (url.includes("/answerCallbackQuery")) {
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 900 } }) };
       }
 
       throw new Error(`Unexpected URL ${url}`);
@@ -1219,10 +1224,152 @@ describe("telegram worker", () => {
     expect(body.text).toContain("<b>L-2026-010</b>");
     expect(body.text).toContain("Frau Schneider - Neubau EFH am Chiemsee");
     expect(body.text).toContain("Reply to this lead card to update the lead");
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-1" },
+      data: { rawInput: "telegram\nTelegram lead card: telegram-bot:12345:900" }
+    });
     expect(body.reply_markup.inline_keyboard[0][0]).toEqual({
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-010"
     });
+  });
+
+  it("updates a lead when replying to a lead card opened from Telegram search", async () => {
+    let rawInput = "telegram";
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { rawInput?: { contains?: string }; leadId?: string } }).where;
+          if (where?.leadId === "L-2026-010" || (where?.rawInput?.contains && rawInput.includes(where.rawInput.contains))) {
+            return [
+              {
+                id: "lead-record-1",
+                leadId: "L-2026-010",
+                displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+                searchTags: ["schneider", "chiemsee"],
+                createdDate: new Date("2026-06-02T10:00:00.000Z"),
+                status: "needs_data",
+                temperature: "warm",
+                requestType: "Neubau EFH",
+                projectAddress: "Bad Aibling",
+                bgfM2: 195,
+                missingData: ["phone"],
+                client: { name: "Frau Schneider", email: "frau.schneider@example.com", phone: null },
+                rawInput
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          const data = (args as { data?: { rawInput?: string } }).data;
+          if (data?.rawInput) {
+            rawInput = data.rawInput;
+          }
+          return { id: "lead-record-1", leadId: "L-2026-010", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: undefined,
+        bgfM2: undefined,
+        email: null,
+        phone: "+49 160 111222",
+        missingData: [],
+        summary: "Phone update",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/answerCallbackQuery")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 901 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 245,
+            callback_query: {
+              id: "callback-open-lead",
+              data: "lead_open:L-2026-010",
+              message: {
+                message_id: 144,
+                date: 1779296580,
+                chat: { id: 12345 }
+              }
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toMatchObject({ processed: 1, lastUpdateId: 245 });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 246,
+            message: {
+              message_id: 146,
+              date: 1779296640,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 901 },
+              text: "phone +49 160 111222"
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 246 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(parser.parseLead).toHaveBeenCalledWith(expect.objectContaining({ text: "phone +49 160 111222" }));
+    expect(updates).toContainEqual({
+      where: { id: "lead-record-1" },
+      data: { rawInput: "telegram\nTelegram lead card: telegram-bot:12345:901" }
+    });
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        where: { id: "lead-record-1" },
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("telegram lead update"),
+          missingData: [],
+          status: "new"
+        })
+      })
+    );
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies.at(-1).text).toContain("<b>L-2026-010</b> updated in CRM.");
+    expect(sendBodies.at(-1).text).not.toContain("Server error occurred");
   });
 
   it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {
