@@ -12,6 +12,8 @@ export type LeadSearchRecord = {
   requestType?: string | null;
   projectAddress?: string | null;
   clientName?: string | null;
+  email?: string | null;
+  phone?: string | null;
   displayName?: string | null;
   searchTags?: string[] | null;
 };
@@ -91,7 +93,7 @@ export function filterLeadSearchRecords(
 export function createLeadSearchFilterResponse(
   content: string,
   records: LeadSearchRecord[],
-  options: { now?: Date; limit?: number; includeCrmButtons?: boolean } = {}
+  options: { now?: Date; limit?: number; includeCrmButtons?: boolean; telegramLeadButtons?: boolean } = {}
 ): AssistantChannelResponse {
   const request = parseLeadSearchFilterRequest(content, options);
   const matches = filterLeadSearchRecords(records, request, options);
@@ -111,6 +113,7 @@ export function createLeadSearchFilterResponse(
     normalizedActions: [],
     buttons: createLeadSearchButtons(request, shown, {
       includeCrmButtons: options.includeCrmButtons,
+      telegramLeadButtons: options.telegramLeadButtons,
       wantsCsv: request.wantsCsv,
       hasMatches: matches.length > 0
     }),
@@ -144,16 +147,16 @@ export function createLeadSearchCrmResultsUrl(request: LeadSearchFilterRequest):
 function createLeadSearchButtons(
   request: LeadSearchFilterRequest,
   shown: LeadSearchRecord[],
-  options: { includeCrmButtons?: boolean; wantsCsv: boolean; hasMatches: boolean }
+  options: { includeCrmButtons?: boolean; telegramLeadButtons?: boolean; wantsCsv: boolean; hasMatches: boolean }
 ): AssistantChannelResponse["buttons"] {
   const buttons: AssistantChannelResponse["buttons"] = [];
 
   if (options.includeCrmButtons) {
     buttons.push(
       ...shown.map((record) => ({
-        label: createLeadCrmButtonLabel(record),
-        action: "open_crm" as const,
-        url: `/leads?leadId=${encodeURIComponent(record.leadId)}`
+        label: options.telegramLeadButtons ? createLeadTelegramButtonLabel(record) : createLeadCrmButtonLabel(record),
+        action: options.telegramLeadButtons ? ("open_lead" as const) : ("open_crm" as const),
+        ...(options.telegramLeadButtons ? { value: record.leadId } : { url: `/leads?leadId=${encodeURIComponent(record.leadId)}` })
       }))
     );
 
@@ -203,17 +206,12 @@ export function createLeadSearchFilterSubmissionResult(
 }
 
 function formatLeadSearchLine(record: LeadSearchRecord): string {
-  return [
-    record.leadId,
-    record.displayName,
-    record.clientName,
-    record.temperature,
-    record.status,
-    record.requestType,
-    record.projectAddress
-  ]
+  const details = [record.displayName, record.clientName, record.requestType, record.projectAddress, record.temperature, record.status]
     .filter(Boolean)
     .join(" · ");
+  const compactDetails = truncateSearchResultDetails(details);
+
+  return compactDetails ? `<b>${record.leadId}</b> · ${compactDetails}` : `<b>${record.leadId}</b>`;
 }
 
 function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
@@ -226,6 +224,8 @@ function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
     record.status,
     record.requestType,
     record.projectAddress,
+    record.email,
+    record.phone,
     ...(record.searchTags ?? [])
   ]
     .filter((value): value is string => Boolean(value))
@@ -253,6 +253,20 @@ function createLeadCrmButtonLabel(record: LeadSearchRecord): string {
   }
 
   return `${record.leadId} · ${truncateButtonTitle(title)}`;
+}
+
+function createLeadTelegramButtonLabel(record: LeadSearchRecord): string {
+  const title = (record.displayName || record.clientName || record.requestType || record.projectAddress || record.leadId).trim();
+  return truncateButtonTitle(title);
+}
+
+function truncateSearchResultDetails(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 160) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 157).trimEnd()}...`;
 }
 
 function truncateButtonTitle(title: string): string {
@@ -337,6 +351,16 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
   const trimmed = content.trim();
   if (isLatestListRequest(trimmed)) {
     return null;
+  }
+
+  const email = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.exec(trimmed)?.[0];
+  if (email && /\b(find|search|show|open|look up|pull up|get)\b|(?:РЅР°Р№РґРё|РїРѕРєР°Р¶Рё|РёС‰Рё|РѕС‚РєСЂРѕР№)/i.test(trimmed)) {
+    return email;
+  }
+
+  const phone = /\+?\d[\d\s().-]{6,}\d/.exec(trimmed)?.[0]?.trim();
+  if (phone && /\b(phone|tel|telephone|number|contact|client|lead)\b|(?:С‚РµР»РµС„РѕРЅ|РЅРѕРјРµСЂ|РєРѕРЅС‚Р°РєС‚|РєР»РёРµРЅС‚|Р»РёРґ)/i.test(trimmed)) {
+    return phone;
   }
 
   const explicit =

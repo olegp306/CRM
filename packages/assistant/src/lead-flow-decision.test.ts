@@ -22,7 +22,7 @@ describe("lead flow decision", () => {
       decideLeadFlow({
         ...baseMessage,
         channel: "telegram",
-        content: "/newlead"
+        content: "/new lead"
       })
     ).toEqual({ kind: "start_draft", source: "new_lead_command" });
   });

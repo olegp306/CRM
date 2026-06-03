@@ -70,8 +70,12 @@ describe("assistant channel engine", () => {
 
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
-    expect(result.text).toContain("I can create and update leads");
-    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).toContain("Here is the simple Telegram flow");
+    expect(result.text).toContain("Use /new lead");
+    expect(result.text).toContain("Use /search lead");
+    expect(result.text).toContain("reply to that card");
+    expect(result.text).toContain("Find project Schneider EFH");
+    expect(result.text).toContain("Show last 10 leads");
     expect(result.text).not.toContain("mark KP as sent");
   });
 
@@ -84,8 +88,11 @@ describe("assistant channel engine", () => {
 
     expect(result.intent).toBe("help");
     expect(result.shouldPersistFeedback).toBe(false);
-    expect(result.text).toContain("I can create and update leads");
-    expect(result.text).toContain("Right now in Telegram I only create leads and update existing leads");
+    expect(result.text).toContain("Here is the simple Telegram flow");
+    expect(result.text).toContain("Use /new lead");
+    expect(result.text).toContain("Use /search lead");
+    expect(result.text).toContain("reply to that card");
+    expect(result.text).toContain("Search by tag residential");
     expect(result.text).not.toContain("mark KP as sent");
   });
 
@@ -93,7 +100,7 @@ describe("assistant channel engine", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
       channel: "web",
-      content: "/newlead"
+      content: "/new lead"
     });
 
     expect(result.intent).toBe("lead_intake");
@@ -323,7 +330,7 @@ describe("assistant channel engine", () => {
     expect(result.text).toContain("L-2026-004");
   });
 
-  it("keeps Telegram lead status answers inside the current create/update-only scope", () => {
+  it("keeps Telegram lead status answers inside the current create/update/search scope", () => {
     const result = createAssistantChannelResponse({
       ...baseMessage,
       channel: "telegram",
@@ -338,7 +345,7 @@ describe("assistant channel engine", () => {
     expect(result.intent).toBe("support_request");
     expect(result.buttons).toEqual([{ label: "CRM", url: "/leads?leadId=L-2026-004" }]);
     expect(result.text).toContain("L-2026-004");
-    expect(result.text).toContain("create or update leads");
+    expect(result.text).toContain("reply to the lead card");
     expect(result.text).not.toContain("follow-ups");
     expect(result.text).not.toContain("KP documents");
   });
@@ -365,7 +372,7 @@ describe("assistant channel engine", () => {
     });
 
     expect(result.intent).toBe("support_request");
-    expect(result.text).toContain("Right now in Telegram I create or update leads");
+    expect(result.text).toContain("/search lead");
     expect(result.text).not.toContain("Nocturne");
     expect(result.shouldPersistFeedback).toBe(false);
     expect(result.buttons).toEqual([]);

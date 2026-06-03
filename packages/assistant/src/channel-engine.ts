@@ -239,8 +239,8 @@ function createTelegramLimitedCrmActionsResponse(): AssistantChannelResponse {
     normalizedActions: [],
     text: [
       "Telegram actions are limited right now.",
-      "For now I can only create a lead or update an existing lead.",
-      "Reply to a lead card with new source material or missing fields."
+      "Use /new lead to create a lead, or /search lead to find one.",
+      "After a lead card is shown, reply to that card to update the lead, add a note, or add a reminder."
     ].join("\n")
   };
 }
@@ -252,15 +252,15 @@ export function createCrmOrchestratorRoutedButPausedResponse(decision: CrmOrches
     feedbackType: undefined,
     buttons: [],
     normalizedActions: [],
-    text: `${detail}\nRoute: ${decision.action}.\nFor now I can create a lead or update an existing lead in Telegram.`
+  text: `${detail}\nRoute: ${decision.action}.\nUse /new lead to create a lead, or /search lead to find one. Reply to a lead card for updates and reminders.`
   };
 }
 
 function createSupportResponseText(channel: AssistantChannelMessage["channel"], leadId: string | null): string {
   if (channel === "telegram") {
     return leadId
-      ? `I can help with lead ${leadId}. Right now in Telegram I create or update leads and can open this lead in CRM.`
-      : "Right now in Telegram I create or update leads. Reply to a lead card or send client source material.";
+      ? `I can help with lead ${leadId}. In Telegram, reply to the lead card to update it, add a note, or add a reminder.`
+      : "In Telegram, use /new lead to create a lead or /search lead to search by title, client, tag, location, status, date, phone, or email. Updates and reminders happen by replying to a lead card.";
   }
 
   return leadId
@@ -370,7 +370,13 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
       : "In Telegram, you can send text, photos, PDFs, voice messages, and audio files. Reply to a lead card to update that exact lead.";
   const capabilityText =
     channel === "telegram"
-      ? "I can create and update leads. Right now in Telegram I only create leads and update existing leads; other CRM actions are paused while we unify the workflow."
+      ? [
+          "Here is the simple Telegram flow:",
+          "1. Use /new lead to create a lead, then send the client text, photos, PDFs, voice messages, or audio files.",
+          "2. Use /search lead to find a lead, then describe what you are looking for: project name, client, address, tag, phone, email, status, or date.",
+          "3. To change a lead, first find or create it, open its Telegram lead card, and reply to that card with the update, note, reminder, or extra files.",
+          "Examples: \"Find project Schneider EFH\", \"Show last 10 leads\", \"Find warm leads from last month\", \"Search by tag residential\"."
+        ].join("\n")
       : "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.";
 
   return [

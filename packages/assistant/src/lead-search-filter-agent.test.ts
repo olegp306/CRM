@@ -27,7 +27,9 @@ const records: LeadSearchRecord[] = [
     temperature: "hot",
     requestType: "EFH Neubau",
     projectAddress: "Munich",
-    clientName: "Anna Meyer"
+    clientName: "Anna Meyer",
+    email: "anna.meyer@example.com",
+    phone: "+49 160 4442211"
   },
   {
     id: "lead-3",
@@ -88,6 +90,18 @@ describe("lead search/filter agent", () => {
 
     expect(request.filters.query).toBe("hobby_jazz");
     expect(filterLeadSearchRecords(records, request)).toEqual([records[2]]);
+  });
+
+  it("filters leads by phone and email", () => {
+    const phoneRequest = parseLeadSearchFilterRequest("Find the client by phone +49 160 4442211", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+    const emailRequest = parseLeadSearchFilterRequest("Find lead by email anna.meyer@example.com", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(filterLeadSearchRecords(records, phoneRequest)).toEqual([records[1]]);
+    expect(filterLeadSearchRecords(records, emailRequest)).toEqual([records[1]]);
   });
 
   it("finds leads by human title fragments instead of exact full names", () => {

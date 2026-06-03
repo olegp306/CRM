@@ -23,7 +23,7 @@ describe("lead chat orchestrator", () => {
       message: {
         ...baseMessage,
         channel: "telegram",
-        content: "/newlead"
+        content: "/new lead"
       }
     });
 

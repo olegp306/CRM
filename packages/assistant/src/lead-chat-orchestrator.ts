@@ -95,7 +95,7 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
 }
 
 export function isNewLeadCommand(content: string): boolean {
-  return /^\/(?:newlead|new_lead|lead)\b/i.test(content.trim()) || /^new lead$/i.test(content.trim());
+  return /^\/new(?:@\w+)?\s+lead\b/i.test(content.trim());
 }
 
 export function isLeadChatSourceMaterial(message: AssistantChannelMessage): boolean {
