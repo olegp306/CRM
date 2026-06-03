@@ -1132,6 +1132,14 @@ describe("telegram worker", () => {
       text: "Frau Schneider - Neubau EFH...",
       callback_data: "lead_open:L-2026-010"
     });
+    expect(client.lead.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.not.objectContaining({
+          email: true,
+          phone: true
+        })
+      })
+    );
     expect(sendBodies[1].text).toContain("Found 1 leads");
     expect(sendBodies[1].text).toContain("<b>L-2026-010</b>");
     expect(sendBodies[1].reply_markup.inline_keyboard[0][0]).toEqual({

@@ -5,9 +5,10 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.5",
-  title: "Telegram command menu and scrollable changelog",
+  version: "0.4.6",
+  title: "Telegram search menu hotfix",
   items: [
+    "Fixed Search Lead from the Telegram command menu when the database has leads without direct contact fields.",
     "Telegram bot menu now exposes new lead and search lead command entries.",
     "Search mode now opens with the latest 5 leads, Telegram lead-card buttons, and next-page navigation.",
     "Web changelog dialog now keeps current notes visible and scrolls through longer release history.",

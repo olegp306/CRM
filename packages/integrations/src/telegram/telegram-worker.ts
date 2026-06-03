@@ -2371,8 +2371,6 @@ async function findTelegramLeadSearchRecords(config: Pick<TelegramWorkerConfig, 
       temperature: true,
       requestType: true,
       projectAddress: true,
-      email: true,
-      phone: true,
       client: {
         select: {
           name: true,
