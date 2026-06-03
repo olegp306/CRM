@@ -184,7 +184,7 @@ Strong reminder signals:
 - "if they do not reply"
 - "tomorrow"
 - "next week"
-- "in a couple of days"
+- "in N days"
 - "next Tuesday evening"
 - "напомни"
 - "поставь напоминание"
@@ -200,8 +200,10 @@ Strong reminder signals:
 - "не забыть"
 - "если не ответит"
 - "через неделю"
-- "через пару дней"
-- "через два дня"
+- "через N дней"
+- "через три дня"
+- "через четыре дня"
+- "через несколько дней"
 - "завтра"
 - "на следующей неделе во вторник"
 - "на следующей неделе во вторник вечером"
@@ -210,8 +212,11 @@ Use Reminder Agent even if the message mentions a lead, client, company, or proj
 
 Treat natural relative dates as schedulable reminder dates:
 
+- "через <number> дней/дня/день" means that many calendar days from the message date.
+- The number may be written as digits or Russian words: один, два, три, четыре, пять, шесть, семь, восемь, девять, десять, одиннадцать, двенадцать, двадцать, тридцать, etc.
 - "через пару дней" means in two days.
-- "через два дня" means in two days.
+- "через несколько дней" means in a few days; if no exact number is present, ask one short clarification instead of saying there is no date.
+- Do not reject a reminder only because the day count is written in words.
 - "на следующей неделе во вторник" means Tuesday of the next calendar week.
 - "утром" means 10:00, "в обед" means 13:00, and "вечером" means 17:00 when no exact time is provided.
 

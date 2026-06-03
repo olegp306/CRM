@@ -33,6 +33,9 @@ describe("CRM orchestrator agent", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"CREATE_REMINDER"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"SUPPORT_REQUEST"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain('"create_reminder"');
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("через <number> дней/дня/день");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("The number may be written as digits or Russian words");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Do not reject a reminder only because the day count is written in words.");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("OUTPUT FORMAT");
   });
 

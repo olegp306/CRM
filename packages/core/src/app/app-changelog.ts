@@ -5,12 +5,12 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.11",
-  title: "Russian reminder date parsing",
+  version: "0.4.12",
+  title: "Generalized reminder date prompts",
   items: [
-    "Telegram and Web reminders now understand Russian phrases like через два дня and через пару дней.",
-    "Next-week weekday reminders like на следующей неделе во вторник вечером now resolve to the correct day and time.",
-    "Natural dayparts now map to stable times: утром 10:00, в обед 13:00, вечером 17:00.",
-    "Default CRM reminder prompts now include the same natural-date examples."
+    "Default CRM reminder prompts now explain the general rule for через N дней instead of only listing fixed examples.",
+    "The prompt tells the model to accept day counts written as digits or Russian words.",
+    "Ambiguous phrases like через несколько дней now ask one short clarification instead of being treated as missing a date.",
+    "The same natural-date rule is included in the CRM entity extraction prompt."
   ]
 };
