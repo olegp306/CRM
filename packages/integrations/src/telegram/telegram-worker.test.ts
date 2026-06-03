@@ -5383,6 +5383,112 @@ describe("telegram worker", () => {
     });
   });
 
+  it("accumulates each replied reminder as a separate CRM calendar action", async () => {
+    const calendarActions: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      },
+      crmCalendarAction: {
+        create: vi.fn(async (args: unknown) => {
+          calendarActions.push(args);
+          return { id: `calendar-action-${calendarActions.length}` };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 445,
+          message: {
+            message_id: 918,
+            date: 1779297400,
+            chat: { id: 12345 },
+            reply_to_message: { message_id: 900 },
+            text: "\u0427\u0435\u0440\u0435\u0437 \u0434\u0432\u0430 \u0434\u043d\u044f \u043d\u0430\u043f\u043e\u043c\u043d\u0438 \u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u043c \u043e \u043f\u0440\u0435\u0434\u043e\u043f\u043b\u0430\u0442\u0435"
+          }
+        }
+      ],
+      config
+    );
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 446,
+          message: {
+            message_id: 919,
+            date: 1779297400,
+            chat: { id: 12345 },
+            reply_to_message: { message_id: 900 },
+            text: "\u041d\u0430\u043f\u043e\u043c\u043d\u0438 \u0447\u0435\u0440\u0435\u0437 \u0442\u0440\u0438 \u0434\u043d\u044f \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0438\u043c \u043f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c"
+          }
+        }
+      ],
+      config
+    );
+
+    expect(calendarActions).toHaveLength(2);
+    expect(calendarActions).toEqual([
+      {
+        data: expect.objectContaining({
+          workspaceId: "workspace-demo",
+          leadRecordId: "lead-record-2",
+          title: "\u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u043c \u043e \u043f\u0440\u0435\u0434\u043e\u043f\u043b\u0430\u0442\u0435",
+          dueAt: new Date("2026-05-22T09:00:00.000Z"),
+          sourceChannel: "telegram",
+          sourceMessageId: "918",
+          actorUserId: "telegram:12345"
+        })
+      },
+      {
+        data: expect.objectContaining({
+          workspaceId: "workspace-demo",
+          leadRecordId: "lead-record-2",
+          title: "\u043d\u0443\u0436\u043d\u043e \u0438\u043c \u043f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c",
+          dueAt: new Date("2026-05-23T09:00:00.000Z"),
+          sourceChannel: "telegram",
+          sourceMessageId: "919",
+          actorUserId: "telegram:12345"
+        })
+      }
+    ]);
+  });
+
   it("confirms a replied reminder even when Telegram audit persistence fails", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const client = {

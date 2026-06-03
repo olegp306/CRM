@@ -111,7 +111,8 @@ export type TelegramWorkerPrismaLike = {
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
   crmCalendarAction?: {
-    deleteMany(args: unknown): Promise<{ count: number }>;
+    create?(args: unknown): Promise<{ id?: string }>;
+    deleteMany?(args: unknown): Promise<{ count: number }>;
   };
   auditLog?: {
     findMany(args: unknown): Promise<Array<{ targetId?: string | null; metadata?: unknown; createdAt?: Date | string }>>;
@@ -516,6 +517,20 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           data: {
             followup1Date: reminderDraft.dueAt,
             followupStatus: "planned"
+          }
+        });
+        await client.crmCalendarAction?.create?.({
+          data: {
+            workspaceId: config.workspaceId,
+            leadRecordId: repliedLead.id,
+            title: reminderDraft.summary,
+            description: summary,
+            dueAt: reminderDraft.dueAt,
+            recurrence: reminderDraft.recurrence ?? "none",
+            status: "planned",
+            sourceChannel: "telegram",
+            sourceMessageId: String(message.messageId),
+            actorUserId: `telegram:${message.chatId}`
           }
         });
       }
@@ -1346,7 +1361,7 @@ async function processTelegramLeadUndoCallback(input: {
     const lead = await findLeadByLeadId(client, config.workspaceId, record.leadId);
     if (lead?.id) {
       await client.leadContextEntity?.deleteMany({ where: { workspaceId: config.workspaceId, leadRecordId: lead.id } });
-      await client.crmCalendarAction?.deleteMany({ where: { workspaceId: config.workspaceId, leadRecordId: lead.id } });
+      await client.crmCalendarAction?.deleteMany?.({ where: { workspaceId: config.workspaceId, leadRecordId: lead.id } });
       if (client.lead.delete) {
         await client.lead.delete({ where: { id: lead.id } });
       } else if (client.lead.update) {

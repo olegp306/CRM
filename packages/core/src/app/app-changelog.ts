@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.15",
-  title: "Telegram callback resilience",
+  version: "0.4.16",
+  title: "Telegram reminders accumulate",
   items: [
-    "Telegram callback acknowledgements are now best-effort, so a stale button response can no longer crash the worker.",
-    "The Telegram worker keeps processing normal messages after Telegram returns 400 for answerCallbackQuery.",
-    "A regression test covers stale callback failures followed by a regular lead message in the same polling batch."
+    "Telegram reply reminders now create a separate CRM calendar action for every scheduled reminder.",
+    "Multiple reminders on the same lead accumulate instead of only leaving the latest date on the lead follow-up field.",
+    "A regression test covers two replied reminders creating two independent calendar actions."
   ]
 };
