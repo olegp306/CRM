@@ -102,6 +102,23 @@ describe("lead reminder agent", () => {
     expect(coupleDays.dueAt?.toISOString()).toBe("2026-05-28T09:00:00.000Z");
   });
 
+  it("detects natural Russian future-action reminders without an explicit reminder verb", () => {
+    const text =
+      "\u0415\u0449\u0451 \u0447\u0435\u0440\u0435\u0437 11 \u0434\u043d\u0435\u0439 \u043d\u0443\u0436\u043d\u043e \u0438\u043c \u0441\u043a\u0430\u0437\u0430\u0442\u044c \u0447\u0442\u043e \u043f\u043e\u0440\u0430 \u043f\u043e\u0441\u044b\u043b\u0430\u0442\u044c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443";
+
+    expect(isReminderRequest(text)).toBe(true);
+
+    const draft = createLeadReminderDraft(text, {
+      now: new Date("2026-06-03T16:20:00.000Z")
+    });
+
+    expect(draft.calendarStatus).toBe("crm_followup_scheduled");
+    expect(draft.dueAt?.toISOString()).toBe("2026-06-14T09:00:00.000Z");
+    expect(draft.summary).toBe(
+      "\u043d\u0443\u0436\u043d\u043e \u0438\u043c \u0441\u043a\u0430\u0437\u0430\u0442\u044c \u0447\u0442\u043e \u043f\u043e\u0440\u0430 \u043f\u043e\u0441\u044b\u043b\u0430\u0442\u044c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443"
+    );
+  });
+
   it("extracts Russian next-week weekday reminders with daypart time", () => {
     const draft = createLeadReminderDraft(
       "\u041d\u0430 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0439 \u043d\u0435\u0434\u0435\u043b\u0435 \u0432\u043e \u0432\u0442\u043e\u0440\u043d\u0438\u043a \u0432\u0435\u0447\u0435\u0440\u043e\u043c \u043d\u0430\u043f\u043e\u043c\u043d\u0438 \u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u043c \u043e \u043f\u0440\u0435\u0434\u043e\u043f\u043b\u0430\u0442\u0435",

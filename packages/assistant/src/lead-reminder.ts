@@ -1,6 +1,9 @@
 const RU_REMINDER_WORD =
   /(?:\u043d\u0430\u043f\u043e\u043c\u043d\u0438|\u043d\u0430\u043f\u043e\u043c\u0438\u043d|\u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u0443\u0439|\u043f\u043e\u0441\u0442\u0430\u0432\u044c\s+(?:\u043d\u0430\u043f\u043e\u043c\u0438\u043d|\u0437\u0430\u0434\u0430\u0447)|\u0437\u0430\u0434\u0430\u0447\u0430|\u0437\u0430\u0444\u043e\u043b\u043b\u043e\u0443\u0430\u043f|\u0444\u043e\u043b\u043b\u043e\u0443\u0430\u043f|\u043f\u0435\u0440\u0435\u0437\u0432\u043e\u043d\u0438\u0442\u044c|\u043f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c|\u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c|\u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c|\u0443\u0437\u043d\u0430\u0442\u044c|\u0441\u043f\u0440\u043e\u0441\u0438\u0442\u044c|\u043d\u0435\s+\u0437\u0430\u0431\u044b\u0442\u044c|\u0435\u0441\u043b\u0438\s+\S+\s+\u043d\u0435\s+\u043e\u0442\u0432\u0435\u0442|\u043a\u043e\u0433\u0434\u0430\s+\S+\s+\u043e\u0442\u0432\u0435\u0442|\u0447\u0435\u0440\u0435\u0437\s+\u043d\u0435\u0434\u0435\u043b\u044e|\u043d\u0430\s+\u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0439\s+\u043d\u0435\u0434\u0435\u043b\u0435)/i;
 
+const RU_RELATIVE_DAY_ACTION =
+  /(?:^|\s)(?:\u0435\u0449[\u0435\u0451]\s+)?\u0447\u0435\u0440\u0435\u0437\s+(?:\d{1,2}|\u043e\u0434\u0438\u043d|\u0434\u0432\u0430|\u0442\u0440\u0438|\u0447\u0435\u0442\u044b\u0440\u0435|\u043f\u044f\u0442\u044c|\u0448\u0435\u0441\u0442\u044c|\u0441\u0435\u043c\u044c|\u0432\u043e\u0441\u0435\u043c\u044c|\u0434\u0435\u0432\u044f\u0442\u044c|\u0434\u0435\u0441\u044f\u0442\u044c|\u043e\u0434\u0438\u043d\u043d\u0430\u0434\u0446\u0430\u0442\u044c|\u0434\u0432\u0435\u043d\u0430\u0434\u0446\u0430\u0442\u044c|\u043f\u0430\u0440\u0443)\s+(?:\u0434\u0435\u043d\u044c|\u0434\u043d\u044f|\u0434\u043d\u0435\u0439)\s+.*(?:\u043d\u0443\u0436\u043d\u043e|\u043d\u0430\u0434\u043e|\u0441\u043a\u0430\u0437\u0430\u0442\u044c|\u043f\u043e\u0441\u043b\u0430\u0442\u044c|\u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c|\u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c|\u043f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c|\u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c|\u0443\u0442\u043e\u0447\u043d\u0438\u0442\u044c)(?:\s|$)/i;
+
 const EN_REMINDER_WORD = /\b(follow[-\s]?up|remind|reminder|schedule)\b/i;
 
 export type LeadReminderDraft = {
@@ -17,7 +20,7 @@ export function isReminderRequest(content: string): boolean {
     return false;
   }
 
-  return EN_REMINDER_WORD.test(text) || RU_REMINDER_WORD.test(text);
+  return EN_REMINDER_WORD.test(text) || RU_REMINDER_WORD.test(text) || RU_RELATIVE_DAY_ACTION.test(text);
 }
 
 export function createLeadReminderDraft(content: string, options: { now: Date } = { now: new Date() }): LeadReminderDraft {
@@ -151,6 +154,7 @@ function normalizeReminderSummary(text: string, matchedDueText: string | null): 
   }
 
   summary = summary
+    .replace(/^\s*(?:\u0435\u0449[\u0435\u0451])[:,\s-]*/i, "")
     .replace(/\b(?:today|tomorrow)\b|сегодня|завтра|послезавтра/gi, "")
     .replace(/(?:через\s+(?:\d{1,2}|один|два|три|четыре|пять|пару)\s+(?:день|дня|дней)|\bin\s+\d{1,2}\s+days?\b|\bnext week\b|через\s+неделю|на\s+следующей\s+неделе(?:\s+(?:во?\s+)?(?:понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))?)/gi, "")
     .replace(/(?:\b(?:at)\s*|в\s*)?\d{1,2}:\d{2}\b|(?:в|at)\s+\d{1,2}(?:\s*(?:часов|часа|am|pm))?|(?:утром|утро|в\s+обед|обедом|вечером|вечер)/gi, "")
