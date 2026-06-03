@@ -5,17 +5,13 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.6",
-  title: "Telegram search menu hotfix",
+  version: "0.4.7",
+  title: "Web CRM calendar",
   items: [
-    "Fixed Search Lead from the Telegram command menu when the database has leads without direct contact fields.",
-    "Telegram bot menu now exposes new lead and search lead command entries.",
-    "Search mode now opens with the latest 5 leads, Telegram lead-card buttons, and next-page navigation.",
-    "Web changelog dialog now keeps current notes visible and scrolls through longer release history.",
-    "Telegram lead create/update flow now explains the simple workflow on start, help, and capability questions.",
-    "Use new lead to start creating leads and search lead to enter lead search mode.",
-    "Search results can open a lead card directly in Telegram before sending updates.",
-    "Lead updates, notes, reminders, and extra files now require replying to a Telegram lead card.",
-    "Default CRM orchestrator prompts document the same command-area rules for future prompt resets."
+    "Lead cards now show an action calendar filtered to the selected lead.",
+    "Action calendars can move between months and switch between calendar and list views.",
+    "Calendar events show follow-up, reminder, birthday, yearly, and event badges.",
+    "The Today page now has a shared workspace CRM calendar with planned actions from all leads.",
+    "Today calendar entries can open the related lead for follow-up work."
   ]
 };

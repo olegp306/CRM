@@ -16,6 +16,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadCalendarMonthViewModel,
   createLeadCalendarViewModel,
   createLeadContextItems,
   createLeadHistory,
@@ -34,6 +35,7 @@ import {
   normalizeLeadTableViewMode,
   resolveDeepLinkedLeadRowId,
   resolveInitialSelectedLeadId,
+  shiftLeadCalendarMonth,
   type LeadMobileViewMode,
   type LeadActionPlanItem,
   type LeadCalendarViewModel,
@@ -791,6 +793,16 @@ function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextActio
 
 function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(calendar.initialMonth);
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [selectedDate, setSelectedDate] = useState<string | null>(calendar.items[0]?.date ?? null);
+  const month = createLeadCalendarMonthViewModel(visibleMonth, calendar.items);
+  const selectedItems = selectedDate ? calendar.items.filter((item) => item.date === selectedDate) : [];
+
+  useEffect(() => {
+    setVisibleMonth(calendar.initialMonth);
+    setSelectedDate(calendar.items[0]?.date ?? null);
+  }, [calendar.initialMonth, calendar.items]);
 
   return (
     <LeadCardAccordion
@@ -809,51 +821,86 @@ function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel
           <p className="mt-1 break-words text-sm font-semibold text-foreground">{calendar.nextSummary}</p>
         </div>
         {calendar.items.length > 0 ? (
-          <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-            <div className="min-w-0 rounded-lg bg-white p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-semibold text-foreground">{calendar.monthLabel}</p>
-                <span className="text-[11px] text-muted-foreground">Mon-Sun</span>
+          <div className="grid min-w-0 gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setVisibleMonth((current) => shiftLeadCalendarMonth(current, -1))}
+                  className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground"
+                >
+                  Prev
+                </button>
+                <p className="min-w-32 text-center text-sm font-semibold text-foreground">{month.monthLabel}</p>
+                <button
+                  type="button"
+                  onClick={() => setVisibleMonth((current) => shiftLeadCalendarMonth(current, 1))}
+                  className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground"
+                >
+                  Next
+                </button>
               </div>
-              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-muted-foreground">
-                {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-                  <span key={`${day}-${index}`}>{day}</span>
+              <div className="flex rounded-md border border-border bg-muted/40 p-1">
+                {(["calendar", "list"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`rounded px-2 py-1 text-xs font-semibold ${
+                      viewMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {mode === "calendar" ? "Calendar" : "List"}
+                  </button>
                 ))}
               </div>
-              <div className="mt-1 grid gap-1">
-                {calendar.weeks.map((week, weekIndex) => (
-                  <div key={weekIndex} className="grid grid-cols-7 gap-1">
-                    {week.map((day) => (
-                      <div
-                        key={day.date}
-                        title={day.itemCount > 0 ? `${day.itemCount} action on ${day.date}` : day.date}
-                        className={`grid aspect-square min-h-8 place-items-center rounded-md border text-[11px] ${
-                          day.itemCount > 0
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : day.isCurrentMonth
-                              ? "border-border bg-muted/40 text-foreground"
-                              : "border-transparent bg-transparent text-muted-foreground/50"
-                        }`}
-                      >
-                        <span>{day.day}</span>
+            </div>
+            {viewMode === "calendar" ? (
+              <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+                <div className="min-w-0 rounded-lg bg-white p-3">
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-muted-foreground">
+                    {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
+                      <span key={`${day}-${index}`}>{day}</span>
+                    ))}
+                  </div>
+                  <div className="mt-1 grid gap-1">
+                    {month.weeks.map((week, weekIndex) => (
+                      <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                        {week.map((day) => (
+                          <button
+                            type="button"
+                            key={day.date}
+                            disabled={day.itemCount === 0}
+                            title={day.itemCount > 0 ? `${day.itemCount} action on ${day.date}` : day.date}
+                            onClick={() => setSelectedDate(day.date)}
+                            className={`grid aspect-square min-h-8 min-w-0 place-items-center rounded-md border text-[11px] ${
+                              day.itemCount > 0
+                                ? selectedDate === day.date
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-primary/40 bg-primary/10 text-foreground"
+                                : day.isCurrentMonth
+                                  ? "border-border bg-muted/40 text-foreground"
+                                  : "border-transparent bg-transparent text-muted-foreground/50"
+                            }`}
+                          >
+                            <span>{day.day}</span>
+                            {day.itemCount > 0 ? (
+                              <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+                            ) : null}
+                          </button>
+                        ))}
                       </div>
                     ))}
                   </div>
-                ))}
+                </div>
+                <CalendarItemList
+                  items={selectedItems}
+                  emptyText={selectedDate ? `No actions on ${selectedDate}.` : "Pick a highlighted date to see details."}
+                />
               </div>
-            </div>
-            <div className="grid min-w-0 gap-2">
-              {calendar.items.map((item) => (
-                <article key={item.id} className="min-w-0 rounded-lg bg-white p-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-foreground">{item.title}</h4>
-                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">{item.status}</span>
-                  </div>
-                  <p className="mt-1 text-xs font-semibold text-muted-foreground">{item.date}</p>
-                  <p className="mt-1 break-words text-sm text-foreground">{item.description}</p>
-                </article>
-              ))}
-            </div>
+            ) : (
+              <CalendarItemList items={calendar.items} emptyText="No scheduled actions." />
+            )}
           </div>
         ) : (
           <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No future follow-ups or events are scheduled for this lead yet.</p>
@@ -861,6 +908,43 @@ function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel
       </div>
     </LeadCardAccordion>
   );
+}
+
+function CalendarItemList({ items, emptyText }: { items: LeadCalendarViewModel["items"]; emptyText: string }) {
+  return (
+    <div className="grid min-w-0 content-start gap-2">
+      {items.length > 0 ? (
+        items.map((item) => (
+          <article key={item.id} className="min-w-0 rounded-lg bg-white p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h4 className="break-words text-sm font-semibold text-foreground">{item.title}</h4>
+                <p className="mt-1 text-xs font-semibold text-muted-foreground">{item.date}</p>
+              </div>
+              <div className="flex flex-wrap justify-end gap-1">
+                <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${getCalendarBadgeClassName(item.badgeTone)}`}>
+                  {item.badgeLabel}
+                </span>
+                <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">{item.status}</span>
+              </div>
+            </div>
+            <p className="mt-2 break-words text-sm text-foreground">{item.description}</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">{item.sourceLabel}</p>
+          </article>
+        ))
+      ) : (
+        <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function getCalendarBadgeClassName(tone: LeadCalendarViewModel["items"][number]["badgeTone"]): string {
+  if (tone === "rose") return "bg-rose-50 text-rose-700";
+  if (tone === "emerald") return "bg-emerald-50 text-emerald-700";
+  if (tone === "blue") return "bg-blue-50 text-blue-700";
+  if (tone === "amber") return "bg-amber-50 text-amber-700";
+  return "bg-muted text-muted-foreground";
 }
 
 function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {

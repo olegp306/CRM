@@ -4,6 +4,7 @@ import {
   canUndoLeadKpSent,
   clampLeadColumnSizing,
   createLeadActionPlan,
+  createLeadCalendarMonthViewModel,
   createLeadCalendarViewModel,
   createLeadHistory,
   createLeadContextItems,
@@ -584,22 +585,67 @@ describe("lead table model", () => {
       outcome: ""
     });
 
-    expect(calendar.nextSummary).toBe("Next: 2026-05-28 - Follow up with client reaction and update outcome.");
+    expect(calendar.nextSummary).toBe("Next: 2026-05-28 - Follow up: Check client reaction and update outcome.");
     expect(calendar.items).toEqual([
       {
-        id: "followup-2026-05-28",
+        id: "followup-lead-2026-05-28",
         title: "Follow up",
         date: "2026-05-28",
         status: "planned",
-        description: "Check client reaction and update outcome."
+        description: "Check client reaction and update outcome.",
+        kind: "followup",
+        recurrence: null,
+        badgeLabel: "Follow-up",
+        badgeTone: "amber",
+        sourceLabel: "Lead follow-up",
+        leadId: undefined,
+        leadName: undefined
       }
     ]);
-    expect(calendar.monthLabel).toBe("May 2026");
-    expect(calendar.weeks).toHaveLength(5);
-    expect(calendar.weeks.flat().find((day) => day.date === "2026-05-28")).toMatchObject({
+    expect(calendar.initialMonth).toBe("2026-05");
+    const month = createLeadCalendarMonthViewModel(calendar.initialMonth, calendar.items);
+    expect(month.monthLabel).toBe("May 2026");
+    expect(month.weeks).toHaveLength(5);
+    expect(month.weeks.flat().find((day) => day.date === "2026-05-28")).toMatchObject({
       day: 28,
       isCurrentMonth: true,
-      itemCount: 1
+      itemCount: 1,
+      items: [calendar.items[0]]
+    });
+  });
+
+  it("adds CRM calendar actions with recurrence and birthday badges to the lead calendar", () => {
+    const calendar = createLeadCalendarViewModel(
+      {
+        leadId: "L-2026-010",
+        leadName: "Artem - house in Munich",
+        followup1Date: "",
+        followupStatus: "",
+        outcome: "",
+        calendarActions: [
+          {
+            id: "calendar-1",
+            title: "Birthday",
+            description: "Congratulate the client.",
+            dueAt: "2026-06-14T09:00:00.000Z",
+            recurrence: "yearly",
+            status: "planned",
+            sourceChannel: "telegram"
+          }
+        ]
+      },
+      { today: new Date("2026-06-01T12:00:00.000Z") }
+    );
+
+    expect(calendar.nextSummary).toBe("Next: 2026-06-14 - Birthday: Congratulate the client.");
+    expect(calendar.items[0]).toMatchObject({
+      id: "calendar-1",
+      date: "2026-06-14",
+      kind: "birthday",
+      badgeLabel: "DR yearly",
+      badgeTone: "rose",
+      leadId: "L-2026-010",
+      leadName: "Artem - house in Munich"
     });
   });
 
@@ -683,7 +729,7 @@ describe("lead table model", () => {
 
     expect(calendar.nextSummary).toBe("No scheduled future actions yet.");
     expect(calendar.items).toEqual([]);
-    expect(calendar.weeks).toEqual([]);
+    expect(calendar.initialMonth).toMatch(/^\d{4}-\d{2}$/);
   });
 
   it("builds a collapsed-card history from the lead workflow state", () => {

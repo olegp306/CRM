@@ -65,6 +65,20 @@ export type LeadTableRecord = {
   outcomeReason: string | null;
   projectRecordId: string | null;
   contextEntities?: LeadContextEntityRecord[];
+  calendarActions?: LeadCalendarActionRecord[];
+};
+
+export type LeadCalendarActionRecord = {
+  id: string;
+  title: string;
+  description?: string | null;
+  dueAt?: Date | string | null;
+  recurrence?: string | null;
+  status?: string | null;
+  sourceChannel?: string | null;
+  sourceMessageId?: string | null;
+  actorUserId?: string | null;
+  createdAt?: Date | string | null;
 };
 
 export type LeadContextEntityRecord = {
@@ -81,6 +95,7 @@ export type LeadTableRow = Record<LeadTableColumnKey, string> & {
   kpPdfAttachmentId?: string;
   channelEvents?: LeadChannelHistoryEvent[];
   contextEntities?: LeadContextItem[];
+  calendarActions?: LeadCalendarActionRecord[];
 };
 
 export type LeadActionPlanItem = {
@@ -96,6 +111,13 @@ export type LeadCalendarItem = {
   date: string;
   status: string;
   description: string;
+  kind: "followup" | "reminder" | "birthday" | "event";
+  recurrence: string | null;
+  badgeLabel: string;
+  badgeTone: "amber" | "blue" | "emerald" | "rose" | "neutral";
+  sourceLabel: string;
+  leadId?: string;
+  leadName?: string;
 };
 
 export type LeadCalendarDay = {
@@ -103,12 +125,18 @@ export type LeadCalendarDay = {
   day: number;
   isCurrentMonth: boolean;
   itemCount: number;
+  items: LeadCalendarItem[];
 };
 
 export type LeadCalendarViewModel = {
   nextSummary: string;
-  monthLabel: string;
+  initialMonth: string;
   items: LeadCalendarItem[];
+};
+
+export type LeadCalendarMonthViewModel = {
+  month: string;
+  monthLabel: string;
   weeks: LeadCalendarDay[][];
 };
 
@@ -568,7 +596,8 @@ export function createLeadTableRows(
     kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
     kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined,
     channelEvents: channelEventsByLeadId[record.leadId] ?? undefined,
-    contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? [])
+    contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? []),
+    calendarActions: record.calendarActions ?? []
   }));
 }
 
@@ -740,32 +769,72 @@ export function createLeadActionPlan(lead: Pick<LeadTableRow, "missingData" | "i
 }
 
 export function createLeadCalendarViewModel(
-  lead: Pick<LeadTableRow, "followup1Date" | "followupStatus" | "outcome">
+  lead: Pick<LeadTableRow, "followup1Date" | "followupStatus" | "outcome"> &
+    Partial<Pick<LeadTableRow, "leadId" | "leadName" | "calendarActions">>,
+  options: { today?: Date } = {}
 ): LeadCalendarViewModel {
-  const followupDate = normalizeCalendarDate(lead.followup1Date);
-  const items: LeadCalendarItem[] = followupDate && !lead.outcome
-    ? [
-        {
-          id: `followup-${followupDate}`,
-          title: "Follow up",
-          date: followupDate,
-          status: lead.followupStatus || "planned",
-          description: "Check client reaction and update outcome."
-        }
-      ]
-    : [];
-
-  const nextItem = items[0];
-  const monthDate = nextItem ? new Date(`${nextItem.date}T00:00:00.000Z`) : null;
+  const items = createLeadCalendarItems(lead).sort((left, right) => left.date.localeCompare(right.date));
+  const today = formatDate(options.today ?? new Date());
+  const nextItem = items.find((item) => item.date >= today) ?? items[0];
+  const initialMonth = nextItem ? nextItem.date.slice(0, 7) : today.slice(0, 7);
 
   return {
     nextSummary: nextItem
-      ? `Next: ${nextItem.date} - Follow up with client reaction and update outcome.`
+      ? `Next: ${nextItem.date} - ${nextItem.title}${nextItem.description ? `: ${nextItem.description}` : ""}`
       : "No scheduled future actions yet.",
-    monthLabel: monthDate ? formatCalendarMonthLabel(monthDate) : "",
-    items,
-    weeks: monthDate ? createCalendarWeeks(monthDate, items) : []
+    initialMonth,
+    items
   };
+}
+
+export function createLeadCalendarItems(
+  lead: Pick<LeadTableRow, "followup1Date" | "followupStatus" | "outcome"> &
+    Partial<Pick<LeadTableRow, "leadId" | "leadName" | "calendarActions">>
+): LeadCalendarItem[] {
+  const actionItems = (lead.calendarActions ?? [])
+    .map((action) => createLeadCalendarItemFromAction(action, lead))
+    .filter((item): item is LeadCalendarItem => Boolean(item));
+  const followupDate = normalizeCalendarDate(lead.followup1Date);
+  const hasExistingFollowup = followupDate
+    ? actionItems.some((item) => item.date === followupDate && item.kind === "followup")
+    : false;
+
+  if (followupDate && !lead.outcome && !hasExistingFollowup) {
+    actionItems.push({
+      id: `followup-${lead.leadId ?? "lead"}-${followupDate}`,
+      title: "Follow up",
+      date: followupDate,
+      status: lead.followupStatus || "planned",
+      description: "Check client reaction and update outcome.",
+      kind: "followup",
+      recurrence: null,
+      badgeLabel: "Follow-up",
+      badgeTone: "amber",
+      sourceLabel: "Lead follow-up",
+      leadId: lead.leadId,
+      leadName: lead.leadName
+    });
+  }
+
+  return actionItems;
+}
+
+export function createLeadCalendarMonthViewModel(month: string, items: LeadCalendarItem[]): LeadCalendarMonthViewModel {
+  const normalizedMonth = normalizeCalendarMonth(month) ?? formatDate(new Date()).slice(0, 7);
+  const monthDate = new Date(`${normalizedMonth}-01T00:00:00.000Z`);
+
+  return {
+    month: normalizedMonth,
+    monthLabel: formatCalendarMonthLabel(monthDate),
+    weeks: createCalendarWeeks(monthDate, items)
+  };
+}
+
+export function shiftLeadCalendarMonth(month: string, offset: number): string {
+  const normalizedMonth = normalizeCalendarMonth(month) ?? formatDate(new Date()).slice(0, 7);
+  const date = new Date(`${normalizedMonth}-01T00:00:00.000Z`);
+  date.setUTCMonth(date.getUTCMonth() + offset);
+  return date.toISOString().slice(0, 7);
 }
 
 export function createLeadHistory(
@@ -1245,6 +1314,76 @@ function normalizeCalendarDate(value: Date | string | null): string | null {
   return formatted || null;
 }
 
+function normalizeCalendarMonth(value: string): string | null {
+  if (/^\d{4}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const date = new Date(`${value}-01T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 7);
+}
+
+function createLeadCalendarItemFromAction(
+  action: LeadCalendarActionRecord,
+  lead: Partial<Pick<LeadTableRow, "leadId" | "leadName">>
+): LeadCalendarItem | null {
+  const date = normalizeCalendarDate(action.dueAt ?? null);
+  if (!date) {
+    return null;
+  }
+
+  const kind = classifyLeadCalendarKind(action);
+  const recurrence = action.recurrence?.trim() || null;
+  const badge = createLeadCalendarBadge(kind, recurrence);
+
+  return {
+    id: action.id,
+    title: action.title || "Calendar action",
+    date,
+    status: action.status || "planned",
+    description: action.description || "No description yet.",
+    kind,
+    recurrence,
+    badgeLabel: badge.label,
+    badgeTone: badge.tone,
+    sourceLabel: action.sourceChannel || "CRM",
+    leadId: lead.leadId,
+    leadName: lead.leadName
+  };
+}
+
+function classifyLeadCalendarKind(action: LeadCalendarActionRecord): LeadCalendarItem["kind"] {
+  const text = `${action.title} ${action.description ?? ""} ${action.recurrence ?? ""}`.toLowerCase();
+  if (/birthday|birth day|день рождения|др\b|geburtstag/.test(text)) {
+    return "birthday";
+  }
+  if (/follow[- ]?up|followup|перезвон|созвон|написать|позвонить|уточнить|проверить|ping|пинг/.test(text)) {
+    return "followup";
+  }
+  if (/remind|reminder|напом|follow/.test(text)) {
+    return "reminder";
+  }
+  return "event";
+}
+
+function createLeadCalendarBadge(
+  kind: LeadCalendarItem["kind"],
+  recurrence: string | null
+): { label: string; tone: LeadCalendarItem["badgeTone"] } {
+  if (kind === "birthday") {
+    return { label: recurrence === "yearly" ? "DR yearly" : "DR", tone: "rose" };
+  }
+  if (recurrence === "yearly") {
+    return { label: "Yearly", tone: "emerald" };
+  }
+  if (kind === "followup") {
+    return { label: "Follow-up", tone: "amber" };
+  }
+  if (kind === "reminder") {
+    return { label: "Reminder", tone: "blue" };
+  }
+  return { label: "Event", tone: "neutral" };
+}
+
 function formatCalendarMonthLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 }
@@ -1258,9 +1397,9 @@ function createCalendarWeeks(monthDate: Date, items: LeadCalendarItem[]): LeadCa
   const endOffset = (7 - ((lastOfMonth.getUTCDay() + 6) % 7) - 1) % 7;
   const end = new Date(lastOfMonth);
   end.setUTCDate(lastOfMonth.getUTCDate() + endOffset);
-  const itemCounts = new Map<string, number>();
+  const itemsByDate = new Map<string, LeadCalendarItem[]>();
   for (const item of items) {
-    itemCounts.set(item.date, (itemCounts.get(item.date) ?? 0) + 1);
+    itemsByDate.set(item.date, [...(itemsByDate.get(item.date) ?? []), item]);
   }
 
   const days: LeadCalendarDay[] = [];
@@ -1270,7 +1409,8 @@ function createCalendarWeeks(monthDate: Date, items: LeadCalendarItem[]): LeadCa
       date,
       day: cursor.getUTCDate(),
       isCurrentMonth: cursor.getUTCMonth() === monthDate.getUTCMonth(),
-      itemCount: itemCounts.get(date) ?? 0
+      itemCount: itemsByDate.get(date)?.length ?? 0,
+      items: itemsByDate.get(date) ?? []
     });
   }
 

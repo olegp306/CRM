@@ -45,6 +45,21 @@ export default async function LeadsPage() {
           confidence: true,
           normalizedKey: true
         }
+      },
+      calendarActions: {
+        orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          dueAt: true,
+          recurrence: true,
+          status: true,
+          sourceChannel: true,
+          sourceMessageId: true,
+          actorUserId: true,
+          createdAt: true
+        }
       }
     }
   });

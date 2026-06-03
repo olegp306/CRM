@@ -167,7 +167,8 @@ describe("L01 lead intake loop", () => {
         dueDateLabel: "2026-05-21",
         rawInput: "Follow up with lead L-2026-001 today",
         requestedByUserId: "user-1",
-        status: "pending"
+        status: "pending",
+        source: "assistant_followup"
       }
     ]);
   });
