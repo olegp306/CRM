@@ -4112,6 +4112,12 @@ describe("telegram worker", () => {
     ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 21 });
 
     expect(client.lead.create).not.toHaveBeenCalled();
+    const replyLookupCall = client.lead.findMany.mock.calls.find(([args]) => {
+      const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+      return rawInput === "telegram-bot:12345:900";
+    })?.[0] as { select?: Record<string, unknown> } | undefined;
+    expect(replyLookupCall?.select).not.toHaveProperty("email");
+    expect(replyLookupCall?.select).not.toHaveProperty("phone");
     expect(updates).toEqual([
       {
         where: { id: "lead-record-2" },

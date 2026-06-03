@@ -5,12 +5,12 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.9",
-  title: "Telegram reply actions fix",
+  version: "0.4.10",
+  title: "Telegram reply context hotfix",
   items: [
-    "Lead cards opened from Telegram search now remember their reply context.",
-    "Replies to those Telegram lead cards can update lead fields instead of falling into server errors.",
-    "Replies to opened lead cards can create reminder/history actions for the correct lead.",
-    "A regression test now covers the search-to-open-to-reply Telegram workflow."
+    "Telegram reply context lookup no longer requests non-existent Lead email/phone fields from Prisma.",
+    "Reply-based lead updates can resolve the target lead card without returning Server Error.",
+    "Reply-based reminders and history notes can resolve the target lead card through client contact data.",
+    "A regression test now covers the Telegram reply lookup query shape."
   ]
 };

@@ -3171,8 +3171,6 @@ async function findLeadByTelegramBotMessage(
       requestType: true,
       projectAddress: true,
       bgfM2: true,
-      email: true,
-      phone: true,
       missingData: true,
       kpSentDate: true
     }
