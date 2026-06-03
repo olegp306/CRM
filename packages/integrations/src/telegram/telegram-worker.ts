@@ -102,6 +102,16 @@ export type TelegramWorkerPrismaLike = {
     >;
     create(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
     update?(args: unknown): Promise<{ id?: string; leadId: string; status: string }>;
+    delete?(args: unknown): Promise<unknown>;
+  };
+  leadContextEntity?: {
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
+  crmCalendarAction?: {
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
+  auditLog?: {
+    findMany(args: unknown): Promise<Array<{ targetId?: string | null; metadata?: unknown; createdAt?: Date | string }>>;
   };
 };
 
@@ -214,8 +224,9 @@ type AllowedTelegramLeadActionCallback = {
   chatId: string;
   messageId?: number;
   receivedAt: string;
-  action: "mark_kp_sent" | "undo_kp_sent";
+  action: "mark_kp_sent" | "undo_kp_sent" | "undo_lead_action" | "recreate_lead_from_undo";
   leadId: string;
+  actionId?: string;
 };
 
 type TelegramSourceAttachmentPrismaLike = {
@@ -224,7 +235,34 @@ type TelegramSourceAttachmentPrismaLike = {
   };
 };
 
-const defaultTelegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+let defaultTelegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+const telegramUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>();
+const telegramCompletedUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>();
+const telegramUndoneActionMemory = new Set<string>();
+
+type TelegramLeadUndoActionType = "create_lead" | "update_lead";
+
+type TelegramLeadUndoActionRecord = {
+  id: string;
+  workspaceId: string;
+  chatId: string;
+  actionId: string;
+  leadId: string;
+  actionType: TelegramLeadUndoActionType;
+  leadRecordId?: string;
+  before?: Record<string, unknown>;
+  draftSnapshot?: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+  sourceText: string;
+  sourceMessageIds: number[];
+  createdAt: string;
+};
+
+export function resetTelegramWorkerMemoryForTests(): void {
+  defaultTelegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+  telegramUndoActionMemory.clear();
+  telegramCompletedUndoActionMemory.clear();
+  telegramUndoneActionMemory.clear();
+}
 
 export function createTelegramTestUpdateFromEnv(env: TelegramTestEnv): TelegramUpdate | undefined {
   const text = env.TELEGRAM_TEST_MESSAGE?.trim();
@@ -259,6 +297,18 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   let skipped = 0;
 
   for (const callback of allowedCallbacks) {
+    if (callback.action === "undo_lead_action") {
+      await processTelegramLeadUndoCallback({ callback, config, client, fetchImpl });
+      processed += 1;
+      continue;
+    }
+
+    if (callback.action === "recreate_lead_from_undo") {
+      await processTelegramLeadRecreateCallback({ callback, config, client, fetchImpl });
+      processed += 1;
+      continue;
+    }
+
     await answerTelegramCallbackQuery({
       botToken: config.botToken,
       callbackQueryId: callback.callbackQueryId,
@@ -278,9 +328,24 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     };
 
     try {
-    const leadFlowDecision = decideLeadFlow(createTelegramAssistantChannelMessage(config.workspaceId, message));
+    if (isTelegramLeadUndoClarificationRequest(message)) {
+      await sendWorkerTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramLeadUndoClarificationMessage(),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
 
-    if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command") {
+    const leadFlowDecision = decideLeadFlow(createTelegramAssistantChannelMessage(config.workspaceId, message));
+    const forceCreateLeadFromCommand =
+      leadFlowDecision.kind === "start_draft" &&
+      leadFlowDecision.source === "new_lead_command" &&
+      !isBareTelegramNewLeadCommand(message.text);
+
+    if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command" && !forceCreateLeadFromCommand) {
       const session = createTelegramLeadDraftSession({
         chatId: message.chatId,
         workspaceId: config.workspaceId,
@@ -425,42 +490,44 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    const generalAssistantResponse = createTelegramGeneralAssistantResponse(
-      config.workspaceId,
-      message,
-      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
-    );
-    if (generalAssistantResponse) {
-      const responseText =
-        !repliedLead && generalAssistantResponse.intent === "crm_action" && isReminderRequest(message.text)
-          ? createTelegramLimitedActionsText()
-          : generalAssistantResponse.text;
-      await sendWorkerTelegramMessage({
-        botToken: config.botToken,
-        chatId: message.chatId,
-        text: responseText,
-        replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons, config.crmBaseUrl),
-        fetchImpl
-      });
-      skipped += message.sourceMessageIds.length;
-      continue;
-    }
+    if (!forceCreateLeadFromCommand) {
+      const generalAssistantResponse = createTelegramGeneralAssistantResponse(
+        config.workspaceId,
+        message,
+        repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
+      );
+      if (generalAssistantResponse) {
+        const responseText =
+          !repliedLead && generalAssistantResponse.intent === "crm_action" && isReminderRequest(message.text)
+            ? createTelegramLimitedActionsText()
+            : generalAssistantResponse.text;
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: responseText,
+          replyMarkup: createTelegramResponseReplyMarkup(generalAssistantResponse.buttons, config.crmBaseUrl),
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
 
-    const crmOrchestratorFallbackResponse = await createTelegramCrmOrchestratorFallbackResponse(
-      config,
-      message,
-      repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
-    );
-    if (crmOrchestratorFallbackResponse) {
-      await sendWorkerTelegramMessage({
-        botToken: config.botToken,
-        chatId: message.chatId,
-        text: crmOrchestratorFallbackResponse.text,
-        replyMarkup: createTelegramResponseReplyMarkup(crmOrchestratorFallbackResponse.buttons, config.crmBaseUrl),
-        fetchImpl
-      });
-      skipped += message.sourceMessageIds.length;
-      continue;
+      const crmOrchestratorFallbackResponse = await createTelegramCrmOrchestratorFallbackResponse(
+        config,
+        message,
+        repliedLead ? { leadId: repliedLead.leadId, sourceMessageId: String(message.replyToMessageId ?? message.messageId) } : undefined
+      );
+      if (crmOrchestratorFallbackResponse) {
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: crmOrchestratorFallbackResponse.text,
+          replyMarkup: createTelegramResponseReplyMarkup(crmOrchestratorFallbackResponse.buttons, config.crmBaseUrl),
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
     }
 
     if (repliedLead && isTelegramKpSentCommand(message) && !isTelegramKpSentUndoCommand(message)) {
@@ -635,10 +702,20 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         continue;
       }
 
+      const updateUndoAction = createTelegramLeadUndoActionRecord({
+        config,
+        message,
+        leadId: repliedLead.leadId,
+        leadRecordId: repliedLead.id,
+        actionType: "update_lead",
+        before: createTelegramLeadRestoreSnapshot(repliedLead),
+        draftSnapshot: draft
+      });
       await client.lead.update({
         where: { id: repliedLead.id },
         data: createTelegramLeadUpdateData(repliedLead, draft, message)
       });
+      await saveTelegramLeadUndoAction(config, updateUndoAction);
       await saveTelegramLeadEntityExtraction(config, message, repliedLead, draft.rawInput);
       await saveTelegramChannelEvent(
         config,
@@ -669,7 +746,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         chatId: message.chatId,
         text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft),
         parseMode: "HTML",
-        replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
+        replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, repliedLead.leadId, {
+          email: draft.email,
+          missingFields: draft.missingData,
+          undoActionId: updateUndoAction.actionId
+        }),
         fetchImpl
       });
       processed += 1;
@@ -685,7 +766,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       : null;
     let activeSession = replySession ?? (await telegramDraftStore.getActive({ workspaceId: config.workspaceId, chatId: message.chatId }));
 
-    if (!activeSession) {
+    if (forceCreateLeadFromCommand && activeSession) {
+      await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
+      activeSession = null;
+    }
+
+    if (!activeSession && !forceCreateLeadFromCommand) {
       const persistedLeadMatch = decideIncomingLeadMatch({
         incoming: {
           rawInput: draft.rawInput,
@@ -720,10 +806,20 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         }
 
         const fieldsChanged = createDetectedTelegramLeadFields(draft);
+        const updateUndoAction = createTelegramLeadUndoActionRecord({
+          config,
+          message,
+          leadId: lead.leadId,
+          leadRecordId: lead.id,
+          actionType: "update_lead",
+          before: createTelegramLeadRestoreSnapshot(lead),
+          draftSnapshot: draft
+        });
         await client.lead.update({
           where: { id: lead.id },
           data: createTelegramLeadUpdateData(lead, draft, message)
         });
+        await saveTelegramLeadUndoAction(config, updateUndoAction);
         await saveTelegramLeadEntityExtraction(config, message, lead, draft.rawInput);
         await saveTelegramChannelEvent(
           config,
@@ -754,7 +850,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           chatId: message.chatId,
           text: createTelegramLeadUpdatedMessage(lead.leadId, draft),
           parseMode: "HTML",
-          replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, lead.leadId),
+          replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, lead.leadId, {
+            email: draft.email,
+            missingFields: draft.missingData,
+            undoActionId: updateUndoAction.actionId
+          }),
           fetchImpl
         });
         processed += 1;
@@ -775,7 +875,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }
     }
 
-    if (activeSession && !replySession && isPossibleDifferentLead(activeSession, draft)) {
+    if (activeSession && !replySession && !forceCreateLeadFromCommand && isPossibleDifferentLead(activeSession, draft)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -802,6 +902,21 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     if (activeSession?.leadId) {
       const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+      const updateUndoAction = createTelegramLeadUndoActionRecord({
+        config,
+        message,
+        leadId: activeSession.leadId,
+        actionType: "update_lead",
+        before: {
+          status: "needs_data",
+          rawInput: activeSession.draft.rawInput ?? null,
+          requestType: activeSession.draft.requestType ?? null,
+          projectAddress: activeSession.draft.projectAddress ?? null,
+          bgfM2: activeSession.draft.bgfM2 ?? null,
+          missingData: activeSession.draft.missingData ?? []
+        },
+        draftSnapshot: { ...session.draft, missingData: templateAwareMissingData }
+      });
       try {
         const updated = client.lead.update
           ? await client.lead.update({
@@ -821,6 +936,9 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
               }
             })
           : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
+        if (client.lead.update) {
+          await saveTelegramLeadUndoAction(config, updateUndoAction);
+        }
         const sent = await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
@@ -828,7 +946,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           parseMode: "HTML",
           replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, updated.leadId, {
             email: session.draft.email,
-            missingFields: templateAwareMissingData
+            missingFields: templateAwareMissingData,
+            undoActionId: client.lead.update ? updateUndoAction.actionId : undefined
           }),
           fetchImpl
         });
@@ -879,6 +998,15 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
         }
       });
+      const createUndoAction = createTelegramLeadUndoActionRecord({
+        config,
+        message,
+        leadId: created.leadId,
+        leadRecordId: created.id,
+        actionType: "create_lead",
+        draftSnapshot: { ...session.draft, missingData: templateAwareMissingData }
+      });
+      await saveTelegramLeadUndoAction(config, createUndoAction);
       await saveTelegramChannelEvent(
         config,
         message,
@@ -903,7 +1031,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         parseMode: "HTML",
         replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
           email: session.draft.email,
-          missingFields: templateAwareMissingData
+          missingFields: templateAwareMissingData,
+          undoActionId: createUndoAction.actionId
         }),
         fetchImpl
       });
@@ -941,6 +1070,15 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
       }
     });
+    const createUndoAction = createTelegramLeadUndoActionRecord({
+      config,
+      message,
+      leadId: created.leadId,
+      leadRecordId: created.id,
+      actionType: "create_lead",
+      draftSnapshot: { ...session.draft, missingData: templateAwareMissingData }
+    });
+    await saveTelegramLeadUndoAction(config, createUndoAction);
     await saveTelegramChannelEvent(
       config,
       message,
@@ -1028,7 +1166,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         email: session.draft.email,
         pdfUrl: generatedDocumentPdfUrl,
         docxUrl: generatedDocumentDocxUrl,
-        missingFields: templateAwareMissingData
+        missingFields: templateAwareMissingData,
+        undoActionId: createUndoAction.actionId
       }),
       fetchImpl
     });
@@ -1077,6 +1216,194 @@ function createTelegramCrmOnlyReplyMarkup(crmBaseUrl: string | undefined, leadId
       ]
     ]
   };
+}
+
+function createTelegramUndoOnlyReplyMarkup(leadId: string, actionId: string): unknown {
+  return {
+    inline_keyboard: [[{ text: "Undo", callback_data: createTelegramLeadUndoCallbackData(leadId, actionId) }]]
+  };
+}
+
+async function processTelegramLeadUndoCallback(input: {
+  callback: AllowedTelegramLeadActionCallback;
+  config: TelegramWorkerConfig;
+  client: TelegramWorkerPrismaLike;
+  fetchImpl: typeof fetch;
+}): Promise<void> {
+  const { callback, config, client, fetchImpl } = input;
+  await answerTelegramCallbackQuery({
+    botToken: config.botToken,
+    callbackQueryId: callback.callbackQueryId,
+    text: "Undo requested.",
+    fetchImpl
+  });
+
+  const record = await findTelegramLeadUndoAction(client, {
+    workspaceId: config.workspaceId,
+    chatId: callback.chatId,
+    leadId: callback.leadId,
+    actionId: callback.actionId,
+    includeDone: true
+  });
+
+  if (!record) {
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: callback.chatId,
+      text: `I could not find an undoable action for lead <b>${escapeHtml(callback.leadId)}</b>.`,
+      parseMode: "HTML",
+      replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, callback.leadId),
+      fetchImpl
+    });
+    return;
+  }
+
+  if (record.actionType === "create_lead") {
+    const lead = await findLeadByLeadId(client, config.workspaceId, record.leadId);
+    if (lead?.id) {
+      await client.leadContextEntity?.deleteMany({ where: { workspaceId: config.workspaceId, leadRecordId: lead.id } });
+      await client.crmCalendarAction?.deleteMany({ where: { workspaceId: config.workspaceId, leadRecordId: lead.id } });
+      if (client.lead.delete) {
+        await client.lead.delete({ where: { id: lead.id } });
+      } else if (client.lead.update) {
+        await client.lead.update({ where: { id: lead.id }, data: { status: "archived", archivedAt: new Date(callback.receivedAt) } });
+      }
+    }
+
+    await markTelegramLeadUndoActionDone(config, record, { undone: true, mode: client.lead.delete ? "deleted" : "archived" });
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: callback.chatId,
+      text: `Undo done. Lead <b>${escapeHtml(record.leadId)}</b> was ${client.lead.delete ? "removed" : "archived"}.`,
+      parseMode: "HTML",
+      fetchImpl
+    });
+    return;
+  }
+
+  const lead = await findLeadByLeadId(client, config.workspaceId, record.leadId);
+  if (!lead?.id || !client.lead.update || !record.before) {
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: callback.chatId,
+      text: `I found the undo action for <b>${escapeHtml(record.leadId)}</b>, but cannot restore it from this worker.`,
+      parseMode: "HTML",
+      replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, record.leadId),
+      fetchImpl
+    });
+    return;
+  }
+
+  await client.lead.update({
+    where: { id: lead.id },
+    data: record.before
+  });
+  await markTelegramLeadUndoActionDone(config, record, { undone: true, mode: "restored" });
+  await sendTelegramMessage({
+    botToken: config.botToken,
+    chatId: callback.chatId,
+    text: `Undo done. Lead <b>${escapeHtml(record.leadId)}</b> was restored to the previous state.`,
+    parseMode: "HTML",
+    replyMarkup: createTelegramUndoUpdateDoneReplyMarkup(config.crmBaseUrl, record),
+    fetchImpl
+  });
+}
+
+async function processTelegramLeadRecreateCallback(input: {
+  callback: AllowedTelegramLeadActionCallback;
+  config: TelegramWorkerConfig;
+  client: TelegramWorkerPrismaLike;
+  fetchImpl: typeof fetch;
+}): Promise<void> {
+  const { callback, config, client, fetchImpl } = input;
+  await answerTelegramCallbackQuery({
+    botToken: config.botToken,
+    callbackQueryId: callback.callbackQueryId,
+    text: "Creating a new lead from the same source.",
+    fetchImpl
+  });
+
+  const record = await findTelegramLeadUndoAction(client, {
+    workspaceId: config.workspaceId,
+    chatId: callback.chatId,
+    leadId: callback.leadId,
+    actionId: callback.actionId,
+    includeDone: true
+  });
+  const draft = record?.draftSnapshot;
+  if (!record || !draft) {
+    await sendTelegramMessage({
+      botToken: config.botToken,
+      chatId: callback.chatId,
+      text: "I could not recreate a new lead because the original source snapshot is missing.",
+      fetchImpl
+    });
+    return;
+  }
+
+  const existingIds = await client.lead.findMany({
+    where: { workspaceId: config.workspaceId },
+    select: { leadId: true, rawInput: true }
+  });
+  const leadId = getNextBusinessId({
+    kind: "lead",
+    now: new Date(callback.receivedAt),
+    existingIds: existingIds.map((lead) => lead.leadId)
+  });
+  const created = await client.lead.create({
+    data: {
+      workspaceId: config.workspaceId,
+      leadId,
+      status: (draft.missingData ?? []).length > 0 ? "needs_data" : "new",
+      rawInput: draft.rawInput,
+      requestType: draft.requestType,
+      projectAddress: draft.projectAddress,
+      ...createTelegramLeadDisplayData(draft),
+      bgfM2: draft.bgfM2,
+      isStandard: draft.isStandard,
+      missingData: draft.missingData,
+      temperature: draft.temperature === "unknown" ? "hot" : draft.temperature
+    }
+  });
+  const createUndoAction = createTelegramLeadUndoActionRecord({
+    config,
+    message: {
+      chatId: callback.chatId,
+      messageId: callback.messageId ?? Number(record.actionId),
+      text: record.sourceText,
+      sourceMessageIds: record.sourceMessageIds,
+      receivedAt: callback.receivedAt
+    },
+    leadId: created.leadId,
+    leadRecordId: created.id,
+    actionType: "create_lead",
+    draftSnapshot: draft
+  });
+  await saveTelegramLeadUndoAction(config, createUndoAction);
+
+  await sendTelegramMessage({
+    botToken: config.botToken,
+    chatId: callback.chatId,
+    text: createTelegramLeadConfirmation({ leadId: created.leadId, status: created.status, draft }),
+    parseMode: "HTML",
+    replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, created.leadId, {
+      email: draft.email,
+      missingFields: draft.missingData,
+      undoActionId: createUndoAction.actionId
+    }),
+    fetchImpl
+  });
+}
+
+function createTelegramUndoUpdateDoneReplyMarkup(crmBaseUrl: string | undefined, record: TelegramLeadUndoActionRecord): unknown | undefined {
+  const buttons: Array<{ text: string; url: string } | { text: string; callback_data: string }> = [];
+  const crmUrl = createTelegramAbsoluteButtonUrl(`/leads?leadId=${encodeURIComponent(record.leadId)}`, crmBaseUrl);
+  if (crmUrl) {
+    buttons.push({ text: "CRM", url: crmUrl });
+  }
+  buttons.push({ text: "Create new lead from this source", callback_data: createTelegramLeadRecreateCallbackData(record.leadId, record.actionId) });
+
+  return { inline_keyboard: chunkTelegramButtons(buttons, 1) };
 }
 
 function isPrismaRecordNotFoundError(error: unknown): boolean {
@@ -1590,7 +1917,8 @@ function createAllowedTelegramLeadActionCallbacks(
         messageId: callback.message?.message_id,
         receivedAt: new Date((callback.message?.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
         action: parsed.action,
-        leadId: parsed.leadId
+        leadId: parsed.leadId,
+        actionId: parsed.actionId
       }
     ];
   });
@@ -1675,6 +2003,31 @@ function isTelegramKpSentUndoCommand(message: Pick<AllowedTelegramMessage, "text
   }
 
   return /(undo|отмени|откат|верни|не отправ)/i.test(text) && /(kp|кп|commercial proposal|offer|отправ)/i.test(text);
+}
+
+function isTelegramLeadUndoClarificationRequest(message: Pick<AllowedTelegramMessageBatch, "text" | "attachments" | "replyToMessageId">): boolean {
+  const text = message.text.trim();
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    return false;
+  }
+
+  if (isTelegramKpSentUndoCommand(message)) {
+    return false;
+  }
+
+  const hasUndoIntent = /(undo|revert|rollback|cancel|remove|delete|archive|отмени|отменить|откат|откатить|верни|удали|удалить|архив)/i.test(text);
+  const hasLeadTarget = /(lead|лид|лида|заявк|карточк|client|клиент)/i.test(text) || /\bL-\d{4}-\d+\b/i.test(text);
+
+  return hasUndoIntent && hasLeadTarget;
+}
+
+function createTelegramLeadUndoClarificationMessage(): string {
+  return [
+    "I can undo the last lead create/update through the <b>Undo</b> button on the lead reply.",
+    "If the update should become a separate new lead, press <b>Undo</b> first, then choose <b>Create new lead from this source</b>.",
+    "If you mean another lead, reply to that lead card or send its lead number."
+  ].join("\n");
 }
 
 function isTelegramKpSentCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments">): boolean {
@@ -2162,6 +2515,168 @@ async function saveTelegramChannelEvent(
   });
 }
 
+async function saveTelegramLeadUndoAction(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "saveAuditEvent">,
+  record: TelegramLeadUndoActionRecord
+): Promise<void> {
+  telegramUndoActionMemory.set(record.id, record);
+  telegramCompletedUndoActionMemory.delete(record.id);
+  telegramUndoneActionMemory.delete(record.id);
+
+  if (!config.saveAuditEvent) {
+    return;
+  }
+
+  await config.saveAuditEvent({
+    workspaceId: config.workspaceId,
+    actorUserId: `telegram:${record.chatId}`,
+    action: "assistant.channel.event",
+    targetType: "AssistantChannelEvent",
+    targetId: record.id,
+    metadata: {
+      type: "telegram_lead_undo_action",
+      ...record
+    }
+  });
+}
+
+async function markTelegramLeadUndoActionDone(
+  config: Pick<TelegramWorkerConfig, "workspaceId" | "saveAuditEvent">,
+  record: TelegramLeadUndoActionRecord,
+  result: Record<string, unknown>
+): Promise<void> {
+  telegramUndoneActionMemory.add(record.id);
+  telegramCompletedUndoActionMemory.set(record.id, record);
+
+  if (!config.saveAuditEvent) {
+    return;
+  }
+
+  await config.saveAuditEvent({
+    workspaceId: config.workspaceId,
+    actorUserId: `telegram:${record.chatId}`,
+    action: "assistant.channel.event",
+    targetType: "AssistantChannelEvent",
+    targetId: `${record.id}:done`,
+    metadata: {
+      type: "telegram_lead_undo_action_done",
+      undoActionId: record.id,
+      actionType: record.actionType,
+      ...result
+    }
+  });
+}
+
+async function findTelegramLeadUndoAction(
+  client: TelegramWorkerPrismaLike,
+  input: { workspaceId: string; chatId: string; leadId: string; actionId?: string; includeDone?: boolean }
+): Promise<TelegramLeadUndoActionRecord | null> {
+  const memoryRecords = input.includeDone
+    ? [...telegramUndoActionMemory.values(), ...telegramCompletedUndoActionMemory.values()]
+    : [...telegramUndoActionMemory.values()];
+  const memoryRecord = memoryRecords
+    .filter(
+      (record) =>
+        record.workspaceId === input.workspaceId &&
+        record.chatId === input.chatId &&
+        record.leadId === input.leadId &&
+        (!input.actionId || record.actionId === input.actionId) &&
+        (input.includeDone || !telegramUndoneActionMemory.has(record.id))
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+
+  if (memoryRecord) {
+    return memoryRecord;
+  }
+
+  if (!client.auditLog?.findMany) {
+    return null;
+  }
+
+  const rows = await client.auditLog.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      metadata: { path: ["type"], equals: "telegram_lead_undo_action" }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10
+  });
+  const doneRows = await client.auditLog.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      metadata: { path: ["type"], equals: "telegram_lead_undo_action_done" }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20
+  });
+  const doneIds = new Set(
+    doneRows.flatMap((row) => {
+      const metadata = row.metadata as { undoActionId?: unknown } | undefined;
+      return typeof metadata?.undoActionId === "string" ? [metadata.undoActionId] : [];
+    })
+  );
+
+  for (const row of rows) {
+    const record = parseTelegramLeadUndoActionRecord(row.metadata);
+    if (record && record.chatId === input.chatId && (!input.actionId || record.actionId === input.actionId) && (input.includeDone || !doneIds.has(record.id))) {
+      return record;
+    }
+  }
+
+  return null;
+}
+
+function parseTelegramLeadUndoActionRecord(metadata: unknown): TelegramLeadUndoActionRecord | null {
+  if (typeof metadata !== "object" || metadata === null) {
+    return null;
+  }
+
+  const candidate = metadata as TelegramLeadUndoActionRecord;
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.workspaceId !== "string" ||
+    typeof candidate.chatId !== "string" ||
+    typeof candidate.leadId !== "string" ||
+    typeof candidate.actionId !== "string" ||
+    (candidate.actionType !== "create_lead" && candidate.actionType !== "update_lead")
+  ) {
+    return null;
+  }
+
+  return candidate;
+}
+
+function createTelegramLeadUndoActionRecord(input: {
+  config: Pick<TelegramWorkerConfig, "workspaceId">;
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "messageId" | "text" | "sourceMessageIds" | "receivedAt">;
+  leadId: string;
+  leadRecordId?: string;
+  actionType: TelegramLeadUndoActionType;
+  before?: Record<string, unknown>;
+  draftSnapshot?: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+}): TelegramLeadUndoActionRecord {
+  const actionId = String(input.message.messageId);
+
+  return {
+    id: `telegram-lead-undo:${input.message.chatId}:${input.leadId}:${actionId}`,
+    workspaceId: input.config.workspaceId,
+    chatId: input.message.chatId,
+    actionId,
+    leadId: input.leadId,
+    leadRecordId: input.leadRecordId,
+    actionType: input.actionType,
+    before: input.before,
+    draftSnapshot: input.draftSnapshot,
+    sourceText: input.message.text,
+    sourceMessageIds: input.message.sourceMessageIds,
+    createdAt: input.message.receivedAt
+  };
+}
+
 async function saveTelegramLeadEntityExtraction(
   config: Pick<TelegramWorkerConfig, "workspaceId" | "crmEntityExtractor" | "saveLeadEntityExtraction">,
   message: Pick<AllowedTelegramMessageBatch, "chatId" | "sourceMessageIds" | "receivedAt" | "attachments">,
@@ -2453,6 +2968,19 @@ function createTelegramLeadUpdateData(
   return update;
 }
 
+function createTelegramLeadRestoreSnapshot(
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]
+): Record<string, unknown> {
+  return {
+    status: lead.status ?? "new",
+    rawInput: lead.rawInput ?? null,
+    requestType: lead.requestType ?? null,
+    projectAddress: lead.projectAddress ?? null,
+    bgfM2: lead.bgfM2 ?? null,
+    missingData: lead.missingData ?? []
+  };
+}
+
 function createTelegramLeadDisplayData(
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
   lead?: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]
@@ -2690,10 +3218,10 @@ function toOptionalNumber(value: unknown): number | null {
 function createTelegramCrmReplyMarkup(
   crmBaseUrl: string | undefined,
   leadId: string,
-  kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string; missingFields?: string[] }
+  kpMail?: { email?: string | null; pdfUrl?: string; docxUrl?: string; missingFields?: string[]; undoActionId?: string }
 ): unknown | undefined {
   if (!crmBaseUrl?.trim()) {
-    return undefined;
+    return kpMail?.undoActionId ? createTelegramUndoOnlyReplyMarkup(leadId, kpMail.undoActionId) : undefined;
   }
 
   const actions = createLeadChatActions(
@@ -2724,13 +3252,49 @@ function createTelegramCrmReplyMarkup(
         return [];
     }
   });
+  if (kpMail?.undoActionId) {
+    row.push({ text: "Undo", callback_data: createTelegramLeadUndoCallbackData(leadId, kpMail.undoActionId) });
+  }
 
   return {
     inline_keyboard: [row]
   };
 }
 
-function parseTelegramLeadActionCallbackData(data: string | undefined): { action: "mark_kp_sent" | "undo_kp_sent"; leadId: string } | null {
+function createTelegramLeadUndoCallbackData(leadId: string, actionId: string): string {
+  return `lead_undo:${leadId}:${actionId}`;
+}
+
+function createTelegramLeadRecreateCallbackData(leadId: string, actionId: string): string {
+  return `lead_recreate:${leadId}:${actionId}`;
+}
+
+function isBareTelegramNewLeadCommand(text: string): boolean {
+  const normalized = text.trim();
+  return /^\/(?:newlead|new_lead|lead)\s*$/i.test(normalized) || /^new lead\s*$/i.test(normalized);
+}
+
+function parseTelegramLeadActionCallbackData(
+  data: string | undefined
+): { action: "mark_kp_sent" | "undo_kp_sent" | "undo_lead_action" | "recreate_lead_from_undo"; leadId: string; actionId?: string } | null {
+  const undoMatch = /^lead_undo:(L-\d{4}-\d+):(\d+)$/i.exec(data?.trim() ?? "");
+  if (undoMatch) {
+    return {
+      action: "undo_lead_action",
+      leadId: undoMatch[1].toUpperCase(),
+      actionId: undoMatch[2]
+    };
+  }
+
+  const recreateMatch = /^lead_recreate:(L-\d{4}-\d+):(\d+)$/i.exec(data?.trim() ?? "");
+  if (recreateMatch) {
+    return {
+      action: "recreate_lead_from_undo",
+      leadId: recreateMatch[1].toUpperCase(),
+      actionId: recreateMatch[2]
+    };
+  }
+
   const match = /^lead_action:(mark_kp_sent|undo_kp_sent):(L-\d{4}-\d+)$/i.exec(data?.trim() ?? "");
 
   if (!match) {

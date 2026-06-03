@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.4.1`
+Current stable version: `0.4.3`
 
 Stable tag format:
 
@@ -26,6 +26,8 @@ v0.3.8
 v0.3.9
 v0.4.0
 v0.4.1
+v0.4.2
+v0.4.3
 ```
 
 ## Branch Workflow
@@ -152,6 +154,26 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.4.3
+
+Telegram lead undo release:
+
+- Telegram lead creation replies include an `Undo` action that removes or archives the newly created lead and clears linked context/calendar rows.
+- Telegram lead update replies include an `Undo` action that restores the previous lead fields.
+- After undoing an update, Telegram can create a separate new lead from the same source material when the update was actually a new request.
+- Typed lead undo requests now ask for clarification instead of accidentally creating or updating a lead.
+- Telegram undo records are persisted through assistant channel audit metadata so callbacks can be recovered outside in-memory state.
+
+## 0.4.2
+
+Lead search routing and changelog release:
+
+- Telegram CRM Orchestrator understands human search phrases for project titles, client names, tags, locations, and recent lead lists.
+- Search results return readable CRM buttons and filtered CRM result links.
+- Lead display names stay compact in Telegram confirmations, CRM cards, and search results.
+- Clicking the app version in the web UI opens concise release notes for the current build.
+- Settings lead reset clears lead context entities and calendar actions before deleting test leads.
 
 ## 0.4.1
 
