@@ -5,13 +5,12 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.7",
-  title: "Web CRM calendar",
+  version: "0.4.8",
+  title: "Telegram search and reply fixes",
   items: [
-    "Lead cards now show an action calendar filtered to the selected lead.",
-    "Action calendars can move between months and switch between calendar and list views.",
-    "Calendar events show follow-up, reminder, birthday, yearly, and event badges.",
-    "The Today page now has a shared workspace CRM calendar with planned actions from all leads.",
-    "Today calendar entries can open the related lead for follow-up work."
+    "Telegram search mode now shows a compact one-line header and lead ID buttons.",
+    "Telegram search results render lead IDs in bold instead of showing raw HTML tags.",
+    "Reply-based lead reminders and notes stay resilient when audit or calendar side effects fail.",
+    "The CRM orchestrator default prompt now treats Oleg and Ekaterina as internal actors, not clients."
   ]
 };

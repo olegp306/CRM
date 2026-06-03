@@ -379,6 +379,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         botToken: config.botToken,
         chatId: message.chatId,
         text: searchModeResponse.text,
+        parseMode: "HTML",
         replyMarkup: createTelegramResponseReplyMarkup(searchModeResponse.buttons, config.crmBaseUrl),
         fetchImpl
       });
@@ -518,16 +519,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           }
         });
       }
-      const calendarSync =
-        reminderDraft?.dueAt
-          ? await syncEventToGoogleCalendar({
-              workspaceId: config.workspaceId,
-              title: `Follow up ${repliedLead.leadId}`,
-              startsAt: reminderDraft.dueAt,
-              endsAt: new Date(reminderDraft.dueAt.getTime() + 30 * 60 * 1000),
-              description: summary
-            })
-          : null;
+      const calendarSync = reminderDraft?.dueAt
+        ? await trySyncTelegramReminderToCalendar({
+            workspaceId: config.workspaceId,
+            leadId: repliedLead.leadId,
+            dueAt: reminderDraft.dueAt,
+            summary
+          })
+        : null;
 
       await saveTelegramChannelEvent(
         config,
@@ -1513,9 +1512,30 @@ async function processTelegramSearchNextCallback(input: {
     botToken: input.config.botToken,
     chatId: input.callback.chatId,
     text: response.text,
+    parseMode: "HTML",
     replyMarkup: createTelegramResponseReplyMarkup(response.buttons, input.config.crmBaseUrl),
     fetchImpl: input.fetchImpl
   });
+}
+
+async function trySyncTelegramReminderToCalendar(input: {
+  workspaceId: string;
+  leadId: string;
+  dueAt: Date;
+  summary: string;
+}): Promise<CalendarSyncResult | null> {
+  try {
+    return await syncEventToGoogleCalendar({
+      workspaceId: input.workspaceId,
+      title: `Follow up ${input.leadId}`,
+      startsAt: input.dueAt,
+      endsAt: new Date(input.dueAt.getTime() + 30 * 60 * 1000),
+      description: input.summary
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 function createTelegramUndoUpdateDoneReplyMarkup(crmBaseUrl: string | undefined, record: TelegramLeadUndoActionRecord): unknown | undefined {
@@ -2308,20 +2328,15 @@ async function createTelegramSearchModeStartedResponse(
   });
   const hasNext = records.length > safeOffset + pageSize;
   const buttons = [
-    ...response.buttons,
+    ...createTelegramLeadIdButtonLabels(response.buttons),
     ...(hasNext ? [{ label: "next 5", action: "search_next", value: String(safeOffset + pageSize) }] : [])
   ];
-  const rangeLabel =
-    records.length === 0
-      ? "No leads found yet."
-      : safeOffset === 0
-        ? "Latest 5 leads:"
-        : `Leads ${safeOffset + 1}-${safeOffset + page.length}:`;
+  const rangeLabel = safeOffset === 0 ? "latest five leads" : `leads ${safeOffset + 1}-${safeOffset + page.length}`;
+  const foundLabel = records.length === 0 ? "no leads found" : `${page.length} of ${records.length} leads found`;
 
   return {
     text: [
-      "Search mode.",
-      rangeLabel,
+      `search mode <b>${escapeHtml(rangeLabel)}</b> ${escapeHtml(foundLabel)}.`,
       response.text,
       "",
       "Send a lead name, project title, address, tag, phone, email, status, date, or a phrase like \"show last 10 leads\".",
@@ -2351,10 +2366,21 @@ async function createTelegramSearchFilterResponse(
 
   const records = await findTelegramLeadSearchRecords(config, client);
 
-  return createLeadSearchFilterResponse(searchText, records.map(toTelegramLeadSearchRecord), {
+  const response = createLeadSearchFilterResponse(searchText, records.map(toTelegramLeadSearchRecord), {
     includeCrmButtons: true,
     telegramLeadButtons: true
   });
+
+  return {
+    ...response,
+    buttons: createTelegramLeadIdButtonLabels(response.buttons)
+  };
+}
+
+function createTelegramLeadIdButtonLabels<T extends { label: string; action?: string; value?: string }>(buttons: T[]): T[] {
+  return buttons.map((button) =>
+    button.action === "open_lead" && button.value ? { ...button, label: button.value } : button
+  );
 }
 
 async function findTelegramLeadSearchRecords(config: Pick<TelegramWorkerConfig, "workspaceId">, client: TelegramWorkerPrismaLike) {
@@ -2774,14 +2800,18 @@ async function saveTelegramChannelEvent(
     return;
   }
 
-  await config.saveAuditEvent({
-    workspaceId: config.workspaceId,
-    actorUserId: `telegram:${message.chatId}`,
-    action: "assistant.channel.event",
-    targetType: "AssistantChannelEvent",
-    targetId: createTelegramChannelEventTargetId(event),
-    metadata: event
-  });
+  try {
+    await config.saveAuditEvent({
+      workspaceId: config.workspaceId,
+      actorUserId: `telegram:${message.chatId}`,
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      targetId: createTelegramChannelEventTargetId(event),
+      metadata: event
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
 }
 
 async function saveTelegramLeadUndoAction(
@@ -2796,17 +2826,21 @@ async function saveTelegramLeadUndoAction(
     return;
   }
 
-  await config.saveAuditEvent({
-    workspaceId: config.workspaceId,
-    actorUserId: `telegram:${record.chatId}`,
-    action: "assistant.channel.event",
-    targetType: "AssistantChannelEvent",
-    targetId: record.id,
-    metadata: {
-      type: "telegram_lead_undo_action",
-      ...record
-    }
-  });
+  try {
+    await config.saveAuditEvent({
+      workspaceId: config.workspaceId,
+      actorUserId: `telegram:${record.chatId}`,
+      action: "assistant.channel.event",
+      targetType: "AssistantChannelEvent",
+      targetId: record.id,
+      metadata: {
+        type: "telegram_lead_undo_action",
+        ...record
+      }
+    });
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
 }
 
 async function markTelegramLeadUndoActionDone(

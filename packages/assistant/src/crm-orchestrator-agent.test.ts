@@ -27,6 +27,9 @@ describe("CRM orchestrator agent", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("lead display name / project title");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("search by tag residential");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("INTERNAL ACTORS AND TESTERS");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Oleg Panyukov");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Ekaterina Reyzbikh");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"CREATE_REMINDER"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"SUPPORT_REQUEST"');
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain('"create_reminder"');

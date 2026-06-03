@@ -608,7 +608,7 @@ describe("telegram worker", () => {
     expect(body.reply_markup).toEqual({
       inline_keyboard: [
         [
-          { text: "Anna Meyer", callback_data: "lead_open:L-2026-001" },
+          { text: "L-2026-001", callback_data: "lead_open:L-2026-001" },
           { text: "Open results in CRM", url: "https://crm.example.com/leads?date=last_month&temperature=warm" }
         ],
         [{ text: "Download CSV", url: "https://crm.example.com/exports/leads?date=last_month&temperature=warm" }]
@@ -695,8 +695,8 @@ describe("telegram worker", () => {
     expect(body.reply_markup).toEqual({
       inline_keyboard: [
         [
-          { text: "Frau Schneider - Neubau EFH...", callback_data: "lead_open:L-2026-010" },
-          { text: "Buro GmbH - Office renovation...", callback_data: "lead_open:L-2026-011" }
+          { text: "L-2026-010", callback_data: "lead_open:L-2026-010" },
+          { text: "L-2026-011", callback_data: "lead_open:L-2026-011" }
         ],
         [{ text: "Open results in CRM", url: "https://crm.example.com/leads" }]
       ]
@@ -783,7 +783,7 @@ describe("telegram worker", () => {
     expect(body.reply_markup).toEqual({
       inline_keyboard: [
         [
-          { text: "Frau Schneider - Neubau EFH...", callback_data: "lead_open:L-2026-010" },
+          { text: "L-2026-010", callback_data: "lead_open:L-2026-010" },
           { text: "Open results in CRM", url: "https://crm.example.com/leads?leadSearch=Schneider+house+lake" }
         ]
       ]
@@ -908,7 +908,7 @@ describe("telegram worker", () => {
     expect(body.text).toContain("Irina Schneider - Neubau EFH");
     expect(body.text).not.toContain("Lead Search Agent");
     expect(body.reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Irina Schneider - Neubau EFH",
+      text: "L-2026-014",
       callback_data: "lead_open:L-2026-014"
     });
   });
@@ -1126,10 +1126,10 @@ describe("telegram worker", () => {
     const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
       .filter(([url]) => String(url).includes("/sendMessage"))
       .map(([, init]) => JSON.parse(String(init.body)));
-    expect(sendBodies[0].text).toContain("Search mode.");
-    expect(sendBodies[0].text).toContain("Latest 5 leads");
+    expect(sendBodies[0].text).toContain("search mode <b>latest five leads</b> 1 of 1 leads found.");
+    expect(sendBodies[0].parse_mode).toBe("HTML");
     expect(sendBodies[0].reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Frau Schneider - Neubau EFH...",
+      text: "L-2026-010",
       callback_data: "lead_open:L-2026-010"
     });
     expect(client.lead.findMany).toHaveBeenCalledWith(
@@ -1143,7 +1143,7 @@ describe("telegram worker", () => {
     expect(sendBodies[1].text).toContain("Found 1 leads");
     expect(sendBodies[1].text).toContain("<b>L-2026-010</b>");
     expect(sendBodies[1].reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Frau Schneider - Neubau EFH...",
+      text: "L-2026-010",
       callback_data: "lead_open:L-2026-010"
     });
     expect(sendBodies[1].reply_markup.inline_keyboard.flat()).toContainEqual({
@@ -1363,7 +1363,7 @@ describe("telegram worker", () => {
     expect(body.text).toContain("Found 1 leads");
     expect(body.text).not.toContain("Telegram actions are limited right now.");
     expect(body.reply_markup.inline_keyboard[0][0]).toEqual({
-      text: "Schneider - EFH Neubau in...",
+      text: "L-2026-777",
       callback_data: "lead_open:L-2026-777"
     });
   });
@@ -5027,6 +5027,89 @@ describe("telegram worker", () => {
       text: "CRM",
       url: "https://crm.example.com/leads?leadId=L-2026-002"
     });
+  });
+
+  it("confirms a replied reminder even when Telegram audit persistence fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Telegram lead card: telegram-bot:12345:900",
+                missingData: []
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async () => ({ id: "lead-record-2", leadId: "L-2026-002", status: "new" }))
+      }
+    };
+    const parser: OpenAiLeadParserClient = { parseLead: vi.fn() };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    try {
+      await expect(
+        processTelegramUpdates(
+          [
+            {
+              update_id: 244,
+              message: {
+                message_id: 904,
+                date: 1779297400,
+                chat: { id: 12345 },
+                reply_to_message: { message_id: 900 },
+                text: "Remind me tomorrow to check LinkedIn for this lead"
+              }
+            }
+          ],
+          {
+            allowedChatIds: new Set(["12345"]),
+            botToken: "telegram-token",
+            workspaceId: "workspace-demo",
+            crmBaseUrl: "https://crm.example.com",
+            parser,
+            prisma: client,
+            saveAuditEvent: vi.fn(async () => {
+              throw new Error("audit store unavailable");
+            }),
+            fetchImpl: fetchMock as unknown as typeof fetch
+          }
+        )
+      ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 244 });
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).toHaveBeenCalledWith({
+      where: { id: "lead-record-2" },
+      data: {
+        followup1Date: new Date("2026-05-21T09:00:00.000Z"),
+        followupStatus: "planned"
+      }
+    });
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies.at(-1).text).toContain("<b>L-2026-002</b> updated in CRM.");
+    expect(sendBodies.at(-1).text).toContain("Reminder scheduled");
+    expect(sendBodies.at(-1).text).not.toContain("Server error occurred");
   });
 
   it("records a real Russian replied reminder as a CRM follow-up and history", async () => {
