@@ -5,12 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.12",
-  title: "Generalized reminder date prompts",
+  version: "0.4.13",
+  title: "Telegram reply routing fix",
   items: [
-    "Default CRM reminder prompts now explain the general rule for через N дней instead of only listing fixed examples.",
-    "The prompt tells the model to accept day counts written as digits or Russian words.",
-    "Ambiguous phrases like через несколько дней now ask one short clarification instead of being treated as missing a date.",
-    "The same natural-date rule is included in the CRM entity extraction prompt."
+    "Telegram replies to an opened lead card now stay attached to that lead even when the chat is still in search mode.",
+    "Reply updates, notes, and reminders no longer trigger a fresh search result list.",
+    "The regression test covers search mode, opening a lead card, and then replying to update the selected lead."
   ]
 };

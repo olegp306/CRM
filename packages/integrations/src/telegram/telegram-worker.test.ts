@@ -1234,7 +1234,7 @@ describe("telegram worker", () => {
     });
   });
 
-  it("updates a lead when replying to a lead card opened from Telegram search", async () => {
+  it("updates a lead when replying to a lead card opened from active Telegram search mode", async () => {
     let rawInput = "telegram";
     const updates: unknown[] = [];
     const client = {
@@ -1310,6 +1310,21 @@ describe("telegram worker", () => {
       prisma: client,
       fetchImpl: fetchMock as unknown as typeof fetch
     };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 244,
+          message: {
+            message_id: 143,
+            date: 1779296520,
+            chat: { id: 12345 },
+            text: "search lead"
+          }
+        }
+      ],
+      config
+    );
 
     await expect(
       processTelegramUpdates(

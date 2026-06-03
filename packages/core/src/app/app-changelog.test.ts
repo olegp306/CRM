@@ -6,6 +6,6 @@ describe("app changelog", () => {
   it("tracks the current app version with concise release notes", () => {
     expect(currentAppChangelog.version).toBe(currentAppMetadata.version);
     expect(currentAppChangelog.items.length).toBeGreaterThanOrEqual(3);
-    expect(currentAppChangelog.items.join(" ")).toContain("через N дней");
+    expect(currentAppChangelog.items.join(" ")).toContain("search mode");
   });
 });

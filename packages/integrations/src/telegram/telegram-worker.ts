@@ -2373,8 +2373,12 @@ async function createTelegramSearchModeStartedResponse(
 async function createTelegramSearchFilterResponse(
   config: Pick<TelegramWorkerConfig, "workspaceId" | "crmBaseUrl">,
   client: TelegramWorkerPrismaLike,
-  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments">
+  message: Pick<AllowedTelegramMessageBatch, "chatId" | "text" | "receivedAt" | "sourceMessageIds" | "attachments" | "replyToMessageId">
 ) {
+  if (message.replyToMessageId !== undefined) {
+    return null;
+  }
+
   const isSearchMode = isTelegramSearchModeActive(config.workspaceId, message.chatId);
   if ((message.attachments?.length ?? 0) > 0 || (!isSearchMode && !isTelegramSearchOrFilterRequest(message.text))) {
     return null;
