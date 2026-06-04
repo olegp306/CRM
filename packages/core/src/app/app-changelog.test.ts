@@ -6,6 +6,6 @@ describe("app changelog", () => {
   it("tracks the current app version with concise release notes", () => {
     expect(currentAppChangelog.version).toBe(currentAppMetadata.version);
     expect(currentAppChangelog.items.length).toBeGreaterThanOrEqual(3);
-    expect(currentAppChangelog.items.join(" ")).toContain("Telegram help now links to a CRM user guide");
+    expect(currentAppChangelog.items.join(" ")).toContain("Telegram reply updates no longer query email or phone as Lead fields");
   });
 });

@@ -81,6 +81,11 @@ export type TelegramWorkerPrismaLike = {
   attachment?: {
     create(args: unknown): Promise<{ id: string }>;
   };
+  client?: {
+    findMany?(args: unknown): Promise<Array<{ id?: string; clientId: string }>>;
+    create?(args: unknown): Promise<{ id?: string; clientId?: string; name?: string; email?: string | null; phone?: string | null }>;
+    update?(args: unknown): Promise<{ id?: string; clientId?: string; name?: string; email?: string | null; phone?: string | null }>;
+  };
   lead: {
     findMany(
       args: unknown
@@ -97,7 +102,7 @@ export type TelegramWorkerPrismaLike = {
         displayName?: string | null;
         searchTags?: unknown;
         clientRecordId?: string | null;
-        client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
+        client?: { id?: string | null; name?: string | null; email?: string | null; phone?: string | null } | null;
         clientName?: string | null;
         bgfM2?: number | null;
         budgetEur?: number | string | null;
@@ -732,8 +737,10 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         projectAddress: true,
         bgfM2: true,
         missingData: true,
+        clientRecordId: true,
         client: {
           select: {
+            id: true,
             name: true,
             email: true,
             phone: true
@@ -824,9 +831,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         before: createTelegramLeadRestoreSnapshot(repliedLead),
         draftSnapshot: draft
       });
-      await client.lead.update({
-        where: { id: repliedLead.id },
-        data: createTelegramLeadUpdateData(repliedLead, draft, message, fieldCommand)
+      await updateTelegramLeadRecordFromDraft({
+        client,
+        config,
+        lead: repliedLead,
+        draft,
+        message,
+        command: fieldCommand,
+        where: { id: repliedLead.id }
       });
       await saveTelegramLeadUndoAction(config, updateUndoAction);
       await saveTelegramLeadEntityExtraction(config, message, repliedLead, draft.rawInput);
@@ -928,9 +940,13 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           before: createTelegramLeadRestoreSnapshot(lead),
           draftSnapshot: draft
         });
-        await client.lead.update({
-          where: { id: lead.id },
-          data: createTelegramLeadUpdateData(lead, draft, message)
+        await updateTelegramLeadRecordFromDraft({
+          client,
+          config,
+          lead,
+          draft,
+          message,
+          where: { id: lead.id }
         });
         await saveTelegramLeadUndoAction(config, updateUndoAction);
         await saveTelegramLeadEntityExtraction(config, message, lead, draft.rawInput);
@@ -1032,21 +1048,19 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       });
       try {
         const updated = client.lead.update
-          ? await client.lead.update({
+          ? await updateTelegramLeadRecordFromDraft({
+              client,
+              config,
+              lead: { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
+              draft: { ...session.draft, missingData: templateAwareMissingData },
+              message,
               where: {
                 workspaceId_leadId: {
                   workspaceId: config.workspaceId,
                   leadId: activeSession.leadId
                 }
               },
-              data: {
-                ...createTelegramLeadUpdateData(
-                  { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
-                  { ...session.draft, missingData: templateAwareMissingData },
-                  message
-                ),
-                rawInput: session.draft.rawInput
-              }
+              extraData: { rawInput: session.draft.rawInput }
             })
           : { leadId: activeSession.leadId, status: templateAwareMissingData.length > 0 ? "needs_data" : "new" };
         if (client.lead.update) {
@@ -3271,15 +3285,14 @@ async function findLeadByTelegramBotMessage(
       status: true,
       temperature: true,
       rawInput: true,
-      client: { select: { name: true, email: true, phone: true } },
+      clientRecordId: true,
+      client: { select: { id: true, name: true, email: true, phone: true } },
       requestType: true,
       projectAddress: true,
       bgfM2: true,
       budgetEur: true,
       desiredStart: true,
       desiredMoveIn: true,
-      email: true,
-      phone: true,
       missingData: true,
       kpSentDate: true
     }
@@ -3337,15 +3350,14 @@ async function findLeadByLeadId(
       displayName: true,
       status: true,
       rawInput: true,
-      client: { select: { name: true, email: true, phone: true } },
+      clientRecordId: true,
+      client: { select: { id: true, name: true, email: true, phone: true } },
       requestType: true,
       projectAddress: true,
       bgfM2: true,
       budgetEur: true,
       desiredStart: true,
       desiredMoveIn: true,
-      email: true,
-      phone: true,
       missingData: true,
       kpSentDate: true
     }
@@ -3382,6 +3394,39 @@ function createTelegramLeadSessionFromExistingLead(
       temperature: "unknown"
     }
   });
+}
+
+async function updateTelegramLeadRecordFromDraft(input: {
+  client: TelegramWorkerPrismaLike;
+  config: Pick<TelegramWorkerConfig, "workspaceId">;
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number];
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>;
+  message: AllowedTelegramMessageBatch;
+  command?: LeadFieldCommand | null;
+  where: unknown;
+  extraData?: Record<string, unknown>;
+}): Promise<{ id?: string; leadId: string; status: string }> {
+  const leadData = {
+    ...createTelegramLeadUpdateData(input.lead, input.draft, input.message, input.command),
+    ...(input.extraData ?? {})
+  };
+  const contactData = extractTelegramLeadContactUpdateData(leadData);
+  const clientRecordId = await persistTelegramLeadContactUpdate({
+    client: input.client,
+    workspaceId: input.config.workspaceId,
+    lead: input.lead,
+    contactData,
+    receivedAt: input.message.receivedAt
+  });
+
+  if (clientRecordId && !input.lead.clientRecordId) {
+    leadData.clientRecordId = clientRecordId;
+  }
+
+  return input.client.lead.update?.({
+    where: input.where,
+    data: leadData
+  }) ?? { leadId: input.lead.leadId, status: leadData.missingData instanceof Array && leadData.missingData.length > 0 ? "needs_data" : "new" };
 }
 
 function createTelegramLeadUpdateData(
@@ -3427,6 +3472,89 @@ function createTelegramLeadUpdateData(
   }
 
   return update;
+}
+
+function extractTelegramLeadContactUpdateData(update: Record<string, unknown>): { name?: string; email?: string; phone?: string } {
+  const contactData: { name?: string; email?: string; phone?: string } = {};
+  if (Object.prototype.hasOwnProperty.call(update, "clientName")) {
+    const name = update.clientName;
+    if (isMeaningfulTelegramFieldValue(name)) {
+      contactData.name = String(name);
+    }
+    delete update.clientName;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, "email")) {
+    const email = update.email;
+    if (isMeaningfulTelegramFieldValue(email)) {
+      contactData.email = String(email);
+    }
+    delete update.email;
+  }
+  if (Object.prototype.hasOwnProperty.call(update, "phone")) {
+    const phone = update.phone;
+    if (isMeaningfulTelegramFieldValue(phone)) {
+      contactData.phone = String(phone);
+    }
+    delete update.phone;
+  }
+
+  return contactData;
+}
+
+async function persistTelegramLeadContactUpdate(input: {
+  client: TelegramWorkerPrismaLike;
+  workspaceId: string;
+  lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number];
+  contactData: { name?: string; email?: string; phone?: string };
+  receivedAt: string;
+}): Promise<string | null> {
+  if (!hasTelegramContactUpdateData(input.contactData)) {
+    return null;
+  }
+
+  const clientRecordId = input.lead.clientRecordId ?? input.lead.client?.id ?? null;
+  if (clientRecordId && input.client.client?.update) {
+    await input.client.client.update({
+      where: { id: clientRecordId },
+      data: input.contactData
+    });
+    return clientRecordId;
+  }
+
+  if (!input.client.client?.create) {
+    return null;
+  }
+
+  const existingClients = (await input.client.client.findMany?.({
+    where: { workspaceId: input.workspaceId },
+    select: { clientId: true }
+  })) ?? [];
+  const created = await input.client.client.create({
+    data: {
+      workspaceId: input.workspaceId,
+      clientId: getNextBusinessId({
+        kind: "client",
+        now: new Date(input.receivedAt),
+        existingIds: existingClients.map((client) => client.clientId)
+      }),
+      name: input.contactData.name ?? getLeadClientName(input.lead) ?? createFallbackTelegramClientName(input.lead),
+      clientType: "unknown",
+      email: input.contactData.email,
+      phone: input.contactData.phone,
+      source: "telegram"
+    }
+  });
+
+  return created.id ?? null;
+}
+
+function hasTelegramContactUpdateData(contactData: { name?: string; email?: string; phone?: string }): boolean {
+  return Boolean(contactData.name || contactData.email || contactData.phone);
+}
+
+function createFallbackTelegramClientName(lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]): string {
+  const fromDisplayName = lead.displayName?.split(" - ")[0]?.trim();
+  return fromDisplayName || "Unknown client";
 }
 
 function applyTargetedLeadFieldUpdate(
@@ -3550,8 +3678,6 @@ function createTelegramLeadRestoreSnapshot(
     budgetEur: lead.budgetEur ?? null,
     desiredStart: lead.desiredStart ?? null,
     desiredMoveIn: lead.desiredMoveIn ?? null,
-    email: getLeadEmail(lead),
-    phone: getLeadPhone(lead),
     missingData: lead.missingData ?? []
   };
 }

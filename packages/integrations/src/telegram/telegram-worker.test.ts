@@ -4238,8 +4238,14 @@ describe("telegram worker", () => {
       const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
       return rawInput === "telegram-bot:12345:900";
     })?.[0] as { select?: Record<string, unknown> } | undefined;
-    expect(replyLookupCall?.select).toHaveProperty("email");
-    expect(replyLookupCall?.select).toHaveProperty("phone");
+    expect(replyLookupCall?.select).not.toHaveProperty("email");
+    expect(replyLookupCall?.select).not.toHaveProperty("phone");
+    expect(replyLookupCall?.select?.client).toEqual({
+      select: expect.objectContaining({
+        email: true,
+        phone: true
+      })
+    });
     expect(updates).toEqual([
       {
         where: { id: "lead-record-2" },
@@ -4366,9 +4372,22 @@ describe("telegram worker", () => {
 
   it("updates only the requested phone field when replying with a targeted screenshot instruction", async () => {
     const updates: unknown[] = [];
+    const clientCreates: unknown[] = [];
     const client = {
+      client: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(async (args: unknown) => {
+          clientCreates.push(args);
+          return { id: "client-record-1", clientId: "C-2026-001", name: "Schneider", phone: "+49 170 1234567" };
+        }),
+        update: vi.fn()
+      },
       lead: {
         findMany: vi.fn(async (args: unknown) => {
+          const select = (args as { select?: Record<string, unknown> }).select;
+          if (select?.email || select?.phone) {
+            throw new Error("Unknown field email for select statement on model Lead");
+          }
           const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
           if (rawInput === "telegram-bot:12345:900") {
             return [
@@ -4382,8 +4401,7 @@ describe("telegram worker", () => {
                 requestType: "Neubau EFH",
                 projectAddress: "Bad Aibling",
                 bgfM2: null,
-                email: null,
-                phone: null,
+                client: { name: "Schneider", email: null, phone: null },
                 missingData: ["phone", "bgfM2"]
               }
             ];
@@ -4393,6 +4411,10 @@ describe("telegram worker", () => {
         }),
         create: vi.fn(),
         update: vi.fn(async (args: unknown) => {
+          const data = (args as { data?: Record<string, unknown> }).data;
+          if (data?.email || data?.phone) {
+            throw new Error("Unknown argument phone. Available options are marked with ?");
+          }
           updates.push(args);
           return { id: "lead-record-2", leadId: "L-2026-002", status: "needs_data" };
         })
@@ -4452,12 +4474,29 @@ describe("telegram worker", () => {
     expect(updates[0]).toEqual({
       where: { id: "lead-record-2" },
       data: expect.objectContaining({
-        phone: "+49 170 1234567",
         missingData: ["bgfM2"],
         rawInput: expect.stringContaining("telegram lead update")
       })
     });
+    expect(clientCreates).toEqual([
+      {
+        data: expect.objectContaining({
+          workspaceId: "workspace-demo",
+          clientId: "C-2026-001",
+          name: "Schneider",
+          phone: "+49 170 1234567"
+        })
+      }
+    ]);
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientRecordId: "client-record-1"
+        })
+      })
+    );
     expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("bgfM2");
+    expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("phone");
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
     expect(sendBody.text).toContain("Phone: <b>+49 170 1234567</b>");
