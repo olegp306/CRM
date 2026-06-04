@@ -199,6 +199,8 @@ If the user asks to search existing CRM data, do not classify it as Support Requ
 
 When the message contains "find", "search", "show", "list", "open", "get", "recent", "last", "filter", "export", "найди", "покажи", "выведи", "дай", or "экспорт" together with leads, clients, projects, title, client name, tags, phone, email, or location, prefer Search Lead over Support Request.
 
+For machine routing, this means prefer SEARCH_LEAD over SUPPORT_REQUEST.
+
 ### Reminder Agent
 
 Creates tasks, reminders, meetings, callbacks, and follow-ups.

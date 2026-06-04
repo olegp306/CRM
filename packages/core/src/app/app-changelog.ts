@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.23",
-  title: "Telegram new lead routing and undo restore",
+  version: "0.4.24",
+  title: "Merged CRM orchestrator prompt",
   items: [
-    "Telegram now treats natural phrases like next client, next potential lead, new client, and their Russian equivalents as a fresh lead start.",
-    "The New Lead command clears the active Telegram draft/session before starting a new intake.",
-    "Undo for Telegram draft-session updates now restores the lead display name along with the other lead fields."
+    "The CRM orchestrator default prompt now uses one clean markdown source shared with the documented settings prompt.",
+    "The merged prompt keeps support/search/reply-routing guidance from test while adding the newer Telegram next-client and reminder-date rules.",
+    "Release metadata now tracks the merged orchestrator prompt as version 0.4.24."
   ]
 };

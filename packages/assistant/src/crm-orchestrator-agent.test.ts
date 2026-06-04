@@ -20,23 +20,27 @@ const baseMessage = {
 describe("CRM orchestrator agent", () => {
   it("keeps the default routing prompt available for workspace settings", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("CRM Orchestrator Agent");
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("BALANCED ROUTING MODE");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Balanced Routing Mode");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Creation Agent");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Update Agent");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Lead Search Agent");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("lead display name / project title");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("search by tag residential");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("INTERNAL ACTORS AND TESTERS");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Internal Actors And Testers");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Oleg Panyukov");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Ekaterina Reyzbikh");
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"CREATE_REMINDER"');
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain('"SUPPORT_REQUEST"');
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain('"create_reminder"');
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("`CREATE_REMINDER`");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("`SUPPORT_REQUEST`");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).not.toContain("`create_reminder`");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("через <number> дней/дня/день");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("The number may be written as digits or Russian words");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Do not reject a reminder only because the day count is written in words.");
-    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("OUTPUT FORMAT");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Additional Telegram Lead Creation signals");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Support hypothesis");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Step 4. Check whether the request asks to find");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("When the message is a reply to a lead card");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Output Format");
   });
 
   it("routes complete new client material to lead creation", () => {

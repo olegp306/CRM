@@ -113,7 +113,7 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
     expect(setting.prompt).toContain("field-level instructions");
     expect(setting.prompt).toContain("take only the client phone from the screenshot");
-    expect(setting.prompt).toContain("OUTPUT FORMAT");
+    expect(setting.prompt).toContain("Output Format");
   });
 
   it("upserts the CRM orchestrator prompt and model for one workspace", async () => {
