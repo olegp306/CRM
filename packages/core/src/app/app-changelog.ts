@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.18",
-  title: "Test and production deploys are isolated",
+  version: "0.4.19",
+  title: "Telegram guide and safer lead replies",
   items: [
-    "The web app shows a visible TEST or STAGING badge for non-production environments.",
-    "VM deployments now require an explicit test or production confirmation before web or Telegram services start.",
-    "Telegram workers refuse to start when the bot environment, deployment environment, and database do not match."
+    "Telegram help now links to a CRM user guide with copyable examples for new leads, search, replies, notes, and reminders.",
+    "Workspace people context is shared with AI prompts so project operators are not mistaken for clients.",
+    "Lead reply updates understand targeted field aliases more carefully, including phone, email, project address, BGF, dates, and budget."
   ]
 };

@@ -6,6 +6,8 @@ import {
   CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+  WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
+  WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
   createWorkspaceAiSettingPrismaStore
 } from "./workspace-ai-setting-prisma-store";
 
@@ -109,6 +111,8 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("Lead Search Agent");
     expect(setting.prompt).toContain("lead display name / project title");
     expect(setting.prompt).toContain("prefer SEARCH_LEAD over SUPPORT_REQUEST");
+    expect(setting.prompt).toContain("field-level instructions");
+    expect(setting.prompt).toContain("take only the client phone from the screenshot");
     expect(setting.prompt).toContain("OUTPUT FORMAT");
   });
 
@@ -232,5 +236,71 @@ describe("workspace ai setting prisma store", () => {
     });
     expect(setting.model).toBe("gpt-5.2");
     expect(setting.role).toBe("crm_entity_extractor");
+  });
+
+  it("returns the built-in workspace people context defaults when no row exists", async () => {
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn()
+      }
+    });
+
+    const setting = await store.getWorkspacePeopleContext("workspace-demo");
+
+    expect(setting).toEqual({
+      workspaceId: "workspace-demo",
+      role: "workspace_people_context",
+      model: WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
+      prompt: WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
+      updatedAt: null
+    });
+    expect(setting.prompt).toContain("Oleg Panyukov");
+    expect(setting.prompt).toContain("Ekaterina Reyzbikh");
+    expect(setting.prompt).toContain("not the client by default");
+  });
+
+  it("upserts the workspace people context for one workspace", async () => {
+    const upsert = vi.fn(async (args: unknown) => ({
+      id: "setting-4",
+      workspaceId: "workspace-demo",
+      role: "workspace_people_context",
+      model: "context",
+      prompt: "Oleg is the owner. Katya is the bureau director.",
+      createdAt: new Date("2026-06-04T08:00:00.000Z"),
+      updatedAt: new Date("2026-06-04T08:05:00.000Z")
+    }));
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(),
+        upsert
+      }
+    });
+
+    const setting = await store.upsertWorkspacePeopleContext({
+      workspaceId: "workspace-demo",
+      model: "context",
+      prompt: "Oleg is the owner. Katya is the bureau director."
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: {
+        workspaceId_role: {
+          workspaceId: "workspace-demo",
+          role: "workspace_people_context"
+        }
+      },
+      create: {
+        workspaceId: "workspace-demo",
+        role: "workspace_people_context",
+        model: "context",
+        prompt: "Oleg is the owner. Katya is the bureau director."
+      },
+      update: {
+        model: "context",
+        prompt: "Oleg is the owner. Katya is the bureau director."
+      }
+    });
+    expect(setting.role).toBe("workspace_people_context");
   });
 });

@@ -104,6 +104,28 @@ Updates existing leads.
 
 Use when the user wants to change client data, add a comment, change status, update phone/email, add a note, attach source material, or record new information in an existing lead card.
 
+When the message is a Telegram reply to an existing lead card, treat field-level instructions as Lead Update Agent requests.
+
+Supported human aliases include:
+
+- phone/mobile/contact number/телефон/номер/мобильный/WhatsApp number
+- email/e-mail/mail/почта/электронная почта
+- client name/customer/клиент/заказчик/имя клиента
+- request type/project type/scope/тип проекта/тип запроса/что делаем/услуга
+- project address/site/location/адрес/адрес участка/адрес объекта/локация
+- BGF/gross floor area/sqm/площадь/м2/квадратура
+- budget/honorar/бюджет/стоимость/гонорар
+- desired start/start date/старт/когда начать
+- desired move-in/deadline/въезд/дедлайн/срок
+- lead title/project title/rename/название лида/имя проекта/переименуй
+- communication channel/channel/канал связи/общаемся через/WhatsApp
+
+If the user says "only" or "только", route the request as a targeted update of that single field.
+
+If the user replies with source material plus a field instruction such as "take only the client phone from the screenshot", route to Lead Update Agent and let the material-analysis layer extract only that requested field.
+
+If the requested value cannot be found in the source material, ask for a clearer value/source instead of inventing data.
+
 Strong update signals:
 
 - "update"

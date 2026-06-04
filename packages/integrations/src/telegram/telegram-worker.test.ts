@@ -40,29 +40,43 @@ describe("telegram worker", () => {
         prompt: "Extract CRM entities.",
         updatedAt: null
       })),
-      upsertCrmEntityExtractor: vi.fn()
+      upsertCrmEntityExtractor: vi.fn(),
+      getWorkspacePeopleContext: vi.fn(async () => ({
+        workspaceId: "workspace-demo",
+        role: "workspace_people_context" as const,
+        model: "context",
+        prompt: "Oleg and Katya are CRM operators, not clients by default.",
+        updatedAt: null
+      })),
+      upsertWorkspacePeopleContext: vi.fn()
     };
 
     await expect(resolveTelegramAiSettings(store, "workspace-demo")).resolves.toEqual({
       clientMaterialAnalysis: expect.objectContaining({
         role: "client_material_analysis",
         model: "gpt-4.1",
-        prompt: "Analyze source materials."
+        prompt: expect.stringContaining("Oleg and Katya are CRM operators")
       }),
       crmOrchestrator: expect.objectContaining({
         role: "crm_orchestrator",
         model: "gpt-5.2",
-        prompt: "Route CRM requests."
+        prompt: expect.stringContaining("Oleg and Katya are CRM operators")
       }),
       crmEntityExtractor: expect.objectContaining({
         role: "crm_entity_extractor",
         model: "gpt-5.1",
-        prompt: "Extract CRM entities."
+        prompt: expect.stringContaining("Oleg and Katya are CRM operators")
+      }),
+      workspacePeopleContext: expect.objectContaining({
+        role: "workspace_people_context",
+        model: "context",
+        prompt: "Oleg and Katya are CRM operators, not clients by default."
       })
     });
     expect(store.getClientMaterialAnalysis).toHaveBeenCalledWith("workspace-demo");
     expect(store.getCrmOrchestrator).toHaveBeenCalledWith("workspace-demo");
     expect(store.getCrmEntityExtractor).toHaveBeenCalledWith("workspace-demo");
+    expect(store.getWorkspacePeopleContext).toHaveBeenCalledWith("workspace-demo");
   });
 
   it("creates a synthetic Telegram update from local test env", () => {
@@ -2217,6 +2231,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           audioTranscriber,
@@ -4119,6 +4134,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -4222,8 +4238,8 @@ describe("telegram worker", () => {
       const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
       return rawInput === "telegram-bot:12345:900";
     })?.[0] as { select?: Record<string, unknown> } | undefined;
-    expect(replyLookupCall?.select).not.toHaveProperty("email");
-    expect(replyLookupCall?.select).not.toHaveProperty("phone");
+    expect(replyLookupCall?.select).toHaveProperty("email");
+    expect(replyLookupCall?.select).toHaveProperty("phone");
     expect(updates).toEqual([
       {
         where: { id: "lead-record-2" },
@@ -4346,6 +4362,197 @@ describe("telegram worker", () => {
     });
     expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("requestType");
     expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("projectAddress");
+  });
+
+  it("updates only the requested phone field when replying with a targeted screenshot instruction", async () => {
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Initial lead\nTelegram lead card: telegram-bot:12345:900",
+                displayName: "Schneider - EFH",
+                clientName: "Schneider",
+                requestType: "Neubau EFH",
+                projectAddress: "Bad Aibling",
+                bgfM2: null,
+                email: null,
+                phone: null,
+                missingData: ["phone", "bgfM2"]
+              }
+            ];
+          }
+
+          return [{ leadId: "L-2026-001", rawInput: "old" }];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "needs_data" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: "",
+        bgfM2: 240,
+        email: null,
+        phone: "+49 170 1234567",
+        missingData: [],
+        summary: "Screenshot includes phone and BGF.",
+        suggestedReply: "Updated."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 213,
+            message: {
+              message_id: 313,
+              date: 1779297000,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text:
+                "\u0412\u043e\u0437\u044c\u043c\u0438 \u0441\u043e \u0441\u043a\u0440\u0438\u043d\u0430 \u0442\u043e\u043b\u044c\u043a\u043e \u0442\u0435\u043b\u0435\u0444\u043e\u043d \u043a\u043b\u0438\u0435\u043d\u0442\u0430"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 213 });
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toEqual({
+      where: { id: "lead-record-2" },
+      data: expect.objectContaining({
+        phone: "+49 170 1234567",
+        missingData: ["bgfM2"],
+        rawInput: expect.stringContaining("telegram lead update")
+      })
+    });
+    expect((updates[0] as { data: Record<string, unknown> }).data).not.toHaveProperty("bgfM2");
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("Phone: <b>+49 170 1234567</b>");
+    expect(sendBody.text).not.toContain("BGF m2: <b>240</b>");
+  });
+
+  it("asks for clearer source material when a targeted field command finds no value", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const rawInput = (args as { where?: { rawInput?: { contains?: string } } }).where?.rawInput?.contains;
+          if (rawInput === "telegram-bot:12345:900") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Initial lead\nTelegram lead card: telegram-bot:12345:900",
+                displayName: "Schneider - EFH",
+                clientName: "Schneider",
+                requestType: "Neubau EFH",
+                projectAddress: "Bad Aibling",
+                bgfM2: null,
+                email: null,
+                phone: null,
+                missingData: ["phone"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: "",
+        bgfM2: undefined,
+        email: null,
+        phone: null,
+        missingData: ["phone"],
+        summary: "Screenshot is unreadable.",
+        suggestedReply: "Please resend."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 214,
+            message: {
+              message_id: 314,
+              date: 1779297000,
+              chat: { id: 12345 },
+              reply_to_message: { message_id: 900 },
+              text:
+                "\u0412\u043e\u0437\u044c\u043c\u0438 \u0441\u043e \u0441\u043a\u0440\u0438\u043d\u0430 \u0442\u043e\u043b\u044c\u043a\u043e \u0442\u0435\u043b\u0435\u0444\u043e\u043d \u043a\u043b\u0438\u0435\u043d\u0442\u0430"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 214 });
+
+    expect(client.lead.update).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("I found lead <b>L-2026-002</b>");
+    expect(sendBody.text).toContain("could not find <b>Phone</b>");
+    expect(sendBody.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "CRM",
+      url: "https://crm.example.com/leads?leadId=L-2026-002"
+    });
   });
 
   it("undoes the last Telegram lead update and offers to create a new lead from the same source", async () => {
@@ -5924,6 +6131,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -6080,6 +6288,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -6211,6 +6420,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -6263,6 +6473,7 @@ describe("telegram worker", () => {
           allowedChatIds: new Set(["12345"]),
           botToken: "telegram-token",
           workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
           fetchImpl: fetchMock as unknown as typeof fetch
@@ -6277,6 +6488,64 @@ describe("telegram worker", () => {
     expect(body.text).toContain("Use new lead");
     expect(body.text).toContain("search lead");
     expect(body.text).toContain("Show last 10 leads");
+    expect(body.text).toContain("Guide button");
+    expect(body.reply_markup).toEqual({
+      inline_keyboard: [[{ text: "Guide", url: "https://crm.example.com/help/telegram-crm-user-guide" }]]
+    });
+  });
+
+  it("answers Russian identity questions with guide help instead of creating a lead", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 12,
+            message: {
+              message_id: 7,
+              date: 1779296460,
+              chat: { id: 12345 },
+              text: "Кто ты и что ты умеешь?"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 12 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1]?.body));
+    expect(body.text).toContain("Quick guide");
+    expect(body.reply_markup.inline_keyboard[0][0]).toEqual({
+      text: "Guide",
+      url: "https://crm.example.com/help/telegram-crm-user-guide"
+    });
   });
 
   it("sends a friendly onboarding message on start", async () => {

@@ -53,9 +53,16 @@ type LeadsTableProps = {
   updateLeadAction: (formData: FormData) => Promise<void>;
   markLeadKpSentAction: (formData: FormData) => Promise<void>;
   undoLeadKpSentAction: (formData: FormData) => Promise<void>;
+  regenerateLeadSummaryAction: (formData: FormData) => Promise<void>;
 };
 
-export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoLeadKpSentAction }: LeadsTableProps) {
+export function LeadsTable({
+  rows,
+  updateLeadAction,
+  markLeadKpSentAction,
+  undoLeadKpSentAction,
+  regenerateLeadSummaryAction
+}: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
   const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
@@ -65,6 +72,7 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const [isUndoingKpSent, setIsUndoingKpSent] = useState(false);
+  const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedLeadId = searchParams.get("leadId");
@@ -207,6 +215,18 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
       router.refresh();
     } finally {
       setIsUndoingKpSent(false);
+    }
+  }
+
+  async function handleRegenerateLeadSummary(leadId: string) {
+    const formData = new FormData();
+    formData.set("id", leadId);
+    setIsRefreshingSummary(true);
+    try {
+      await regenerateLeadSummaryAction(formData);
+      router.refresh();
+    } finally {
+      setIsRefreshingSummary(false);
     }
   }
 
@@ -409,13 +429,15 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
             actionPlan={createLeadActionPlan(selectedLead)}
             isSaving={isSaving}
             isMarkingKpSent={isMarkingKpSent}
-            isUndoingKpSent={isUndoingKpSent}
-            onClose={handleCloseSelectedLead}
-            onSubmit={handleSubmit}
-            onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
-            onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
-            variant="fullscreen"
-          />
+          isUndoingKpSent={isUndoingKpSent}
+          isRefreshingSummary={isRefreshingSummary}
+          onClose={handleCloseSelectedLead}
+          onSubmit={handleSubmit}
+          onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
+          onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
+          onRegenerateSummary={() => handleRegenerateLeadSummary(selectedLead.id)}
+          variant="fullscreen"
+        />
         </div>
       ) : null}
 
@@ -528,10 +550,12 @@ function LeadEditor({
   isSaving,
   isMarkingKpSent,
   isUndoingKpSent,
+  isRefreshingSummary,
   onClose,
   onSubmit,
   onMarkKpSent,
   onUndoKpSent,
+  onRegenerateSummary,
   variant
 }: {
   lead: LeadTableRow;
@@ -539,10 +563,12 @@ function LeadEditor({
   isSaving: boolean;
   isMarkingKpSent: boolean;
   isUndoingKpSent: boolean;
+  isRefreshingSummary: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
   onUndoKpSent: () => void;
+  onRegenerateSummary: () => void;
   variant: "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
@@ -612,6 +638,14 @@ function LeadEditor({
                 {isUndoingKpSent ? "Undoing..." : "Undo KP sent"}
               </button>
             ) : null}
+            <button
+              type="button"
+              disabled={isRefreshingSummary}
+              onClick={onRegenerateSummary}
+              className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+            >
+              {isRefreshingSummary ? "Refreshing..." : "Refresh summary"}
+            </button>
           </div>
         </div>
       </section>
@@ -1164,8 +1198,8 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
 function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
   const fields = [
     { label: "Temperature", value: lead.temperature, badge: <TemperatureBadge value={lead.temperature} /> },
-    { label: "Request", value: lead.requestType, wrap: true },
-    { label: "Address", value: lead.projectAddress, wrap: true },
+    { label: "Request", value: lead.requestType },
+    { label: "Address", value: lead.projectAddress },
     { label: "BGF", value: lead.bgfM2 ? `${lead.bgfM2} m2` : "" },
     { label: "Budget", value: lead.budgetEur ? `${lead.budgetEur} EUR` : "" },
     { label: "Missing", value: lead.missingData || "No data" },
@@ -1178,7 +1212,7 @@ function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
         <div key={field.label} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 text-xs leading-tight">
           <span className="text-muted-foreground">{field.label}</span>
           {field.badge ?? (
-            <span className={`${field.wrap ? "whitespace-normal break-words" : "truncate"} font-semibold text-foreground`}>
+            <span className="whitespace-normal break-words font-semibold text-foreground">
               {field.value || "No data"}
             </span>
           )}

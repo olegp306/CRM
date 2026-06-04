@@ -15,7 +15,9 @@ describe("ai intake store", () => {
       getCrmOrchestrator: vi.fn(),
       upsertCrmOrchestrator: vi.fn(),
       getCrmEntityExtractor: vi.fn(),
-      upsertCrmEntityExtractor: vi.fn()
+      upsertCrmEntityExtractor: vi.fn(),
+      getWorkspacePeopleContext: vi.fn(),
+      upsertWorkspacePeopleContext: vi.fn()
     };
 
     const store = selectWorkspaceAiSettingStoreRuntime({
@@ -90,6 +92,25 @@ describe("ai intake store", () => {
         role: "crm_entity_extractor",
         model: "gpt-5.2",
         prompt: "Extract facts, events, follow-ups, people, organizations, and tags."
+      })
+    );
+  });
+
+  it("persists shared AI people context in memory runtime", async () => {
+    const store = createMemoryWorkspaceAiSettingStore();
+
+    await store.upsertWorkspacePeopleContext({
+      workspaceId: "workspace-demo",
+      model: "context",
+      prompt: "Oleg and Katya are CRM operators, not clients by default."
+    });
+
+    await expect(store.getWorkspacePeopleContext("workspace-demo")).resolves.toEqual(
+      expect.objectContaining({
+        workspaceId: "workspace-demo",
+        role: "workspace_people_context",
+        model: "context",
+        prompt: "Oleg and Katya are CRM operators, not clients by default."
       })
     );
   });

@@ -19,6 +19,7 @@ import {
   createOpenAIAssistantSubmissionResult,
   createOpenAiCrmEntityExtractor,
   createOpenAiCrmOrchestrator,
+  appendWorkspacePromptContext,
   createCrmEntityPersistencePlan,
   createLeadSearchFilterSubmissionResult,
   createExecutionChannelEvents,
@@ -66,7 +67,12 @@ import {
 import { updateAssistantProjectTask } from "./project-task-execution-store";
 import { getAssistantRepository } from "./repository";
 import { createSelectedLeadChatSnapshot } from "./selected-lead-snapshot";
-import { getClientMaterialAnalysisSetting, getCrmEntityExtractorSetting, getCrmOrchestratorSetting } from "../settings/ai-intake/ai-intake-store";
+import {
+  getClientMaterialAnalysisSetting,
+  getCrmEntityExtractorSetting,
+  getCrmOrchestratorSetting,
+  getWorkspacePeopleContextSetting
+} from "../settings/ai-intake/ai-intake-store";
 import { getAssistantLeadTargetId } from "./assistant-lead-target";
 
 export type SubmitAssistantMessageInput = {
@@ -87,10 +93,21 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
     ? await Promise.all([listAssistantCreatedLeads(input.context.workspaceId), listAssistantGeneratedDocuments(input.context.workspaceId)])
     : [[], []];
   const selectedLead = targetLeadId ? createSelectedLeadChatSnapshot(targetLeadId, leads, generatedDocuments) : null;
-  const [clientMaterialAnalysisSetting, crmOrchestratorSetting] = await Promise.all([
+  const [clientMaterialAnalysisSetting, crmOrchestratorSetting, workspacePeopleContextSetting] = await Promise.all([
     getClientMaterialAnalysisSetting(input.context.workspaceId),
-    getCrmOrchestratorSetting(input.context.workspaceId)
+    getCrmOrchestratorSetting(input.context.workspaceId),
+    getWorkspacePeopleContextSetting(input.context.workspaceId)
   ]);
+  const peopleContext = workspacePeopleContextSetting.prompt;
+  const selectedLeadMissingFields = selectedLead?.missingFields ?? [];
+  const leadContext = selectedLead
+    ? [
+        `Selected lead: ${selectedLead.leadId}`,
+        `KP ready: ${selectedLead.kpReady ? "yes" : "no"}`,
+        `Missing fields: ${selectedLeadMissingFields.length > 0 ? selectedLeadMissingFields.join(", ") : "none"}`,
+        `KP sent: ${selectedLead.kpSent ? "yes" : "no"}`
+      ].join("\n")
+    : null;
   const openAiApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
   const assistantInput = {
     ...input,
@@ -109,7 +126,12 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
           ? createOpenAiCrmOrchestrator({
               apiKey: openAiApiKey,
               model: crmOrchestratorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
-              prompt: crmOrchestratorSetting.prompt
+              prompt: appendWorkspacePromptContext({
+                basePrompt: crmOrchestratorSetting.prompt,
+                peopleContext,
+                leadContext,
+                actionContext: "Web assistant message. Route the user request without treating CRM operators as clients."
+              })
             })
           : undefined
       }
@@ -121,7 +143,12 @@ export async function submitAssistantMessageAction(input: SubmitAssistantMessage
         createOpenAiAssistantLeadParserClient({
           apiKey: openAiApiKey,
           model: clientMaterialAnalysisSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
-          prompt: clientMaterialAnalysisSetting.prompt
+          prompt: appendWorkspacePromptContext({
+            basePrompt: clientMaterialAnalysisSetting.prompt,
+            peopleContext,
+            leadContext,
+            actionContext: "Web assistant lead material analysis."
+          })
         })
       )
     : initialResult;
@@ -521,11 +548,19 @@ async function saveWebLeadEntityExtractionAfterExecution({
   }
 
   try {
-    const crmEntityExtractorSetting = await getCrmEntityExtractorSetting(workspaceId);
+    const [crmEntityExtractorSetting, workspacePeopleContextSetting] = await Promise.all([
+      getCrmEntityExtractorSetting(workspaceId),
+      getWorkspacePeopleContextSetting(workspaceId)
+    ]);
     const extraction = await createOpenAiCrmEntityExtractor({
       apiKey: openAiApiKey,
       model: crmEntityExtractorSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
-      prompt: crmEntityExtractorSetting.prompt
+      prompt: appendWorkspacePromptContext({
+        basePrompt: crmEntityExtractorSetting.prompt,
+        peopleContext: workspacePeopleContextSetting.prompt,
+        leadContext: `Execution lead: ${request.leadId}`,
+        actionContext: "Persist CRM entities after a web assistant action execution."
+      })
     }).extract({
       channel: "web",
       workspaceId,

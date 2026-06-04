@@ -5,14 +5,18 @@ import {
   CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+  WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
+  WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
   createDefaultClientMaterialAnalysisSetting,
   createDefaultCrmEntityExtractorSetting,
   createDefaultCrmOrchestratorSetting,
+  createDefaultWorkspacePeopleContextSetting,
   createWorkspaceAiSettingPrismaStore,
   prisma,
   type UpsertClientMaterialAnalysisSettingInput,
   type UpsertCrmEntityExtractorSettingInput,
   type UpsertCrmOrchestratorSettingInput,
+  type UpsertWorkspacePeopleContextSettingInput,
   type WorkspaceAiSettingRecord,
   type WorkspaceAiSettingStore
 } from "@app/db";
@@ -52,6 +56,8 @@ export const CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS = [
   { id: "gpt-5.2", label: "GPT-5.2" },
   { id: "gpt-5.2-pro", label: "GPT-5.2 pro" }
 ] as const;
+
+export const WORKSPACE_PEOPLE_CONTEXT_MODEL_OPTIONS = [{ id: "context", label: "Context only" }] as const;
 
 function getMemorySettings(): WorkspaceAiSettingRecord[] {
   if (!globalForAiIntake.workspaceAiSettings) {
@@ -141,6 +147,34 @@ export function createMemoryWorkspaceAiSettingStore(settings = getMemorySettings
       }
 
       return record;
+    },
+
+    async getWorkspacePeopleContext(workspaceId) {
+      return (
+        settings.find((setting) => setting.workspaceId === workspaceId && setting.role === "workspace_people_context") ??
+        createDefaultWorkspacePeopleContextSetting(workspaceId)
+      );
+    },
+
+    async upsertWorkspacePeopleContext(input: UpsertWorkspacePeopleContextSettingInput) {
+      const existingIndex = settings.findIndex(
+        (setting) => setting.workspaceId === input.workspaceId && setting.role === "workspace_people_context"
+      );
+      const record: WorkspaceAiSettingRecord = {
+        workspaceId: input.workspaceId,
+        role: "workspace_people_context",
+        model: input.model || WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
+        prompt: input.prompt || WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
+        updatedAt: new Date()
+      };
+
+      if (existingIndex >= 0) {
+        settings[existingIndex] = record;
+      } else {
+        settings.push(record);
+      }
+
+      return record;
     }
   };
 }
@@ -206,4 +240,14 @@ export async function saveCrmEntityExtractorSetting(
   input: UpsertCrmEntityExtractorSettingInput
 ): Promise<WorkspaceAiSettingRecord> {
   return getWorkspaceAiSettingStore().upsertCrmEntityExtractor(input);
+}
+
+export async function getWorkspacePeopleContextSetting(workspaceId: string): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().getWorkspacePeopleContext(workspaceId);
+}
+
+export async function saveWorkspacePeopleContextSetting(
+  input: UpsertWorkspacePeopleContextSettingInput
+): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().upsertWorkspacePeopleContext(input);
 }

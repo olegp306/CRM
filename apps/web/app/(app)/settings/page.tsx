@@ -36,6 +36,10 @@ export default function SettingsPage() {
               <h3 className="text-base font-semibold">CRM orchestrator</h3>
               <p className="mt-2 text-sm text-muted-foreground">Top-level routing prompt for Telegram and assistant requests.</p>
             </a>
+            <a href="/settings/ai-context" className="rounded-lg border border-border bg-white p-4 transition hover:bg-muted">
+              <h3 className="text-base font-semibold">AI people context</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Shared operators, roles, and project context added to every agent prompt.</p>
+            </a>
           </div>
         </div>
         <div>

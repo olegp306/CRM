@@ -32,6 +32,9 @@ export type ParsedTelegramLeadInput = {
   projectAddress?: string;
   email?: string | null;
   phone?: string | null;
+  budgetEur?: number | null;
+  desiredStart?: string | null;
+  desiredMoveIn?: string | null;
   missingData: string[];
   summary: string;
   leadSummary?: string;
@@ -71,6 +74,9 @@ export type TelegramLeadIntakeDraft = Omit<LeadIntakeDraft, "missingData"> & {
   missingData: string[];
   telegramSourceExternalId: string;
   temperature: ParsedTelegramLeadInput["temperature"];
+  budgetEur?: number | null;
+  desiredStart?: string | null;
+  desiredMoveIn?: string | null;
 };
 
 export function createTelegramSourceExternalId(chatId: string, messageId: number): string {
@@ -115,7 +121,10 @@ export async function createLeadDraftFromTelegramMessage(
     ...draft,
     missingData: Array.from(new Set([...draft.missingData, ...parsed.missingData])),
     telegramSourceExternalId,
-    temperature: parsed.temperature
+    temperature: parsed.temperature,
+    budgetEur: parsed.budgetEur ?? null,
+    desiredStart: parsed.desiredStart ?? null,
+    desiredMoveIn: parsed.desiredMoveIn ?? null
   };
 }
 

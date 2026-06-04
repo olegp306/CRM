@@ -5,6 +5,8 @@ import {
   createLeadCreatedEvent,
   createLeadDraftUpdatedEvent,
   createLeadDisplayMetadata,
+  appendWorkspacePromptContext,
+  detectLeadFieldCommand,
   createLeadInteractionNoteEvent,
   createLeadInteractionNoteSummary,
   createLeadNaturalContextSummary,
@@ -27,6 +29,7 @@ import {
   type CrmEntityExtractorClient,
   type CrmOrchestratorDecision,
   type CrmOrchestratorClient,
+  type LeadFieldCommand,
   type LeadSearchRecord
 } from "@app/assistant";
 import { assertDeploymentDatabaseIsolation, getNextBusinessId } from "@app/core";
@@ -97,6 +100,9 @@ export type TelegramWorkerPrismaLike = {
         client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
         clientName?: string | null;
         bgfM2?: number | null;
+        budgetEur?: number | string | null;
+        desiredStart?: Date | string | null;
+        desiredMoveIn?: Date | string | null;
         email?: string | null;
         phone?: string | null;
         missingData?: string[] | null;
@@ -419,6 +425,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/start"),
+        replyMarkup: createTelegramGuideReplyMarkup(config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -430,6 +437,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         botToken: config.botToken,
         chatId: message.chatId,
         text: createTelegramSharedHelpMessage(config.workspaceId, message.chatId, "/help"),
+        replyMarkup: createTelegramGuideReplyMarkup(config.crmBaseUrl),
         fetchImpl
       });
       skipped += message.sourceMessageIds.length;
@@ -781,7 +789,21 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         continue;
       }
 
-      if (isPossibleDifferentLead(createTelegramLeadSessionFromExistingLead(repliedLead, message), draft)) {
+      const fieldCommand = detectLeadFieldCommand(message.text);
+      if (fieldCommand && isTargetedLeadFieldValueMissing(fieldCommand, draft)) {
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: createTelegramTargetedFieldMissingMessage(repliedLead.leadId, fieldCommand),
+          parseMode: "HTML",
+          replyMarkup: createTelegramCrmOnlyReplyMarkup(config.crmBaseUrl, repliedLead.leadId),
+          fetchImpl
+        });
+        processed += 1;
+        continue;
+      }
+
+      if (!fieldCommand && isPossibleDifferentLead(createTelegramLeadSessionFromExistingLead(repliedLead, message), draft)) {
         await sendWorkerTelegramMessage({
           botToken: config.botToken,
           chatId: message.chatId,
@@ -804,7 +826,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       });
       await client.lead.update({
         where: { id: repliedLead.id },
-        data: createTelegramLeadUpdateData(repliedLead, draft, message)
+        data: createTelegramLeadUpdateData(repliedLead, draft, message, fieldCommand)
       });
       await saveTelegramLeadUndoAction(config, updateUndoAction);
       await saveTelegramLeadEntityExtraction(config, message, repliedLead, draft.rawInput);
@@ -816,7 +838,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           channel: "telegram",
           threadId: createTelegramThreadId(message.chatId),
           leadId: repliedLead.leadId,
-          fieldsChanged: createDetectedTelegramLeadFields(draft),
+          fieldsChanged: createDetectedTelegramLeadFields(draft, fieldCommand),
           missingData: draft.missingData
         })
       );
@@ -829,13 +851,13 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           threadId: createTelegramThreadId(message.chatId),
           leadId: repliedLead.leadId,
           messageId: String(message.messageId),
-          summary: createTelegramInteractionSummary(message.text, createDetectedTelegramLeadFields(draft))
+          summary: createTelegramInteractionSummary(message.text, createDetectedTelegramLeadFields(draft, fieldCommand))
         })
       );
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
-        text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft),
+        text: createTelegramLeadUpdatedMessage(repliedLead.leadId, draft, fieldCommand),
         parseMode: "HTML",
         replyMarkup: createTelegramCrmReplyMarkup(config.crmBaseUrl, repliedLead.leadId, {
           email: draft.email,
@@ -1832,14 +1854,32 @@ export async function resolveTelegramAiSettings(store: WorkspaceAiSettingStore, 
   clientMaterialAnalysis: WorkspaceAiSettingRecord;
   crmOrchestrator: WorkspaceAiSettingRecord;
   crmEntityExtractor: WorkspaceAiSettingRecord;
+  workspacePeopleContext: WorkspaceAiSettingRecord;
 }> {
-  const [clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor] = await Promise.all([
+  const [clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor, workspacePeopleContext] = await Promise.all([
     store.getClientMaterialAnalysis(workspaceId),
     store.getCrmOrchestrator(workspaceId),
-    store.getCrmEntityExtractor(workspaceId)
+    store.getCrmEntityExtractor(workspaceId),
+    store.getWorkspacePeopleContext(workspaceId)
   ]);
+  const peopleContext = workspacePeopleContext.prompt;
 
-  return { clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor };
+  return {
+    clientMaterialAnalysis: withWorkspacePromptContext(clientMaterialAnalysis, peopleContext),
+    crmOrchestrator: withWorkspacePromptContext(crmOrchestrator, peopleContext),
+    crmEntityExtractor: withWorkspacePromptContext(crmEntityExtractor, peopleContext),
+    workspacePeopleContext
+  };
+}
+
+function withWorkspacePromptContext(setting: WorkspaceAiSettingRecord, peopleContext: string): WorkspaceAiSettingRecord {
+  return {
+    ...setting,
+    prompt: appendWorkspacePromptContext({
+      basePrompt: setting.prompt,
+      peopleContext
+    })
+  };
 }
 
 export async function runTelegramWorkerLoop({
@@ -2218,6 +2258,10 @@ function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "a
     return false;
   }
 
+  if (/(who are you|what can you do|что ты умеешь|что умеешь|кто ты|помощь|как работает)/iu.test(text)) {
+    return true;
+  }
+
   return (
     /^\/(help|about)(@\w+)?$/i.test(text) ||
     /(what can you do|help|capabilities|что ты умеешь|что умеешь|помощь|как работает)/i.test(text) ||
@@ -2316,7 +2360,7 @@ function isTelegramKpSentCommand(message: Pick<AllowedTelegramMessage, "text" | 
 }
 
 function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, content: "/start" | "/help"): string {
-  return createAssistantChannelResponse(
+  const response = createAssistantChannelResponse(
     createTelegramAssistantChannelMessage(workspaceId, {
       chatId,
       text: content,
@@ -2324,6 +2368,16 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
       sourceMessageIds: [content === "/start" ? 0 : 1]
     })
   ).text;
+
+  return [
+    response,
+    "",
+    "Quick guide:",
+    "- new lead: create a lead, then send text, PDF, photos, screenshots, voice, or audio.",
+    "- search lead: find a lead, open its Telegram card, then reply to update it.",
+    "- One reply = one action: update a field, add a note, or add a reminder.",
+    "Use the Guide button for the full instruction with copyable examples."
+  ].join("\n");
 }
 
 function createTelegramGeneralAssistantResponse(
@@ -2707,6 +2761,17 @@ function createTelegramResponseReplyMarkup(buttons: Array<{ label: string; url?:
   };
 }
 
+function createTelegramGuideReplyMarkup(crmBaseUrl: string | undefined) {
+  const guideUrl = createTelegramAbsoluteButtonUrl("/help/telegram-crm-user-guide", crmBaseUrl);
+  if (!guideUrl) {
+    return undefined;
+  }
+
+  return {
+    inline_keyboard: [[{ text: "Guide", url: guideUrl }]]
+  };
+}
+
 function chunkTelegramButtons<T>(buttons: T[], size: number): T[][] {
   const rows: T[][] = [];
   for (let index = 0; index < buttons.length; index += size) {
@@ -3087,12 +3152,23 @@ function createTelegramThreadId(chatId: string): string {
   return `telegram:${chatId}`;
 }
 
-function createDetectedTelegramLeadFields(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>): string[] {
+function createDetectedTelegramLeadFields(draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>, command?: LeadFieldCommand | null): string[] {
+  if (command?.field === "communicationChannel") {
+    return ["communicationChannel"];
+  }
+
+  if (command?.field) {
+    return [command.field];
+  }
+
   const fields = [
     ["clientName", draft.clientName],
     ["requestType", draft.requestType],
     ["projectAddress", draft.projectAddress],
     ["bgfM2", draft.bgfM2],
+    ["budgetEur", draft.budgetEur],
+    ["desiredStart", draft.desiredStart],
+    ["desiredMoveIn", draft.desiredMoveIn],
     ["email", draft.email],
     ["phone", draft.phone]
   ];
@@ -3199,6 +3275,11 @@ async function findLeadByTelegramBotMessage(
       requestType: true,
       projectAddress: true,
       bgfM2: true,
+      budgetEur: true,
+      desiredStart: true,
+      desiredMoveIn: true,
+      email: true,
+      phone: true,
       missingData: true,
       kpSentDate: true
     }
@@ -3260,6 +3341,11 @@ async function findLeadByLeadId(
       requestType: true,
       projectAddress: true,
       bgfM2: true,
+      budgetEur: true,
+      desiredStart: true,
+      desiredMoveIn: true,
+      email: true,
+      phone: true,
       missingData: true,
       kpSentDate: true
     }
@@ -3301,22 +3387,33 @@ function createTelegramLeadSessionFromExistingLead(
 function createTelegramLeadUpdateData(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
-  message: AllowedTelegramMessageBatch
+  message: AllowedTelegramMessageBatch,
+  command?: LeadFieldCommand | null
 ): Record<string, unknown> {
   const renameDisplayName = extractTelegramLeadRenameDisplayName(message.text);
   const update: Record<string, unknown> = {
     rawInput: mergeTelegramLeadRawInput(lead.rawInput ?? "", draft.rawInput, message.chatId, message.sourceMessageIds)
   };
 
-  if (renameDisplayName) {
-    update.displayName = renameDisplayName;
+  if (command) {
+    applyTargetedLeadFieldUpdate(update, command, draft, renameDisplayName);
   } else {
-    addUpdateValue(update, "requestType", draft.requestType);
-    addUpdateValue(update, "projectAddress", draft.projectAddress);
+    if (renameDisplayName) {
+      update.displayName = renameDisplayName;
+    } else {
+      addUpdateValue(update, "requestType", draft.requestType);
+      addUpdateValue(update, "projectAddress", draft.projectAddress);
+    }
+    addUpdateValue(update, "bgfM2", draft.bgfM2);
+    addUpdateValue(update, "email", draft.email);
+    addUpdateValue(update, "phone", draft.phone);
+    addUpdateValue(update, "budgetEur", draft.budgetEur);
+    addUpdateValue(update, "desiredStart", draft.desiredStart);
+    addUpdateValue(update, "desiredMoveIn", draft.desiredMoveIn);
   }
-  addUpdateValue(update, "bgfM2", draft.bgfM2);
-  update.missingData = mergeLeadMissingData(lead, draft, update);
+  update.missingData = mergeLeadMissingData(lead, draft, update, command);
   if (
+    !command &&
     !renameDisplayName &&
     (isMeaningfulTelegramFieldValue(draft.clientName) ||
       isMeaningfulTelegramFieldValue(draft.requestType) ||
@@ -3330,6 +3427,94 @@ function createTelegramLeadUpdateData(
   }
 
   return update;
+}
+
+function applyTargetedLeadFieldUpdate(
+  update: Record<string, unknown>,
+  command: LeadFieldCommand,
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  renameDisplayName: string | null
+): void {
+  if (command.field === "communicationChannel") {
+    return;
+  }
+
+  if (command.field === "displayName") {
+    addUpdateValue(update, "displayName", command.valueHint ?? renameDisplayName);
+    return;
+  }
+
+  const value = getDraftValueForLeadFieldCommand(draft, command.field);
+  addUpdateValue(update, command.field, value);
+}
+
+function getDraftValueForLeadFieldCommand(
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  field: LeadFieldCommand["field"]
+): string | number | null | undefined {
+  switch (field) {
+    case "clientName":
+      return draft.clientName;
+    case "email":
+      return draft.email;
+    case "phone":
+      return draft.phone;
+    case "requestType":
+      return draft.requestType;
+    case "projectAddress":
+      return draft.projectAddress;
+    case "bgfM2":
+      return draft.bgfM2;
+    case "budgetEur":
+      return draft.budgetEur;
+    case "desiredStart":
+      return draft.desiredStart;
+    case "desiredMoveIn":
+      return draft.desiredMoveIn;
+    case "displayName":
+    case "communicationChannel":
+      return null;
+  }
+}
+
+function isTargetedLeadFieldValueMissing(
+  command: LeadFieldCommand,
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
+): boolean {
+  if (command.field === "communicationChannel") {
+    return false;
+  }
+
+  if (command.field === "displayName") {
+    return !isMeaningfulTelegramFieldValue(command.valueHint);
+  }
+
+  return !isMeaningfulTelegramFieldValue(getDraftValueForLeadFieldCommand(draft, command.field));
+}
+
+function createTelegramTargetedFieldMissingMessage(leadId: string, command: LeadFieldCommand): string {
+  const label = getTelegramLeadFieldCommandLabel(command.field);
+  return [
+    `I found lead <b>${escapeHtml(leadId)}</b>, but could not find <b>${escapeHtml(label)}</b> in this reply/source material.`,
+    "Please resend a clearer screenshot or write the value as text."
+  ].join("\n");
+}
+
+function getTelegramLeadFieldCommandLabel(field: LeadFieldCommand["field"]): string {
+  const labels: Record<LeadFieldCommand["field"], string> = {
+    clientName: "Client",
+    email: "Email",
+    phone: "Phone",
+    requestType: "Request type",
+    projectAddress: "Project address",
+    bgfM2: "BGF",
+    budgetEur: "Budget",
+    desiredStart: "Desired start",
+    desiredMoveIn: "Desired move-in",
+    displayName: "Lead title",
+    communicationChannel: "Communication channel"
+  };
+  return labels[field];
 }
 
 function extractTelegramLeadRenameDisplayName(text: string): string | null {
@@ -3362,6 +3547,11 @@ function createTelegramLeadRestoreSnapshot(
     requestType: lead.requestType ?? null,
     projectAddress: lead.projectAddress ?? null,
     bgfM2: lead.bgfM2 ?? null,
+    budgetEur: lead.budgetEur ?? null,
+    desiredStart: lead.desiredStart ?? null,
+    desiredMoveIn: lead.desiredMoveIn ?? null,
+    email: getLeadEmail(lead),
+    phone: getLeadPhone(lead),
     missingData: lead.missingData ?? []
   };
 }
@@ -3406,16 +3596,17 @@ function getLeadPhone(lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"][
 function mergeLeadMissingData(
   lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number],
   draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
-  update: Record<string, unknown>
+  update: Record<string, unknown>,
+  command?: LeadFieldCommand | null
 ): string[] {
   const unresolved = new Set([...(lead.missingData ?? []), ...draft.missingData]);
   const fieldValues: Record<string, unknown> = {
-    clientName: draft.clientName ?? getLeadClientName(lead),
+    clientName: command ? update.clientName ?? getLeadClientName(lead) : draft.clientName ?? getLeadClientName(lead),
     requestType: update.requestType ?? lead.requestType,
     projectAddress: update.projectAddress ?? lead.projectAddress,
     bgfM2: update.bgfM2 ?? lead.bgfM2,
-    email: draft.email ?? getLeadEmail(lead),
-    phone: draft.phone ?? getLeadPhone(lead)
+    email: command ? update.email ?? getLeadEmail(lead) : update.email ?? draft.email ?? getLeadEmail(lead),
+    phone: command ? update.phone ?? getLeadPhone(lead) : update.phone ?? draft.phone ?? getLeadPhone(lead)
   };
   for (const field of ["clientName", "requestType", "projectAddress", "bgfM2", "email", "phone"]) {
     if (isMeaningfulTelegramFieldValue(fieldValues[field])) {
@@ -3438,7 +3629,8 @@ function mergeTelegramLeadRawInput(current: string, next: string, chatId: string
 
 function createTelegramLeadUpdatedMessage(
   leadId: string,
-  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>
+  draft: Awaited<ReturnType<typeof createLeadDraftFromTelegramMessage>>,
+  command?: LeadFieldCommand | null
 ): string {
   const fields = [
     ["Summary", createTelegramLeadSummary(draft, undefined, undefined)],
@@ -3446,15 +3638,45 @@ function createTelegramLeadUpdatedMessage(
     ["Request type", draft.requestType],
     ["Project address", draft.projectAddress],
     ["BGF m2", draft.bgfM2 === null || draft.bgfM2 === undefined ? "" : String(draft.bgfM2)],
+    ["Budget EUR", draft.budgetEur === null || draft.budgetEur === undefined ? "" : String(draft.budgetEur)],
+    ["Desired start", draft.desiredStart],
+    ["Desired move-in", draft.desiredMoveIn],
     ["Email", draft.email],
     ["Phone", draft.phone]
-  ].filter(([, value]) => isMeaningfulTelegramFieldValue(value));
+  ].filter(([label, value]) => {
+    if (!isMeaningfulTelegramFieldValue(value)) {
+      return false;
+    }
+
+    if (!command?.field || command.field === "communicationChannel") {
+      return true;
+    }
+
+    return getTelegramLeadUpdatedMessageField(command.field) === label || label === "Summary";
+  });
 
   return [
     `<b>${escapeHtml(leadId)}</b> updated in CRM.`,
     "",
     ...fields.map(([label, value]) => `${escapeHtml(String(label))}: <b>${escapeHtml(String(value))}</b>`)
   ].join("\n");
+}
+
+function getTelegramLeadUpdatedMessageField(field: LeadFieldCommand["field"]): string | null {
+  const labels: Record<LeadFieldCommand["field"], string | null> = {
+    clientName: "Client",
+    email: "Email",
+    phone: "Phone",
+    requestType: "Request type",
+    projectAddress: "Project address",
+    bgfM2: "BGF m2",
+    budgetEur: "Budget EUR",
+    desiredStart: "Desired start",
+    desiredMoveIn: "Desired move-in",
+    displayName: null,
+    communicationChannel: null
+  };
+  return labels[field];
 }
 
 function isMeaningfulTelegramFieldValue(value: unknown): boolean {

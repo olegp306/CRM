@@ -23,6 +23,8 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("text-white");
     expect(tableSource).toContain("Close");
     expect(tableSource).toContain("Send KP");
+    expect(tableSource).toContain("Refresh summary");
+    expect(pageSource).toContain("regenerateLeadSummaryAction");
   });
 
   it("opens every lead editor as a fullscreen card with a persistent close action", () => {
@@ -72,5 +74,16 @@ describe("leads page layout", () => {
     expect(tableSource).toContain('className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"');
     expect(tableSource).not.toContain("className={leadAccordionClassName}");
     expect(tableSource).not.toContain("className={leadAccordionSummaryClassName}");
+  });
+
+  it("shows all lead card summary field values without ellipsis truncation", () => {
+    const summaryStart = tableSource.indexOf("function LeadKpSummary");
+    const summaryEnd = tableSource.indexOf("function TemperatureBadge");
+    const summarySource = tableSource.slice(summaryStart, summaryEnd);
+
+    expect(summarySource).toContain("break-words");
+    expect(summarySource).toContain("whitespace-normal");
+    expect(summarySource).not.toContain("truncate");
+    expect(summarySource).not.toContain("field.wrap");
   });
 });

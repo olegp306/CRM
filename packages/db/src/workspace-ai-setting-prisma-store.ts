@@ -66,6 +66,27 @@ export const CRM_ORCHESTRATOR_ROLE = "crm_orchestrator" as const;
 export const CRM_ORCHESTRATOR_DEFAULT_MODEL = "gpt-4.1-mini";
 export const CRM_ENTITY_EXTRACTOR_ROLE = "crm_entity_extractor" as const;
 export const CRM_ENTITY_EXTRACTOR_DEFAULT_MODEL = "gpt-4.1-mini";
+export const WORKSPACE_PEOPLE_CONTEXT_ROLE = "workspace_people_context" as const;
+export const WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL = "context";
+export const WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT = [
+  "# Workspace people and project context",
+  "",
+  "Use this context in every CRM interpretation step. It explains recurring internal people and project operators.",
+  "",
+  "## Internal operators",
+  "",
+  "Important shorthand: these internal operators are not the client by default.",
+  "- Oleg Panyukov / Олег Панюков / Oleg / Олег is the CRM owner, developer-facing tester, and system operator. If his name appears in screenshots, forwarded messages, transcripts, or Telegram sender context, do not treat him as the client, payer, project owner, or project contact by default.",
+  "- Ekaterina Reyzbikh / Екатерина Рыбских / Katya / Катя / Reyzbikh is the architecture bureau director and CRM operator. If her name appears as sender, chat owner, forwarded-message author, or instruction author, do not treat her as the client, payer, project owner, or project contact by default.",
+  "",
+  "## Interpretation rules",
+  "",
+  "- Messages, screenshots, PDFs, audio, or forwarded materials from these operators are source material or internal instructions unless the text explicitly says otherwise.",
+  "- If an operator says to create, update, find, summarize, remember, or schedule something, treat that as an instruction from a CRM user.",
+  "- If a screenshot shows an operator name in the chat header or sender line, treat it as provenance/context, not as extracted client identity.",
+  "- Client identity, project address, budget, area, deadlines, and contact channels must come from the actual client/source material, not from internal operator names.",
+  "- When uncertain whether a person is client, intermediary, sender, architect, or developer, keep the uncertainty explicit and ask for clarification rather than inventing a role."
+].join("\n");
 export const CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT = [
   "# CRM Entity Extractor Agent",
   "",
@@ -148,7 +169,8 @@ export const CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT = [
 export type WorkspaceAiSettingRole =
   | typeof CLIENT_MATERIAL_ANALYSIS_ROLE
   | typeof CRM_ORCHESTRATOR_ROLE
-  | typeof CRM_ENTITY_EXTRACTOR_ROLE;
+  | typeof CRM_ENTITY_EXTRACTOR_ROLE
+  | typeof WORKSPACE_PEOPLE_CONTEXT_ROLE;
 
 type WorkspaceAiSettingRow = {
   id: string;
@@ -186,6 +208,12 @@ export type UpsertCrmEntityExtractorSettingInput = {
   prompt: string;
 };
 
+export type UpsertWorkspacePeopleContextSettingInput = {
+  workspaceId: string;
+  model: string;
+  prompt: string;
+};
+
 export type WorkspaceAiSettingPrismaClientLike = {
   workspaceAiSetting: {
     findUnique(args: unknown): Promise<WorkspaceAiSettingRow | null>;
@@ -200,6 +228,8 @@ export type WorkspaceAiSettingStore = {
   upsertCrmOrchestrator(input: UpsertCrmOrchestratorSettingInput): Promise<WorkspaceAiSettingRecord>;
   getCrmEntityExtractor(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
   upsertCrmEntityExtractor(input: UpsertCrmEntityExtractorSettingInput): Promise<WorkspaceAiSettingRecord>;
+  getWorkspacePeopleContext(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
+  upsertWorkspacePeopleContext(input: UpsertWorkspacePeopleContextSettingInput): Promise<WorkspaceAiSettingRecord>;
 };
 
 export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPrismaClientLike): WorkspaceAiSettingStore {
@@ -310,6 +340,42 @@ export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPr
       });
 
       return toWorkspaceAiSettingRecord(row);
+    },
+
+    async getWorkspacePeopleContext(workspaceId) {
+      const row = await client.workspaceAiSetting.findUnique({
+        where: {
+          workspaceId_role: {
+            workspaceId,
+            role: WORKSPACE_PEOPLE_CONTEXT_ROLE
+          }
+        }
+      });
+
+      return row ? toWorkspaceAiSettingRecord(row) : createDefaultWorkspacePeopleContextSetting(workspaceId);
+    },
+
+    async upsertWorkspacePeopleContext(input) {
+      const row = await client.workspaceAiSetting.upsert({
+        where: {
+          workspaceId_role: {
+            workspaceId: input.workspaceId,
+            role: WORKSPACE_PEOPLE_CONTEXT_ROLE
+          }
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          role: WORKSPACE_PEOPLE_CONTEXT_ROLE,
+          model: input.model,
+          prompt: input.prompt
+        },
+        update: {
+          model: input.model,
+          prompt: input.prompt
+        }
+      });
+
+      return toWorkspaceAiSettingRecord(row);
     }
   };
 }
@@ -344,6 +410,16 @@ export function createDefaultCrmEntityExtractorSetting(workspaceId: string): Wor
   };
 }
 
+export function createDefaultWorkspacePeopleContextSetting(workspaceId: string): WorkspaceAiSettingRecord {
+  return {
+    workspaceId,
+    role: WORKSPACE_PEOPLE_CONTEXT_ROLE,
+    model: WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
+    prompt: WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
+    updatedAt: null
+  };
+}
+
 function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSettingRecord {
   return {
     workspaceId: row.workspaceId,
@@ -352,6 +428,8 @@ function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSett
         ? CRM_ORCHESTRATOR_ROLE
         : row.role === CRM_ENTITY_EXTRACTOR_ROLE
           ? CRM_ENTITY_EXTRACTOR_ROLE
+          : row.role === WORKSPACE_PEOPLE_CONTEXT_ROLE
+            ? WORKSPACE_PEOPLE_CONTEXT_ROLE
           : CLIENT_MATERIAL_ANALYSIS_ROLE,
     model: row.model,
     prompt: row.prompt,

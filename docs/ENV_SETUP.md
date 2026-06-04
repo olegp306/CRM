@@ -96,6 +96,7 @@ TELEGRAM_BOT_TOKEN=""
 TELEGRAM_BOT_ENV=""
 TELEGRAM_ALLOWED_CHAT_IDS=""
 TELEGRAM_WORKSPACE_ID="workspace-demo"
+TELEGRAM_CRM_BASE_URL="http://127.0.0.1:37173"
 TELEGRAM_POLL_INTERVAL_MS="5000"
 TELEGRAM_TEST_MESSAGE=""
 TELEGRAM_TEST_CHAT_ID=""
@@ -107,6 +108,8 @@ Use a separate Telegram bot token for each deployed environment:
 
 - test bot: `CRM_DEPLOYMENT_ENV="test"` and `TELEGRAM_BOT_ENV="test"`;
 - production bot: `CRM_DEPLOYMENT_ENV="production"` and `TELEGRAM_BOT_ENV="production"`.
+
+Set `TELEGRAM_CRM_BASE_URL` to the web URL that Telegram buttons should open. For a VM test stand, this should be the test CRM URL, not the production URL.
 
 When `CRM_REQUIRE_DEPLOYMENT_CONFIRMATION="true"`, the Telegram worker refuses to start if the bot marker does not match the selected environment.
 

@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createKpSentLeadUpdate, createLeadIntakeDraft, createTelegramLeadIntakeDraft } from "@app/core";
+import { appendWorkspacePromptContext, createOpenAiAssistantLeadParserClient } from "@app/assistant";
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
+import { getClientMaterialAnalysisSetting, getWorkspacePeopleContextSetting } from "../settings/ai-intake/ai-intake-store";
 import { createLeadFromIntakeDraft } from "./lead-intake-store";
+import { replaceLeadSummaryInRawInput } from "./lead-summary-regeneration";
 import { translateLeadSummary, type LeadSummaryTranslationResult } from "./lead-summary-translation";
 
 export async function translateLeadSummaryAction(input: { text: string; targetLanguage: "ru" | "de" }): Promise<LeadSummaryTranslationResult> {
@@ -114,6 +117,87 @@ export async function undoLeadKpSentAction(formData: FormData): Promise<void> {
   revalidatePath("/today");
 }
 
+export async function regenerateLeadSummaryAction(formData: FormData): Promise<void> {
+  const session = await getWorkspaceSession();
+  const id = getRequiredFormValue(formData, "id");
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required to regenerate lead summary.");
+  }
+
+  const lead = await prisma.lead.findUnique({
+    where: { id, workspaceId: session.workspaceId },
+    select: {
+      id: true,
+      leadId: true,
+      displayName: true,
+      rawInput: true,
+      requestType: true,
+      projectAddress: true,
+      bgfM2: true,
+      budgetEur: true,
+      desiredStart: true,
+      desiredMoveIn: true,
+      missingData: true,
+      client: {
+        select: {
+          email: true,
+          phone: true
+        }
+      }
+    }
+  });
+
+  if (!lead) {
+    throw new Error("Lead was not found.");
+  }
+
+  const [clientMaterialAnalysisSetting, workspacePeopleContextSetting] = await Promise.all([
+    getClientMaterialAnalysisSetting(session.workspaceId),
+    getWorkspacePeopleContextSetting(session.workspaceId)
+  ]);
+  const missingData = normalizeMissingData(lead.missingData);
+  const leadContext = [
+    `Lead ID: ${lead.leadId}`,
+    `Lead name: ${lead.displayName ?? "unknown"}`,
+    `Request type: ${lead.requestType ?? "unknown"}`,
+    `Project address: ${lead.projectAddress ?? "unknown"}`,
+    `BGF m2: ${lead.bgfM2 ?? "unknown"}`,
+    `Budget EUR: ${lead.budgetEur ?? "unknown"}`,
+    `Desired start: ${lead.desiredStart ? lead.desiredStart.toISOString().slice(0, 10) : "unknown"}`,
+    `Desired move-in: ${lead.desiredMoveIn ? lead.desiredMoveIn.toISOString().slice(0, 10) : "unknown"}`,
+    `Email: ${lead.client?.email ?? "unknown"}`,
+    `Phone: ${lead.client?.phone ?? "unknown"}`,
+    `Missing data: ${missingData.length > 0 ? missingData.join(", ") : "none"}`
+  ].join("\n");
+  const parser = createOpenAiAssistantLeadParserClient({
+    apiKey,
+    model: clientMaterialAnalysisSetting.model || process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini",
+    prompt: appendWorkspacePromptContext({
+      basePrompt: clientMaterialAnalysisSetting.prompt,
+      peopleContext: workspacePeopleContextSetting.prompt,
+      leadContext,
+      actionContext: "Regenerate the lead summary from the current lead data and original source materials. Keep existing facts grounded."
+    })
+  });
+  const parsed = await parser.parseLead({
+    text: [leadContext, "", "Original source material:", lead.rawInput ?? ""].join("\n"),
+    receivedAt: new Date().toISOString(),
+    attachments: []
+  });
+  const leadSummary = parsed.leadSummary || parsed.summary;
+
+  await prisma.lead.update({
+    where: { id, workspaceId: session.workspaceId },
+    data: {
+      rawInput: replaceLeadSummaryInRawInput(lead.rawInput, leadSummary)
+    }
+  });
+
+  revalidatePath("/leads");
+}
+
 function getOptionalFormValue(formData: FormData, key: string): string | null {
   const value = formData.get(key);
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -151,4 +235,12 @@ function parseMissingData(value: string | null): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeMissingData(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => String(item).trim()).filter(Boolean);
 }
