@@ -46,7 +46,7 @@ describe("assistant submission orchestration", () => {
       priority: "normal",
       moduleContext: "assistant",
       role: "admin",
-      appVersion: "0.3.3"
+      appVersion: "0.4.23"
     });
     expect(result.response).toBe("I saved this as product feedback for review.");
   });

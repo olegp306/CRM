@@ -407,6 +407,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
 
     if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command" && !forceCreateLeadFromCommand) {
       telegramSearchModeMemory.delete(createTelegramSearchModeKey(config.workspaceId, message.chatId));
+      await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
       const session = createTelegramLeadDraftSession({
         chatId: message.chatId,
         workspaceId: config.workspaceId,
@@ -731,11 +732,15 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       select: {
         id: true,
         leadId: true,
+        displayName: true,
         status: true,
         rawInput: true,
         requestType: true,
         projectAddress: true,
         bgfM2: true,
+        budgetEur: true,
+        desiredStart: true,
+        desiredMoveIn: true,
         missingData: true,
         clientRecordId: true,
         client: {
@@ -1030,20 +1035,24 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     const kpStatus = getKpRequiredFieldStatus(session.draft, config.kpRequiredFields);
 
     if (activeSession?.leadId) {
+      const activeLeadId = activeSession.leadId;
       const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+      const activeLead = existingIds.find((lead) => lead.leadId === activeLeadId);
+      const activeLeadSnapshot = activeLead ?? {
+        leadId: activeLeadId,
+        status: "needs_data",
+        rawInput: activeSession.draft.rawInput,
+        requestType: activeSession.draft.requestType,
+        projectAddress: activeSession.draft.projectAddress,
+        bgfM2: activeSession.draft.bgfM2,
+        missingData: activeSession.draft.missingData
+      };
       const updateUndoAction = createTelegramLeadUndoActionRecord({
         config,
         message,
-        leadId: activeSession.leadId,
+        leadId: activeLeadId,
         actionType: "update_lead",
-        before: {
-          status: "needs_data",
-          rawInput: activeSession.draft.rawInput ?? null,
-          requestType: activeSession.draft.requestType ?? null,
-          projectAddress: activeSession.draft.projectAddress ?? null,
-          bgfM2: activeSession.draft.bgfM2 ?? null,
-          missingData: activeSession.draft.missingData ?? []
-        },
+        before: createTelegramLeadRestoreSnapshot(activeLeadSnapshot),
         draftSnapshot: { ...session.draft, missingData: templateAwareMissingData }
       });
       try {
@@ -1051,7 +1060,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           ? await updateTelegramLeadRecordFromDraft({
               client,
               config,
-              lead: { leadId: activeSession.leadId, status: "needs_data", rawInput: activeSession.draft.rawInput, missingData: activeSession.draft.missingData },
+              lead: activeLeadSnapshot,
               draft: { ...session.draft, missingData: templateAwareMissingData },
               message,
               where: {

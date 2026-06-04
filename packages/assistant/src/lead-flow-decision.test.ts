@@ -27,6 +27,26 @@ describe("lead flow decision", () => {
     ).toEqual({ kind: "start_draft", source: "new_lead_command" });
   });
 
+  it("treats natural next-client wording as an explicit new-lead command", () => {
+    const newLeadPhrases = [
+      "Следующий клиент это Артём из Литвы",
+      "Следующий новый лид это школа авиа планеризма Dassu",
+      "Следующий потенциальный лид - Артур Grauberger",
+      "Новый клиент Tim Tibo на частный дом",
+      "Это новый лид"
+    ];
+
+    for (const content of newLeadPhrases) {
+      expect(
+        decideLeadFlow({
+          ...baseMessage,
+          channel: "telegram",
+          content
+        })
+      ).toEqual({ kind: "start_draft", source: "new_lead_command" });
+    }
+  });
+
   it("updates a selected web lead when source material is attached", () => {
     expect(
       decideLeadFlow({

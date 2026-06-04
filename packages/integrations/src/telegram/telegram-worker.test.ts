@@ -2852,6 +2852,136 @@ describe("telegram worker", () => {
     });
   });
 
+  it("creates a fresh lead from natural next-client wording even when a previous lead session is active", async () => {
+    const created: unknown[] = [];
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { OR?: unknown[]; workspaceId?: string } }).where;
+          if (where?.OR) {
+            return [];
+          }
+
+          if (where?.workspaceId) {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Previous Arthur lead",
+                requestType: "general collaboration inquiry",
+                projectAddress: null,
+                bgfM2: null,
+                missingData: ["projectAddress"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-3", leadId: "L-2026-003", status: "new" };
+        }),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-3", leadId: "L-2026-003", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Артём",
+        requestType: "building permit",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: "выставочная территория недалеко от Мюнхена",
+        bgfM2: 55,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "New client Artem from Lithuania.",
+        suggestedReply: "Created."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    await telegramDraftStore.save({
+      chatId: "12345",
+      workspaceId: "workspace-demo",
+      startedAt: "2026-06-04T11:50:52.000Z",
+      updatedAt: "2026-06-04T11:50:52.000Z",
+      sourceMessageIds: [1857],
+      telegramDraftMessageId: 1858,
+      leadId: "L-2026-002",
+      draft: {
+        source: "telegram",
+        clientName: "Артур Grauberger",
+        requestType: "general collaboration inquiry",
+        projectAddress: null,
+        bgfM2: null,
+        email: null,
+        phone: null,
+        rawInput: "Previous Arthur lead",
+        missingData: ["projectAddress"],
+        telegramSourceExternalId: "telegram:12345:1857",
+        temperature: "unknown",
+        isStandard: false
+      }
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1900 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 226,
+            message: {
+              message_id: 1859,
+              date: 1779297000,
+              chat: { id: 12345 },
+              text:
+                "Следующий клиент это Артём из Литвы. Сейчас мы очень близки к подписанию договора на получение разрешения для строительство для одного маленького домика размером 55 квадратных метров."
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 226 });
+
+    expect(created).toHaveLength(1);
+    expect(created[0]).toEqual({
+      data: expect.objectContaining({
+        leadId: "L-2026-003",
+        rawInput: expect.stringContaining("Следующий клиент это Артём"),
+        projectAddress: "выставочная территория недалеко от Мюнхена",
+        bgfM2: 55
+      })
+    });
+    expect(updates).toEqual([
+      {
+        where: { id: "lead-record-3" },
+        data: { rawInput: expect.stringContaining("Telegram lead card: telegram-bot:12345:1900") }
+      }
+    ]);
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
+  });
+
   it("creates a CRM lead immediately for incomplete document intake and asks for KP fields", async () => {
     const created: unknown[] = [];
     const client = {
@@ -4727,6 +4857,162 @@ describe("telegram worker", () => {
     expect(sendBody.reply_markup.inline_keyboard.flat()).toContainEqual({
       text: "Create new lead from this source",
       callback_data: "lead_recreate:L-2026-002:331"
+    });
+  });
+
+  it("restores display name when undoing an active Telegram draft-session update", async () => {
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { OR?: unknown[]; workspaceId?: string; leadId?: string } }).where;
+          if (where?.OR) {
+            return [];
+          }
+
+          if (where?.leadId === "L-2026-002") {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "new",
+                rawInput: "Polluted raw input",
+                displayName: "Arthur - inquiry in exhibition grounds",
+                requestType: "general collaboration inquiry",
+                projectAddress: "exhibition grounds near Munich",
+                bgfM2: 55,
+                missingData: []
+              }
+            ];
+          }
+
+          if (where?.workspaceId) {
+            return [
+              {
+                id: "lead-record-2",
+                leadId: "L-2026-002",
+                status: "needs_data",
+                rawInput: "Original Arthur raw input",
+                displayName: "Arthur - general collaboration inquiry",
+                requestType: "general collaboration inquiry",
+                projectAddress: null,
+                bgfM2: null,
+                missingData: ["projectAddress"]
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Артём",
+        requestType: "general collaboration inquiry",
+        urgency: "medium" as const,
+        temperature: "unknown" as const,
+        projectAddress: "exhibition grounds near Munich",
+        bgfM2: 55,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Artem details were incorrectly merged.",
+        suggestedReply: "Updated."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    await telegramDraftStore.save({
+      chatId: "12345",
+      workspaceId: "workspace-demo",
+      startedAt: "2026-06-04T11:50:52.000Z",
+      updatedAt: "2026-06-04T11:50:52.000Z",
+      sourceMessageIds: [1857],
+      telegramDraftMessageId: 1858,
+      leadId: "L-2026-002",
+      draft: {
+        source: "telegram",
+        clientName: "Arthur",
+        requestType: "general collaboration inquiry",
+        projectAddress: null,
+        bgfM2: null,
+        email: null,
+        phone: null,
+        rawInput: "Original Arthur raw input",
+        missingData: ["projectAddress"],
+        telegramSourceExternalId: "telegram:12345:1857",
+        temperature: "unknown",
+        isStandard: false
+      }
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1901 } }) };
+      }
+
+      if (url.includes("/answerCallbackQuery")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      telegramDraftStore,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 227,
+          message: {
+            message_id: 1859,
+            date: 1779297000,
+            chat: { id: 12345 },
+            text: "Artem from Lithuania, BGF 55, exhibition grounds near Munich"
+          }
+        }
+      ],
+      config
+    );
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 228,
+            callback_query: {
+              id: "callback-undo-active-session",
+              data: "lead_undo:L-2026-002:1859",
+              message: { message_id: 1901, date: 1779297010, chat: { id: 12345 } }
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 1, lastUpdateId: 228 });
+
+    expect(updates.at(-1)).toEqual({
+      where: { id: "lead-record-2" },
+      data: expect.objectContaining({
+        displayName: "Arthur - general collaboration inquiry",
+        status: "needs_data",
+        rawInput: "Original Arthur raw input",
+        projectAddress: null,
+        bgfM2: null,
+        missingData: ["projectAddress"]
+      })
     });
   });
 

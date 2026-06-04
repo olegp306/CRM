@@ -106,6 +106,20 @@ Strong Lead Creation signals:
 - "новый клиент"
 - "новый лид"
 
+Additional Telegram Lead Creation signals:
+
+- "следующий клиент"
+- "следующий новый лид"
+- "следующий потенциальный лид"
+- "следующий потенциальный клиент"
+- "новый клиент"
+- "это новый лид"
+- "next client"
+- "next potential lead"
+- "new client"
+
+When a Telegram message starts with "следующий клиент", "следующий новый лид", "следующий потенциальный лид", "следующий потенциальный клиент", "новый клиент", "это новый лид", "next client", "next potential lead", or "new client", treat it as a hard Lead Creation signal even if a previous Telegram lead or draft was active.
+
 Do not use Lead Creation if the main action is remind, call, write, follow up, check, ask later, schedule, return to topic, or create a task.
 
 If the user only sends contact data without an explicit action, ask a clarification question.

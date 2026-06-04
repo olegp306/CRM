@@ -95,7 +95,20 @@ export function createLeadChatOrchestratorResponse(input: LeadChatOrchestratorIn
 }
 
 export function isNewLeadCommand(content: string): boolean {
-  return /^(?:\/newlead(?:@\w+)?|\/new(?:@\w+)?\s+lead|new\s+lead)\b/i.test(content.trim());
+  const trimmed = content.trim();
+  return (
+    /^(?:\/newlead(?:@\w+)?|\/new(?:@\w+)?\s+lead|new\s+lead)\b/i.test(trimmed) ||
+    isNaturalNewLeadCommand(trimmed)
+  );
+}
+
+function isNaturalNewLeadCommand(content: string): boolean {
+  return (
+    /^(?:next|another)\s+(?:new\s+)?(?:potential\s+)?(?:lead|client|customer|contact)\b/i.test(content) ||
+    /^(?:this is|it is|that's|that is)\s+(?:a\s+)?new\s+(?:lead|client|customer|contact)\b/i.test(content) ||
+    /^(?:новый|следующий|следующая|следующее|еще один|ещё один)\s+(?:новый\s+)?(?:потенциальный\s+)?(?:лид|клиент|контакт|заказчик)(?=$|[\s,.:;!?-])/iu.test(content) ||
+    /^(?:это|нет[, ]+это)\s+(?:новый\s+)?(?:лид|клиент|контакт|заказчик)(?=$|[\s,.:;!?-])/iu.test(content)
+  );
 }
 
 export function isLeadChatSourceMaterial(message: AssistantChannelMessage): boolean {

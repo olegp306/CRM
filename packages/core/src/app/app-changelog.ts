@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.22",
-  title: "Telegram guide navigation and safer copy",
+  version: "0.4.23",
+  title: "Telegram new lead routing and undo restore",
   items: [
-    "The Telegram CRM guide now has quick links for Create, Search, Update, and Reminder command sections.",
-    "Guide example copy buttons now fall back to a textarea copy flow when the browser blocks the Clipboard API on local HTTP/IP pages.",
-    "Guide tests cover the quick links, ordered steps, and resilient copy behavior."
+    "Telegram now treats natural phrases like next client, next potential lead, new client, and their Russian equivalents as a fresh lead start.",
+    "The New Lead command clears the active Telegram draft/session before starting a new intake.",
+    "Undo for Telegram draft-session updates now restores the lead display name along with the other lead fields."
   ]
 };
