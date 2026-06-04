@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.21",
-  title: "Theme polish and copyable Telegram guide",
+  version: "0.4.22",
+  title: "Telegram guide navigation and safer copy",
   items: [
-    "Theme choices in Settings now visibly switch as soon as the user clicks a theme option.",
-    "Lead cards and lead tables use theme-aware surfaces so dark themes no longer leave white unreadable patches.",
-    "The Telegram CRM guide renders numbered steps correctly and lets users copy command examples with one click."
+    "The Telegram CRM guide now has quick links for Create, Search, Update, and Reminder command sections.",
+    "Guide example copy buttons now fall back to a textarea copy flow when the browser blocks the Clipboard API on local HTTP/IP pages.",
+    "Guide tests cover the quick links, ordered steps, and resilient copy behavior."
   ]
 };

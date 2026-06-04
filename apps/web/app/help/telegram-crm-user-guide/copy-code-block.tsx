@@ -3,13 +3,16 @@
 import { useState } from "react";
 
 export function CopyCodeBlock({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    const copied = await copyText(text);
+    setCopyState(copied ? "copied" : "failed");
+    window.setTimeout(() => setCopyState("idle"), 1600);
   }
+
+  const label =
+    copyState === "copied" ? "Скопировано" : copyState === "failed" ? "Выделите вручную" : "Скопировать";
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-muted">
@@ -20,8 +23,9 @@ export function CopyCodeBlock({ text }: { text: string }) {
           onClick={handleCopy}
           className="rounded-md border border-border bg-white px-2 py-1 text-xs font-semibold text-foreground transition hover:bg-emerald-50 hover:text-emerald-900"
           aria-label="Скопировать пример"
+          aria-live="polite"
         >
-          {copied ? "Скопировано" : "Скопировать"}
+          {label}
         </button>
       </div>
       <pre className="overflow-x-auto px-3 py-2 text-sm leading-6 whitespace-pre-wrap">
@@ -29,4 +33,38 @@ export function CopyCodeBlock({ text }: { text: string }) {
       </pre>
     </div>
   );
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Local HTTP/IP pages can block the Clipboard API, so use the legacy fallback.
+  }
+
+  return fallbackCopyText(text);
+}
+
+function fallbackCopyText(text: string): boolean {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.readOnly = true;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }

@@ -8,6 +8,13 @@ export const metadata = {
   description: "How to use the CRM Telegram bot for leads, search, updates, notes, and reminders."
 };
 
+const quickGuideLinks = [
+  { href: "#guide-create", label: "Create" },
+  { href: "#guide-search", label: "Search" },
+  { href: "#guide-update", label: "Update" },
+  { href: "#guide-reminder", label: "Reminder" }
+] as const;
+
 export default async function TelegramCrmUserGuidePage() {
   const markdown = await readTelegramCrmUserGuide();
   const blocks = parseMarkdownBlocks(markdown);
@@ -21,6 +28,17 @@ export default async function TelegramCrmUserGuidePage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Откройте эту страницу с кнопки Guide в Telegram. Команды и примеры можно выделять и копировать прямо отсюда.
           </p>
+          <nav aria-label="Quick guide sections" className="mt-4 flex flex-nowrap gap-2 overflow-x-auto">
+            {quickGuideLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="whitespace-nowrap rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-emerald-50 hover:text-emerald-900"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
         </div>
         <MarkdownBlocks blocks={blocks} />
       </article>
@@ -117,17 +135,26 @@ function MarkdownBlockView({ block }: { block: MarkdownBlock }) {
 }
 
 function createHeading(level: 1 | 2 | 3 | 4, text: string): ReactNode {
+  const id = getGuideHeadingId(text) ?? undefined;
   const className = {
     1: "text-2xl font-semibold",
-    2: "mt-3 text-xl font-semibold",
-    3: "mt-2 text-lg font-semibold",
-    4: "mt-1 text-base font-semibold"
+    2: "mt-3 scroll-mt-4 text-xl font-semibold",
+    3: "mt-2 scroll-mt-4 text-lg font-semibold",
+    4: "mt-1 scroll-mt-4 text-base font-semibold"
   }[level];
 
-  if (level === 1) return <h1 className={className}>{text}</h1>;
-  if (level === 2) return <h2 className={className}>{text}</h2>;
-  if (level === 3) return <h3 className={className}>{text}</h3>;
-  return <h4 className={className}>{text}</h4>;
+  if (level === 1) return <h1 id={id} className={className}>{text}</h1>;
+  if (level === 2) return <h2 id={id} className={className}>{text}</h2>;
+  if (level === 3) return <h3 id={id} className={className}>{text}</h3>;
+  return <h4 id={id} className={className}>{text}</h4>;
+}
+
+function getGuideHeadingId(text: string): string | null {
+  if (/Создание нового лида/i.test(text)) return "guide-create";
+  if (/Поиск лида/i.test(text)) return "guide-search";
+  if (/Редактирование лида/i.test(text)) return "guide-update";
+  if (/Напоминания/i.test(text)) return "guide-reminder";
+  return null;
 }
 
 function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
