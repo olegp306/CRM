@@ -11,6 +11,14 @@ describe("AppChrome", () => {
     expect(source).toContain("v{appVersion}");
   });
 
+  it("renders a visible non-production environment marker", () => {
+    expect(source).toContain("normalizeDeploymentEnvironmentLabel");
+    expect(source).toContain("TEST");
+    expect(source).toContain("STAGING");
+    expect(source).toContain("environmentLabel");
+    expect(source).toContain("amber-100");
+  });
+
   it("opens a changelog dialog from the app version marker", () => {
     expect(source).toContain("isChangelogOpen");
     expect(source).toContain("Open changelog for version");

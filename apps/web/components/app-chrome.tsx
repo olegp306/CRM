@@ -21,16 +21,26 @@ type AppChromeProps = {
   workspaceName: string;
   userName: string;
   appVersion: string;
+  deploymentEnvironment?: string;
   changelog: AppChromeChangelog;
 };
 
-export function AppChrome({ children, primaryStyle, workspaceName, userName, appVersion, changelog }: AppChromeProps) {
+export function AppChrome({
+  children,
+  primaryStyle,
+  workspaceName,
+  userName,
+  appVersion,
+  deploymentEnvironment,
+  changelog
+}: AppChromeProps) {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const isPending = pendingHref !== null;
   const pendingPresentation = getRoutePendingPresentation(isPending);
   const pendingPreview = getRoutePendingPreview(pendingHref);
+  const environmentLabel = normalizeDeploymentEnvironmentLabel(deploymentEnvironment);
 
   useEffect(() => {
     setPendingHref(null);
@@ -52,14 +62,20 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
       />
       <div className="min-w-0">
         <header className="flex h-14 items-center justify-between border-b border-border bg-white px-4 lg:justify-end lg:px-6">
-          <button
-            type="button"
-            onClick={() => setIsChangelogOpen(true)}
-            className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:text-foreground lg:hidden"
-            aria-label={`Mobile version marker v${appVersion}. Open changelog for version ${appVersion}`}
-          >
-            v{appVersion}
-          </button>
+          <div className="flex items-center gap-2 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setIsChangelogOpen(true)}
+              className="rounded-md border border-border bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground transition hover:text-foreground"
+              aria-label={`Mobile version marker v${appVersion}. Open changelog for version ${appVersion}`}
+            >
+              v{appVersion}
+            </button>
+            <EnvironmentBadge environmentLabel={environmentLabel} />
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
+            <EnvironmentBadge environmentLabel={environmentLabel} />
+          </div>
           <p className="text-xs font-semibold text-muted-foreground">{userName}</p>
         </header>
         <AppMobileTabs pathname={pathname} pendingHref={pendingHref} onNavigate={setPendingHref} locale="en" />
@@ -72,6 +88,38 @@ export function AppChrome({ children, primaryStyle, workspaceName, userName, app
       <AssistantDrawer />
       {isChangelogOpen ? <ChangelogDialog changelog={changelog} onClose={() => setIsChangelogOpen(false)} /> : null}
     </div>
+  );
+}
+
+function normalizeDeploymentEnvironmentLabel(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === "production" || normalized === "prod") {
+    return null;
+  }
+
+  if (normalized === "test" || normalized === "testing") {
+    return "TEST";
+  }
+
+  if (normalized === "staging" || normalized === "stage") {
+    return "STAGING";
+  }
+
+  return normalized.toUpperCase();
+}
+
+function EnvironmentBadge({ environmentLabel }: { environmentLabel: string | null }) {
+  if (!environmentLabel) {
+    return null;
+  }
+
+  return (
+    <span
+      className="rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-black uppercase text-amber-950 shadow-sm"
+      aria-label={`${environmentLabel} environment`}
+    >
+      {environmentLabel}
+    </span>
   );
 }
 

@@ -33,7 +33,8 @@ For production:
 
 1. Add the same required variables in the production host dashboard.
 2. Set `DATABASE_URL` to the production Postgres connection string.
-3. Run `pnpm db:deploy` before serving production traffic.
+3. Set `CRM_REQUIRE_DEPLOYMENT_CONFIRMATION="true"` and explicitly confirm whether this is `test` or `production`.
+4. Run `pnpm db:deploy` before serving production traffic.
 
 ## Required Now
 
@@ -92,6 +93,7 @@ The Telegram worker reads the repository root `.env` when started from the monor
 
 ```env
 TELEGRAM_BOT_TOKEN=""
+TELEGRAM_BOT_ENV=""
 TELEGRAM_ALLOWED_CHAT_IDS=""
 TELEGRAM_WORKSPACE_ID="workspace-demo"
 TELEGRAM_POLL_INTERVAL_MS="5000"
@@ -100,6 +102,13 @@ TELEGRAM_TEST_CHAT_ID=""
 TELEGRAM_TEST_MESSAGE_ID=""
 TELEGRAM_TEST_RECEIVED_AT=""
 ```
+
+Use a separate Telegram bot token for each deployed environment:
+
+- test bot: `CRM_DEPLOYMENT_ENV="test"` and `TELEGRAM_BOT_ENV="test"`;
+- production bot: `CRM_DEPLOYMENT_ENV="production"` and `TELEGRAM_BOT_ENV="production"`.
+
+When `CRM_REQUIRE_DEPLOYMENT_CONFIRMATION="true"`, the Telegram worker refuses to start if the bot marker does not match the selected environment.
 
 Run one polling pass locally with:
 

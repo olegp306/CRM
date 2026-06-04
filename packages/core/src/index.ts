@@ -6,6 +6,7 @@ export * from "./clients/client-matching";
 export * from "./clients/client-validation";
 export * from "./crm/dictionaries";
 export * from "./env/validate-env";
+export * from "./env/deployment-isolation";
 export * from "./ids/business-id";
 export * from "./leads/missing-data";
 export * from "./leads/standard-classifier";

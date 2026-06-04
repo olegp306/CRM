@@ -16,7 +16,15 @@ type AppSidebarProps = {
   onNavigate: (href: string) => void;
 };
 
-export function AppSidebar({ locale = "en", pathname, pendingHref, brandName, appVersion, onVersionClick, onNavigate }: AppSidebarProps) {
+export function AppSidebar({
+  locale = "en",
+  pathname,
+  pendingHref,
+  brandName,
+  appVersion,
+  onVersionClick,
+  onNavigate
+}: AppSidebarProps) {
   const items = getAppNavigationItems(locale);
   const pendingItem = items.find((item) => item.href === pendingHref);
   const displayHref = getNavigationDisplayHref(pathname, pendingHref);

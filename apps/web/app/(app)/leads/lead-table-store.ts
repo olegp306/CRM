@@ -1,7 +1,6 @@
 export type LeadTableColumnKey =
   | "leadId"
   | "leadName"
-  | "loopStage"
   | "clientRecordId"
   | "createdDate"
   | "temperature"
@@ -144,7 +143,6 @@ export type LeadHistoryItem = {
   title: string;
   at: string;
   actor: "Telegram" | "CRM" | "Operator";
-  stageLabel: string;
   description: string;
 };
 
@@ -167,25 +165,6 @@ export type LeadChannelHistoryEvent = {
   metadata: unknown;
 };
 
-export type LeadLoopStepMode = "manual" | "automatic" | "branch";
-
-export type LeadLoopStepStatus = "implemented" | "partial" | "gap";
-
-export type LeadLoopTimelineStep = {
-  id: number;
-  title: string;
-  description: string;
-  mode: LeadLoopStepMode;
-  status: LeadLoopStepStatus;
-  isCurrent: boolean;
-  progressState: "done" | "current" | "upcoming";
-};
-
-export type LeadLoopTimelineViewModel = {
-  currentStepId: number;
-  steps: LeadLoopTimelineStep[];
-};
-
 export type LeadSourceReference = {
   label: string;
   url: string | null;
@@ -202,7 +181,6 @@ export type LeadSummaryInfoItem = {
 export const leadTableColumns: LeadTableColumn[] = [
   { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
   { key: "leadName", label: "Lead name", enableSorting: true, defaultSize: 240, maxSize: 420 },
-  { key: "loopStage", label: "Loop stage", enableSorting: true, defaultSize: 132 },
   { key: "clientRecordId", label: "Client ID", enableSorting: true, defaultSize: 160 },
   { key: "createdDate", label: "Created", enableSorting: true, defaultSize: 124 },
   { key: "temperature", label: "Temperature", enableSorting: true, defaultSize: 132 },
@@ -569,7 +547,6 @@ export function createLeadTableRows(
     id: record.id,
     leadId: record.leadId,
     leadName: record.displayName ?? record.leadId,
-    loopStage: formatLeadLoopStage(record),
     clientRecordId: record.clientRecordId ?? "",
     createdDate: formatDate(record.createdDate),
     temperature: record.temperature ?? "",
@@ -866,7 +843,6 @@ export function createLeadHistory(
       title: "Lead created",
       at: lead.createdDate || "Unknown date",
       actor: lead.source === "telegram" ? "Telegram" : "Operator",
-      stageLabel: "Step 4",
       description: `${lead.leadId} was created from ${lead.source || "web"} intake.`
     }
   ];
@@ -887,7 +863,6 @@ export function createLeadHistory(
     title: "Fields imported",
     at: lead.createdDate || "Unknown date",
     actor: lead.source === "telegram" ? "Telegram" : "Operator",
-    stageLabel: "Steps 2-4",
     description:
       importedFields.length > 0
         ? `Captured ${importedFields.join(", ")}.`
@@ -898,7 +873,6 @@ export function createLeadHistory(
     title: "Automatic checks",
     at: lead.createdDate || "Unknown date",
     actor: "CRM",
-    stageLabel: "Step 5",
     description: createLeadAutomaticCheckDescription(lead)
   });
 
@@ -907,7 +881,6 @@ export function createLeadHistory(
       title: "KP generated",
       at: lead.createdDate || "Unknown date",
       actor: "CRM",
-      stageLabel: "Step 6",
       description: `Commercial proposal record ${lead.kpGeneratedDocumentId} is available.`
     });
   }
@@ -917,7 +890,6 @@ export function createLeadHistory(
       title: "Undo to KP review",
       at: "Current state",
       actor: "Operator",
-      stageLabel: "Step 5",
       description: "The lead is back before KP sent; review the proposal before marking it sent again."
     });
   }
@@ -927,7 +899,6 @@ export function createLeadHistory(
       title: "KP sent",
       at: lead.kpSentDate,
       actor: "Operator",
-      stageLabel: "Step 7",
       description: "Commercial proposal was marked as sent to the client."
     });
   }
@@ -937,7 +908,6 @@ export function createLeadHistory(
       title: "Follow-up scheduled",
       at: lead.followup1Date,
       actor: "CRM",
-      stageLabel: "Step 8",
       description: `Follow-up is scheduled${lead.followupStatus ? ` with status ${lead.followupStatus}` : ""}.`
     });
   }
@@ -947,7 +917,6 @@ export function createLeadHistory(
       title: "Outcome captured",
       at: "Current state",
       actor: "Operator",
-      stageLabel: "Step 9",
       description: lead.projectRecordId ? `Converted toward project ${lead.projectRecordId}.` : `Outcome: ${lead.outcome}.`
     });
   }
@@ -985,7 +954,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: "Lead created",
           at,
           actor,
-          stageLabel: "Step 4",
           description: `${actor} created lead ${leadId} with ${fields}.`,
           sortTime
         }
@@ -998,7 +966,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: "Lead updated",
           at,
           actor,
-          stageLabel: "Steps 2-4",
           description: `${actor} updated ${fields}.`,
           sortTime
         }
@@ -1010,7 +977,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: channelEvent.channel === "telegram" ? "Telegram note" : "Assistant note",
           at,
           actor,
-          stageLabel: "Interaction",
           description: `Request: add note. Action: note saved. ${String(channelEvent.summary ?? "")}`.trim(),
           sortTime
         }
@@ -1032,7 +998,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title,
           at,
           actor,
-          stageLabel: "Duplicate check",
           description,
           sortTime
         }
@@ -1044,7 +1009,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: "KP generated",
           at,
           actor,
-          stageLabel: "Step 6",
           description: `${actor} generated commercial proposal ${String(channelEvent.documentId ?? "")}.`,
           sortTime
         }
@@ -1055,7 +1019,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: "KP sent",
           at,
           actor,
-          stageLabel: "Step 7",
           description: `${actor} marked the commercial proposal as sent.`,
           sortTime
         }
@@ -1066,7 +1029,6 @@ function createLeadChannelHistoryItem(event: LeadChannelHistoryEvent, leadId: st
           title: "Undo to KP review",
           at,
           actor,
-          stageLabel: "Step 5",
           description: `${actor} moved the lead back before KP sent.`,
           sortTime
         }
@@ -1174,139 +1136,6 @@ export function canMarkLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentI
 
 export function canUndoLeadKpSent(lead: Pick<LeadTableRow, "kpGeneratedDocumentId" | "kpSentDate">): boolean {
   return lead.kpGeneratedDocumentId.trim().length > 0 && lead.kpSentDate.trim().length > 0;
-}
-
-export const leadLoopTimelineSteps: Array<Omit<LeadLoopTimelineStep, "isCurrent" | "progressState">> = [
-  {
-    id: 1,
-    title: "Send raw Telegram material",
-    description: "Operator sends text, photos, or PDF material that describes the potential project.",
-    mode: "manual",
-    status: "implemented"
-  },
-  {
-    id: 2,
-    title: "AI extracts lead fields",
-    description: "Telegram intake parses client, request, address, BGF, contacts, and source material.",
-    mode: "automatic",
-    status: "partial"
-  },
-  {
-    id: 3,
-    title: "Ask for missing data",
-    description: "The bot keeps a draft and asks for fields required for a commercial proposal.",
-    mode: "automatic",
-    status: "implemented"
-  },
-  {
-    id: 4,
-    title: "Create client and lead",
-    description: "CRM creates the lead record and links the source material for later review.",
-    mode: "automatic",
-    status: "partial"
-  },
-  {
-    id: 5,
-    title: "Standard vs custom branch",
-    description: "CRM classifies whether standard pricing can be used or manual pricing is needed.",
-    mode: "branch",
-    status: "partial"
-  },
-  {
-    id: 6,
-    title: "Review and send KP",
-    description: "A generated KP is ready for review; PDF and DOCX can be downloaded from the card.",
-    mode: "manual",
-    status: "partial"
-  },
-  {
-    id: 7,
-    title: "Mark KP sent",
-    description: "Operator confirms that the commercial proposal was sent to the client.",
-    mode: "manual",
-    status: "partial"
-  },
-  {
-    id: 8,
-    title: "Schedule follow-up",
-    description: "CRM stores the first follow-up date after the KP was sent.",
-    mode: "automatic",
-    status: "partial"
-  },
-  {
-    id: 9,
-    title: "Reminder and follow-up draft",
-    description: "CRM surfaces due follow-ups and prepares the next client message.",
-    mode: "automatic",
-    status: "partial"
-  }
-];
-
-export function createLeadLoopTimelineViewModel(
-  lead: Pick<
-    LeadTableRow,
-    "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate" | "followup1Date" | "outcome" | "projectRecordId"
-  > | null
-): LeadLoopTimelineViewModel {
-  const currentStepId = resolveCurrentLeadLoopStepId(lead);
-
-  return {
-    currentStepId,
-    steps: leadLoopTimelineSteps.map((step) => ({
-      ...step,
-      isCurrent: step.id === currentStepId,
-      progressState: step.id < currentStepId ? "done" : step.id === currentStepId ? "current" : "upcoming"
-    }))
-  };
-}
-
-function resolveCurrentLeadLoopStepId(
-  lead: Pick<
-    LeadTableRow,
-    "missingData" | "isStandard" | "kpGeneratedDocumentId" | "kpSentDate" | "followup1Date" | "outcome" | "projectRecordId"
-  > | null
-): number {
-  if (!lead) {
-    return 5;
-  }
-
-  if (lead.outcome || lead.projectRecordId) {
-    return 9;
-  }
-
-  if (lead.followup1Date && lead.kpSentDate) {
-    return 8;
-  }
-
-  if (lead.kpGeneratedDocumentId && !lead.kpSentDate) {
-    return 5;
-  }
-
-  if (lead.missingData) {
-    return 3;
-  }
-
-  if (lead.isStandard === "yes" || lead.isStandard === "no") {
-    return 5;
-  }
-
-  return 4;
-}
-
-function formatLeadLoopStage(record: LeadTableRecord): string {
-  const row = {
-    missingData: formatMissingData(record.missingData),
-    isStandard: formatBoolean(record.isStandard),
-    kpGeneratedDocumentId: record.kpGeneratedDocumentId ?? "",
-    kpSentDate: formatDate(record.kpSentDate),
-    followup1Date: formatDate(record.followup1Date),
-    outcome: record.outcome ?? "",
-    projectRecordId: record.projectRecordId ?? ""
-  };
-  const stageId = resolveCurrentLeadLoopStepId(row);
-  const title = leadLoopTimelineSteps.find((step) => step.id === stageId)?.title ?? "Unknown";
-
-  return `${stageId}. ${title}`;
 }
 
 function normalizeCalendarDate(value: Date | string | null): string | null {

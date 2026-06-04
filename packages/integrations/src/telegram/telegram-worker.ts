@@ -29,7 +29,7 @@ import {
   type CrmOrchestratorClient,
   type LeadSearchRecord
 } from "@app/assistant";
-import { getNextBusinessId } from "@app/core";
+import { assertDeploymentDatabaseIsolation, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
 import {
   createAssistantGeneratedDocumentPrismaStore,
@@ -1770,6 +1770,7 @@ async function ensureTelegramBotCommandMenu(config: Pick<TelegramWorkerConfig, "
 
 export async function runTelegramWorkerFromEnv(env = process.env): Promise<TelegramWorkerResult> {
   loadRootEnv();
+  assertDeploymentDatabaseIsolation(env);
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const apiKey = env.OPENAI_API_KEY;
 

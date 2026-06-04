@@ -1,15 +1,15 @@
 [Unit]
-Description=CRM staging web app
+Description=CRM test web app
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/apps/crm-staging/apps/web
+WorkingDirectory=/opt/apps/crm-test/apps/web
 Environment=NODE_ENV=production
 Environment=PORT=3002
 Environment=CRM_REQUIRE_DEPLOYMENT_CONFIRMATION=true
-EnvironmentFile=/opt/apps/crm-staging/.env
+EnvironmentFile=/opt/apps/crm-test/.env
 ExecStart=/usr/bin/pnpm exec next start -H 0.0.0.0 -p 3002
 Restart=always
 RestartSec=5

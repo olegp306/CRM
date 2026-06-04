@@ -10,7 +10,6 @@ import {
   createLeadContextItems,
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
-  createLeadLoopTimelineViewModel,
   createLeadSummaryInfo,
   createLeadTableRows,
   filterLeadRowsForUrlSearch,
@@ -32,7 +31,6 @@ describe("lead table model", () => {
     expect(leadTableColumns.map((column) => column.key)).toEqual([
       "leadId",
       "leadName",
-      "loopStage",
       "clientRecordId",
       "createdDate",
       "temperature",
@@ -393,7 +391,6 @@ describe("lead table model", () => {
       id: "lead-record-1",
       leadId: "L-2026-001",
       leadName: "Irina Schneider - Neubau EFH in Bad Aibling",
-      loopStage: "5. Standard vs custom branch",
       createdDate: "2026-05-21",
       desiredStart: "2026-06-01",
       desiredMoveIn: "",
@@ -762,8 +759,7 @@ describe("lead table model", () => {
     ]);
     expect(history[0]).toMatchObject({
       at: "2026-05-21",
-      actor: "Telegram",
-      stageLabel: "Step 4"
+      actor: "Telegram"
     });
     expect(history[1].description).toContain("requestType, projectAddress, bgfM2, budgetEur, isStandard");
     expect(history[2].description).toContain("Standard pricing branch is available");
@@ -868,7 +864,6 @@ describe("lead table model", () => {
     expect(history[0]).toMatchObject({
       title: "Telegram note",
       actor: "Telegram",
-      stageLabel: "Interaction",
       description: "Request: add note. Action: note saved. Sent the client a birthday gift"
     });
   });
@@ -909,7 +904,6 @@ describe("lead table model", () => {
     expect(history[0]).toMatchObject({
       title: "Needs clarification",
       actor: "Operator",
-      stageLabel: "Duplicate check",
       description: "Operator found a possible existing lead match by projectAddress."
     });
   });
@@ -936,8 +930,7 @@ describe("lead table model", () => {
 
     expect(history.map((item) => item.title)).toContain("Undo to KP review");
     expect(history.find((item) => item.title === "Undo to KP review")).toMatchObject({
-      actor: "Operator",
-      stageLabel: "Step 5"
+      actor: "Operator"
     });
   });
 
@@ -984,60 +977,4 @@ describe("lead table model", () => {
     expect(canUndoLeadKpSent({ kpGeneratedDocumentId: "", kpSentDate: "2026-05-21" })).toBe(false);
   });
 
-  it("builds the nine-step Loop 1 timeline with mode and current-step markers", () => {
-    const timeline = createLeadLoopTimelineViewModel({
-      missingData: "",
-      isStandard: "yes",
-      kpGeneratedDocumentId: "D-telegram-12345-13",
-      kpSentDate: "",
-      followup1Date: "",
-      outcome: "",
-      projectRecordId: ""
-    });
-
-    expect(timeline.steps).toHaveLength(9);
-    expect(timeline.steps.map((step) => step.mode)).toEqual([
-      "manual",
-      "automatic",
-      "automatic",
-      "automatic",
-      "branch",
-      "manual",
-      "manual",
-      "automatic",
-      "automatic"
-    ]);
-    expect(timeline.currentStepId).toBe(5);
-    expect(timeline.steps.map((step) => step.progressState)).toEqual([
-      "done",
-      "done",
-      "done",
-      "done",
-      "current",
-      "upcoming",
-      "upcoming",
-      "upcoming",
-      "upcoming"
-    ]);
-    expect(timeline.steps.find((step) => step.id === 5)).toMatchObject({
-      title: "Standard vs custom branch",
-      description: "CRM classifies whether standard pricing can be used or manual pricing is needed.",
-      isCurrent: true
-    });
-  });
-
-  it("moves the Loop 1 current marker to follow-up after KP is sent", () => {
-    const timeline = createLeadLoopTimelineViewModel({
-      missingData: "",
-      isStandard: "yes",
-      kpGeneratedDocumentId: "D-telegram-12345-13",
-      kpSentDate: "2026-05-23",
-      followup1Date: "2026-05-30",
-      outcome: "",
-      projectRecordId: ""
-    });
-
-    expect(timeline.currentStepId).toBe(8);
-    expect(timeline.steps.find((step) => step.id === 8)?.isCurrent).toBe(true);
-  });
 });

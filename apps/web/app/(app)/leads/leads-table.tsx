@@ -22,7 +22,6 @@ import {
   createLeadHistory,
   createLeadKpMailtoHref,
   createKpDownloadBaseName,
-  createLeadLoopTimelineViewModel,
   createLeadSummaryInfo,
   filterLeadRowsForUrlSearch,
   getLeadSourceMaterials,
@@ -42,8 +41,6 @@ import {
   type LeadContextPanelItem,
   type LeadHistoryItem,
   type LeadSummaryInfoItem,
-  type LeadLoopStepMode,
-  type LeadLoopTimelineStep,
   type LeadTableColumnKey,
   type LeadTableRow,
   type LeadTableViewMode
@@ -426,34 +423,6 @@ export function LeadsTable({ rows, updateLeadAction, markLeadKpSentAction, undoL
   );
 }
 
-function getCompactLoopStepClassName(step: LeadLoopTimelineStep): string {
-  const doneByMode: Record<LeadLoopStepMode, string> = {
-    manual: "border-amber-300 bg-amber-100 text-amber-900",
-    automatic: "border-emerald-300 bg-emerald-100 text-emerald-900",
-    branch: "border-sky-300 bg-sky-100 text-sky-900"
-  };
-  const upcomingByMode: Record<LeadLoopStepMode, string> = {
-    manual: "border-amber-100 bg-amber-50/40 text-amber-900/35",
-    automatic: "border-emerald-100 bg-emerald-50/40 text-emerald-900/35",
-    branch: "border-sky-100 bg-sky-50/40 text-sky-900/35"
-  };
-
-  if (step.progressState === "current") {
-    return `${doneByMode[step.mode]} ring-2 ring-foreground ring-offset-1`;
-  }
-
-  return step.progressState === "done" ? doneByMode[step.mode] : upcomingByMode[step.mode];
-}
-
-function getLoopModeBadgeClassName(mode: LeadLoopStepMode): string {
-  const classes: Record<LeadLoopStepMode, string> = {
-    manual: "bg-amber-100 text-amber-800",
-    automatic: "bg-emerald-100 text-emerald-800",
-    branch: "bg-sky-100 text-sky-800"
-  };
-  return classes[mode];
-}
-
 function TruncatedCell({ value }: { value: string }) {
   return <span className="block max-w-full truncate text-foreground" title={value}>{value || "—"}</span>;
 }
@@ -581,8 +550,6 @@ function LeadEditor({
   const leadContextItems = createLeadContextItems(lead);
   const history = createLeadHistory(lead);
   const calendar = createLeadCalendarViewModel(lead);
-  const timeline = createLeadLoopTimelineViewModel(lead);
-  const currentStep = timeline.steps.find((step) => step.isCurrent) ?? timeline.steps[0];
   const nextAction = actionPlan[0];
 
   return (
@@ -615,17 +582,8 @@ function LeadEditor({
               Created <span className="font-semibold text-foreground">{lead.createdDate || "No data"}</span>
             </p>
           </div>
-          <div className="grid">
-            <span
-              title={currentStep.description}
-              className={`w-full rounded-md px-2 py-1 text-left text-[11px] font-bold ${getLoopModeBadgeClassName(currentStep.mode)}`}
-            >
-              Stage {currentStep.id} - {currentStep.title}
-            </span>
-          </div>
         </div>
 
-        <CompactLeadLoopProgress timeline={timeline} />
         <LeadNextActionRow lead={lead} nextAction={nextAction} />
         <LeadKpSummary lead={lead} />
 
@@ -1169,7 +1127,6 @@ function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
                   {item.at} · {item.actor}
                 </p>
               </div>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">{item.stageLabel}</span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
           </article>
@@ -1204,29 +1161,11 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
   );
 }
 
-function CompactLeadLoopProgress({ timeline }: { timeline: ReturnType<typeof createLeadLoopTimelineViewModel> }) {
-  return (
-    <ol className="grid grid-cols-9 gap-1">
-      {timeline.steps.map((step) => (
-        <li key={step.id}>
-          <button
-            type="button"
-            title={`${step.id}. ${step.title}: ${step.description}`}
-            className={`grid h-8 w-full place-items-center rounded-md border text-[11px] font-bold transition ${getCompactLoopStepClassName(step)}`}
-          >
-            {step.id}
-          </button>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
   const fields = [
     { label: "Temperature", value: lead.temperature, badge: <TemperatureBadge value={lead.temperature} /> },
-    { label: "Request", value: lead.requestType },
-    { label: "Address", value: lead.projectAddress },
+    { label: "Request", value: lead.requestType, wrap: true },
+    { label: "Address", value: lead.projectAddress, wrap: true },
     { label: "BGF", value: lead.bgfM2 ? `${lead.bgfM2} m2` : "" },
     { label: "Budget", value: lead.budgetEur ? `${lead.budgetEur} EUR` : "" },
     { label: "Missing", value: lead.missingData || "No data" },
@@ -1238,7 +1177,11 @@ function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
       {fields.map((field) => (
         <div key={field.label} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 text-xs leading-tight">
           <span className="text-muted-foreground">{field.label}</span>
-          {field.badge ?? <span className="truncate font-semibold text-foreground">{field.value || "No data"}</span>}
+          {field.badge ?? (
+            <span className={`${field.wrap ? "whitespace-normal break-words" : "truncate"} font-semibold text-foreground`}>
+              {field.value || "No data"}
+            </span>
+          )}
         </div>
       ))}
     </div>
