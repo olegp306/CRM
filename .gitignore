@@ -7,6 +7,8 @@ dist/
 dev-server.log
 dev-server-*.log
 dev-server.*.log
+.codex-next-*.log
+.codex-run-dev-*.ps1
 .local-logs/
 .codex_tmp_content_factory/
 .tmp/
