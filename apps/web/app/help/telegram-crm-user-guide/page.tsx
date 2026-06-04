@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ReactNode } from "react";
+import { CopyCodeBlock } from "./copy-code-block";
 
 export const metadata = {
   title: "Telegram CRM User Guide",
@@ -48,6 +49,7 @@ type MarkdownBlock =
   | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
   | { type: "paragraph"; text: string }
   | { type: "list"; items: string[] }
+  | { type: "orderedList"; items: string[] }
   | { type: "code"; text: string }
   | { type: "tip"; children: MarkdownBlock[] }
   | { type: "table"; rows: string[][] };
@@ -76,12 +78,16 @@ function MarkdownBlockView({ block }: { block: MarkdownBlock }) {
           ))}
         </ul>
       );
-    case "code":
+    case "orderedList":
       return (
-        <pre className="overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 text-sm leading-6">
-          <code>{block.text}</code>
-        </pre>
+        <ol className="list-decimal space-y-1 pl-5 text-sm leading-6">
+          {block.items.map((item, index) => (
+            <li key={index}>{renderInlineMarkdown(item)}</li>
+          ))}
+        </ol>
       );
+    case "code":
+      return <CopyCodeBlock text={block.text} />;
     case "tip":
       return (
         <div className="grid gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-950">
@@ -194,6 +200,16 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       continue;
     }
 
+    if (/^\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length && /^\d+\.\s+/.test(lines[index] ?? "")) {
+        items.push((lines[index] ?? "").replace(/^\d+\.\s+/, "").trim());
+        index += 1;
+      }
+      blocks.push({ type: "orderedList", items });
+      continue;
+    }
+
     const paragraphLines: string[] = [];
     while (
       index < lines.length &&
@@ -202,6 +218,7 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       !(lines[index] ?? "").startsWith("```") &&
       !(lines[index] ?? "").startsWith("> [!TIP]") &&
       !(lines[index] ?? "").startsWith("- ") &&
+      !/^\d+\.\s+/.test(lines[index] ?? "") &&
       !((lines[index] ?? "").startsWith("|") && (lines[index] ?? "").endsWith("|"))
     ) {
       paragraphLines.push((lines[index] ?? "").trim());

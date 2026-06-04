@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const pageSource = readFileSync(join(__dirname, "page.tsx"), "utf8");
+const copySource = readFileSync(join(__dirname, "copy-code-block.tsx"), "utf8");
 const guideSource = readFileSync(join(__dirname, "..", "..", "..", "..", "..", "docs", "TELEGRAM_CRM_USER_GUIDE_RU.md"), "utf8");
 
 describe("Telegram CRM user guide page", () => {
@@ -13,5 +14,14 @@ describe("Telegram CRM user guide page", () => {
     expect(guideSource).toContain("> [!TIP]");
     expect(guideSource).not.toContain("<details");
     expect(guideSource).not.toContain("<summary");
+  });
+
+  it("renders numbered steps as ordered lists and makes examples copyable", () => {
+    expect(pageSource).toContain("orderedList");
+    expect(pageSource).toContain("list-decimal");
+    expect(pageSource).toContain("CopyCodeBlock");
+    expect(copySource).toContain("navigator.clipboard.writeText");
+    expect(copySource).toContain("Скопировать");
+    expect(guideSource).toContain("1. Выберите");
   });
 });

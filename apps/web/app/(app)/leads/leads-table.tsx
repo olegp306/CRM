@@ -245,7 +245,7 @@ export function LeadsTable({
   return (
     <div className="grid gap-4">
       <section className="grid gap-3 md:hidden">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3">
           <div>
             <h2 className="text-base font-semibold">Leads</h2>
             <p className="text-xs text-muted-foreground">
@@ -260,7 +260,7 @@ export function LeadsTable({
                 title={mode.description}
                 onClick={() => setMobileViewMode(mode.id)}
                 className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
-                  mobileViewMode === mode.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  mobileViewMode === mode.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {mode.label}
@@ -277,7 +277,7 @@ export function LeadsTable({
                   key={lead.id}
                   type="button"
                   onClick={() => setSelectedLeadId(lead.id)}
-                  className="grid gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-left shadow-sm transition hover:border-foreground/20"
+                  className="grid gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-left shadow-sm transition hover:border-foreground/20"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -302,12 +302,12 @@ export function LeadsTable({
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">No leads matched this search.</div>
+            <div className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">No leads matched this search.</div>
           )
         ) : null}
       </section>
 
-      <section className={`${mobileViewMode === "cards" ? "hidden md:block" : "block"} min-w-0 overflow-hidden rounded-lg border border-border bg-white`}>
+      <section className={`${mobileViewMode === "cards" ? "hidden md:block" : "block"} min-w-0 overflow-hidden rounded-lg border border-border bg-surface`}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">Lead table</h2>
@@ -331,7 +331,7 @@ export function LeadsTable({
                   title={mode.description}
                   onClick={() => handleViewModeChange(mode.id)}
                   className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
-                    viewMode === mode.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    viewMode === mode.id ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {mode.label}
@@ -342,7 +342,7 @@ export function LeadsTable({
               <summary className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm font-semibold">
                 Columns
               </summary>
-              <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-white p-3 shadow-xl">
+              <div className="absolute right-0 z-20 mt-2 grid max-h-96 w-64 gap-2 overflow-auto rounded-lg border border-border bg-surface p-3 shadow-xl">
                 {table.getAllLeafColumns().map((column) => (
                   <label key={column.id} className="flex items-center gap-2 text-sm">
                     <input
@@ -396,7 +396,7 @@ export function LeadsTable({
                     key={row.id}
                     onClick={viewMode === "inline" ? undefined : () => setSelectedLeadId(row.original.id)}
                     className={`${viewMode === "inline" ? "" : "cursor-pointer"} transition hover:bg-muted/60 ${
-                      row.original.id === selectedLeadId ? "bg-primary/5" : "bg-white"
+                      row.original.id === selectedLeadId ? "bg-primary/5" : "bg-surface"
                     }`}
                   >
                     {row.getVisibleCells().map((cell) => (
@@ -423,7 +423,7 @@ export function LeadsTable({
       </section>
 
       {selectedLead ? (
-        <div className="fixed inset-0 z-50 w-screen overflow-hidden bg-white">
+        <div className="fixed inset-0 z-50 w-screen overflow-hidden bg-background">
           <LeadEditor
             lead={selectedLead}
             actionPlan={createLeadActionPlan(selectedLead)}
@@ -537,7 +537,7 @@ function InlineLeadCell({
         onChange={(event) => setValue(event.target.value)}
         onBlur={(event) => submitIfChanged(event.currentTarget.form)}
         onKeyDown={handleKeyDown}
-        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-white focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
         title="Edit inline, then press Enter or leave the cell to save"
       />
     </form>
@@ -586,7 +586,7 @@ function LeadEditor({
       className="box-border h-screen max-h-screen w-full max-w-full overflow-y-auto overflow-x-hidden p-4 pb-32 scroll-pb-32"
     >
       <input type="hidden" name="id" value={lead.id} />
-      <div className="sticky top-0 z-30 -mx-4 -mt-4 flex w-[calc(100%+2rem)] justify-end border-b border-border bg-white/95 px-4 py-3 backdrop-blur">
+      <div className="sticky top-0 z-30 -mx-4 -mt-4 flex w-[calc(100%+2rem)] justify-end border-b border-border bg-surface/95 px-4 py-3 backdrop-blur">
         <button
           type="button"
           onClick={onClose}
@@ -597,7 +597,7 @@ function LeadEditor({
         </button>
       </div>
       <section className="mt-4 grid gap-1 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="-mx-3 -mt-3 grid gap-2 border-b border-border bg-white/95 px-3 py-3 backdrop-blur">
+        <div className="-mx-3 -mt-3 grid gap-2 border-b border-border bg-surface/95 px-3 py-3 backdrop-blur">
           <div className="grid min-w-0 gap-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lead card</p>
             <h2 className="mt-1 text-base font-semibold leading-tight text-foreground sm:text-lg">{lead.leadName || lead.leadId}</h2>
@@ -623,7 +623,7 @@ function LeadEditor({
                 type="button"
                 disabled={isMarkingKpSent}
                 onClick={onMarkKpSent}
-                className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+                className="rounded-md border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
               >
                 {isMarkingKpSent ? "Marking..." : "Mark KP sent"}
               </button>
@@ -633,7 +633,7 @@ function LeadEditor({
                 type="button"
                 disabled={isUndoingKpSent}
                 onClick={onUndoKpSent}
-                className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+                className="rounded-md border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
               >
                 {isUndoingKpSent ? "Undoing..." : "Undo KP sent"}
               </button>
@@ -642,7 +642,7 @@ function LeadEditor({
               type="button"
               disabled={isRefreshingSummary}
               onClick={onRegenerateSummary}
-              className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
+              className="rounded-md border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-60"
             >
               {isRefreshingSummary ? "Refreshing..." : "Refresh summary"}
             </button>
@@ -713,7 +713,7 @@ function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
         <a
           href={`/documents/attachments/${encodeURIComponent(lead.kpDocxAttachmentId)}?download=1&filename=${encodeURIComponent(`${baseName}.docx`)}`}
           download={`${baseName}.docx`}
-          className="rounded-md border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground"
+          className="rounded-md border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground"
         >
           KP DOC
         </a>
@@ -742,7 +742,7 @@ function LeadNextActionRow({ lead, nextAction }: { lead: LeadTableRow; nextActio
   }
 
   return (
-    <div className="grid gap-2 rounded-md bg-white p-2 text-xs sm:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)] sm:items-stretch">
+    <div className="grid gap-2 rounded-md bg-surface p-2 text-xs sm:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)] sm:items-stretch">
       <div className="min-w-0 self-center px-1 py-1">
         <span className="text-muted-foreground">Waiting for </span>
         <span className="font-semibold text-foreground">{nextAction ? nextAction.title : "No immediate action"}</span>
@@ -802,19 +802,19 @@ function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel
       isOpen={isOpen}
       onToggle={() => setIsOpen((current) => !current)}
       headerActions={
-        <span className="max-w-[11rem] truncate rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-muted-foreground sm:max-w-xs">
+        <span className="max-w-[11rem] truncate rounded-md bg-surface px-2 py-1 text-[11px] font-semibold text-muted-foreground sm:max-w-xs">
           {calendar.items.length > 0 ? `${calendar.items.length} planned` : "No dates"}
         </span>
       }
     >
       <div className="grid min-w-0 gap-3 px-3 pb-3">
-        <div className="rounded-lg bg-white p-3 text-sm">
+        <div className="rounded-lg bg-surface p-3 text-sm">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Next scheduled action</p>
           <p className="mt-1 break-words text-sm font-semibold text-foreground">{calendar.nextSummary}</p>
         </div>
         {calendar.items.length > 0 ? (
           <div className="grid min-w-0 gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface p-2">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -849,7 +849,7 @@ function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel
             </div>
             {viewMode === "calendar" ? (
               <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
-                <div className="min-w-0 rounded-lg bg-white p-3">
+                <div className="min-w-0 rounded-lg bg-surface p-3">
                   <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-muted-foreground">
                     {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
                       <span key={`${day}-${index}`}>{day}</span>
@@ -895,7 +895,7 @@ function LeadActionCalendarPanel({ calendar }: { calendar: LeadCalendarViewModel
             )}
           </div>
         ) : (
-          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No future follow-ups or events are scheduled for this lead yet.</p>
+          <p className="rounded-lg bg-surface p-3 text-sm text-muted-foreground">No future follow-ups or events are scheduled for this lead yet.</p>
         )}
       </div>
     </LeadCardAccordion>
@@ -907,7 +907,7 @@ function CalendarItemList({ items, emptyText }: { items: LeadCalendarViewModel["
     <div className="grid min-w-0 content-start gap-2">
       {items.length > 0 ? (
         items.map((item) => (
-          <article key={item.id} className="min-w-0 rounded-lg bg-white p-3 text-sm">
+          <article key={item.id} className="min-w-0 rounded-lg bg-surface p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <h4 className="break-words text-sm font-semibold text-foreground">{item.title}</h4>
@@ -925,7 +925,7 @@ function CalendarItemList({ items, emptyText }: { items: LeadCalendarViewModel["
           </article>
         ))
       ) : (
-        <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">{emptyText}</p>
+        <p className="rounded-lg bg-surface p-3 text-sm text-muted-foreground">{emptyText}</p>
       )}
     </div>
   );
@@ -984,7 +984,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
               aria-label="Translate summary to Russian"
               disabled={translatingTo !== null}
               onClick={() => handleTranslateSummary("ru")}
-              className="rounded-md border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
+              className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
             >
               {translatingTo === "ru" ? "..." : "RU"}
             </button>
@@ -993,7 +993,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
               aria-label="Translate summary to German"
               disabled={translatingTo !== null}
               onClick={() => handleTranslateSummary("de")}
-              className="rounded-md border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
+              className="rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-semibold text-foreground disabled:opacity-60"
             >
               {translatingTo === "de" ? "..." : "DE"}
             </button>
@@ -1003,7 +1003,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
     >
       <div className="grid min-w-0 gap-2 px-3 pb-3">
         {summaryItem ? (
-          <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
+          <article className="min-w-0 overflow-hidden rounded-lg bg-surface p-3 text-sm">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Summary</p>
             <ExpandableLeadText
               text={translatedSummary ?? (summaryItem.fullText ?? summaryItem.description)}
@@ -1016,7 +1016,7 @@ function LeadSummaryInfoPanel({ items }: { items: LeadSummaryInfoItem[] }) {
         {materialItems.length > 0 ? (
           materialItems.map((item, index) => <LeadSummaryInfoItemCard key={`${item.title}-${item.kind}-${index}`} item={item} />)
         ) : summaryItem ? null : (
-          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No summarized source materials saved yet.</p>
+          <p className="rounded-lg bg-surface p-3 text-sm text-muted-foreground">No summarized source materials saved yet.</p>
         )}
       </div>
     </LeadCardAccordion>
@@ -1027,7 +1027,7 @@ function LeadSummaryInfoItemCard({ item }: { item: LeadSummaryInfoItem }) {
   const fullText = item.fullText ?? item.description;
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-lg bg-white p-3 text-sm">
+    <article className="min-w-0 overflow-hidden rounded-lg bg-surface p-3 text-sm">
       <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0">
           <p className="break-words font-semibold text-foreground">{item.title}</p>
@@ -1093,7 +1093,7 @@ function LeadContextPanel({ items }: { items: LeadContextPanelItem[] }) {
     <LeadCardAccordion title="CRM context" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       <div className="grid min-w-0 gap-2 px-3 pb-3">
         {items.map((item, index) => (
-          <article key={`${item.title}-${index}`} className="min-w-0 rounded-lg bg-white p-3 text-sm">
+          <article key={`${item.title}-${index}`} className="min-w-0 rounded-lg bg-surface p-3 text-sm">
             <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] sm:items-start">
               <div className="min-w-0">
                 <p className="break-words font-semibold text-foreground">{item.title}</p>
@@ -1153,7 +1153,7 @@ function LeadHistoryPanel({ history }: { history: LeadHistoryItem[] }) {
     <LeadCardAccordion title="History" isOpen={isOpen} onToggle={() => setIsOpen((current) => !current)}>
       <div className="grid gap-2 px-3 pb-3">
         {history.map((item, index) => (
-          <article key={`${item.title}-${item.at}-${index}`} className="rounded-lg bg-white p-3 text-sm">
+          <article key={`${item.title}-${item.at}-${index}`} className="rounded-lg bg-surface p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">{item.title}</p>
@@ -1178,7 +1178,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
       <div className="grid gap-2 px-3 pb-3">
         {actionPlan.length > 0 ? (
           actionPlan.map((item) => (
-            <div key={`${item.title}-${item.dueDate}`} className="rounded-lg bg-white p-3 text-sm">
+            <div key={`${item.title}-${item.dueDate}`} className="rounded-lg bg-surface p-3 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">{item.title}</p>
                 <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">{item.status}</span>
@@ -1188,7 +1188,7 @@ function ActionPlanPanel({ actionPlan }: { actionPlan: LeadActionPlanItem[] }) {
             </div>
           ))
         ) : (
-          <p className="rounded-lg bg-white p-3 text-sm text-muted-foreground">No action is waiting right now.</p>
+          <p className="rounded-lg bg-surface p-3 text-sm text-muted-foreground">No action is waiting right now.</p>
         )}
       </div>
     </LeadCardAccordion>
@@ -1207,7 +1207,7 @@ function LeadKpSummary({ lead }: { lead: LeadTableRow }) {
   ];
 
   return (
-    <div className="grid gap-1.5 rounded-md bg-white p-3 sm:grid-cols-2">
+    <div className="grid gap-1.5 rounded-md bg-surface p-3 sm:grid-cols-2">
       {fields.map((field) => (
         <div key={field.label} className="grid grid-cols-[82px_minmax(0,1fr)] items-baseline gap-2 text-xs leading-tight">
           <span className="text-muted-foreground">{field.label}</span>
@@ -1258,24 +1258,24 @@ function SourceMaterialsPanel({
                     href={reference.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="max-w-full rounded-md bg-white px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                    className="max-w-full rounded-md bg-surface px-2 py-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
                   >
                     <span className="break-all">{reference.label}</span>
                   </a>
                 ) : (
-                  <span key={reference.label} className="max-w-full rounded-md bg-white px-2 py-1 text-xs font-semibold text-muted-foreground">
+                  <span key={reference.label} className="max-w-full rounded-md bg-surface px-2 py-1 text-xs font-semibold text-muted-foreground">
                     <span className="break-all">{reference.label}</span>
                   </span>
                 )
               )}
             </div>
           ) : null}
-          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-white p-3 text-xs leading-relaxed text-foreground">
+          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 text-xs leading-relaxed text-foreground">
             {sourceText}
           </pre>
         </div>
       ) : (
-        <p className="mx-3 mb-3 rounded-lg bg-white p-3 text-sm text-muted-foreground">No source text or document references saved yet.</p>
+        <p className="mx-3 mb-3 rounded-lg bg-surface p-3 text-sm text-muted-foreground">No source text or document references saved yet.</p>
       )}
     </LeadCardAccordion>
   );
@@ -1297,7 +1297,13 @@ function TextField({
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <input name={name} defaultValue={defaultValue} inputMode={inputMode} required={required} className="rounded-md border border-border px-3 py-2" />
+      <input
+        name={name}
+        defaultValue={defaultValue}
+        inputMode={inputMode}
+        required={required}
+        className="rounded-md border border-border bg-surface px-3 py-2 text-foreground"
+      />
     </label>
   );
 }
@@ -1306,7 +1312,7 @@ function DateField({ label, name, defaultValue }: { label: string; name: string;
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <input name={name} type="date" defaultValue={defaultValue} className="rounded-md border border-border px-3 py-2" />
+      <input name={name} type="date" defaultValue={defaultValue} className="rounded-md border border-border bg-surface px-3 py-2 text-foreground" />
     </label>
   );
 }
@@ -1315,7 +1321,7 @@ function TextareaField({ label, name, defaultValue }: { label: string; name: str
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <textarea name={name} defaultValue={defaultValue} className="min-h-20 rounded-md border border-border px-3 py-2" />
+      <textarea name={name} defaultValue={defaultValue} className="min-h-20 rounded-md border border-border bg-surface px-3 py-2 text-foreground" />
     </label>
   );
 }
@@ -1324,7 +1330,7 @@ function SelectField({ label, name, defaultValue, options }: { label: string; na
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <select name={name} defaultValue={defaultValue} className="rounded-md border border-border px-3 py-2">
+      <select name={name} defaultValue={defaultValue} className="rounded-md border border-border bg-surface px-3 py-2 text-foreground">
         {options.map((option) => (
           <option key={option || "empty"} value={option}>
             {option || "Unknown"}

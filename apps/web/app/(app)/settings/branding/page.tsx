@@ -23,14 +23,14 @@ export default async function BrandingSettingsPage() {
         <p className="text-sm text-muted-foreground">Set the delivered CRM name, accent color, and compact interface theme.</p>
       </div>
 
-      <form action={updateBrandingSettings} className="grid gap-4 rounded-lg border border-border bg-white p-4">
+      <form action={updateBrandingSettings} className="grid gap-4 rounded-lg border border-border bg-surface p-4">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
           <label className="grid gap-1 text-sm font-medium">
             Workspace name
             <input
               name="workspaceName"
               defaultValue={session.workspaceName}
-              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium">
@@ -39,7 +39,7 @@ export default async function BrandingSettingsPage() {
               name="primaryColor"
               type="color"
               defaultValue={session.primaryColor}
-              className="h-10 rounded-md border border-border bg-white px-2"
+              className="h-10 rounded-md border border-border bg-surface px-2"
             />
           </label>
         </div>
@@ -50,9 +50,7 @@ export default async function BrandingSettingsPage() {
             {themeOptions.map((theme) => (
               <label
                 key={theme.id}
-                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold ${
-                  session.themePreference === theme.id ? "bg-white text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
+                className="cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground transition has-[:checked]:bg-surface has-[:checked]:text-foreground has-[:checked]:shadow-sm"
               >
                 <input
                   type="radio"

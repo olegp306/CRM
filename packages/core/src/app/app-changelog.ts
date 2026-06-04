@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.20",
-  title: "Telegram contact reply hotfix",
+  version: "0.4.21",
+  title: "Theme polish and copyable Telegram guide",
   items: [
-    "Telegram reply updates no longer query email or phone as Lead fields, which prevents the Server Error seen on test.",
-    "Phone, email, and client-name updates from Telegram replies are saved through the linked Client record.",
-    "If a lead has no Client yet, Telegram contact updates create and attach one automatically."
+    "Theme choices in Settings now visibly switch as soon as the user clicks a theme option.",
+    "Lead cards and lead tables use theme-aware surfaces so dark themes no longer leave white unreadable patches.",
+    "The Telegram CRM guide renders numbered steps correctly and lets users copy command examples with one click."
   ]
 };
