@@ -1,4 +1,4 @@
-import { getNextBusinessId, type LeadIntakeDraft } from "@app/core";
+import { findMatchingClient, getNextBusinessId, type LeadIntakeDraft } from "@app/core";
 import { prisma } from "@app/db";
 
 type LeadRow = {
@@ -11,6 +11,10 @@ type LeadRow = {
 };
 
 export type LeadIntakePrismaClientLike = {
+  client?: {
+    findMany(args: unknown): Promise<Array<{ id: string; clientId: string; name: string; email?: string | null; phone?: string | null }>>;
+    create(args: unknown): Promise<{ id: string; clientId: string }>;
+  };
   lead: {
     findMany(args: unknown): Promise<Array<{ leadId: string }>>;
     create(args: unknown): Promise<LeadRow>;
@@ -36,6 +40,7 @@ export async function createLeadRecordFromIntakeDraft(
     now: input.now,
     existingIds: existingLeads.map((lead) => lead.leadId)
   });
+  const clientRecordId = await resolveOrCreateClientForLeadDraft(client, input);
 
   return client.lead.create({
     data: {
@@ -48,11 +53,64 @@ export async function createLeadRecordFromIntakeDraft(
       bgfM2: input.draft.bgfM2,
       isStandard: input.draft.isStandard,
       missingData: input.draft.missingData,
-      temperature: input.draft.source === "telegram" ? "hot" : "warm"
+      temperature: input.draft.source === "telegram" ? "hot" : "warm",
+      ...(clientRecordId ? { clientRecordId } : {})
     }
   });
 }
 
 export async function createLeadFromIntakeDraft(input: CreateLeadRecordFromIntakeDraftInput): Promise<LeadRow> {
   return createLeadRecordFromIntakeDraft(prisma, input);
+}
+
+async function resolveOrCreateClientForLeadDraft(
+  client: LeadIntakePrismaClientLike,
+  input: CreateLeadRecordFromIntakeDraftInput
+): Promise<string | null> {
+  if (!client.client || !hasEnoughClientDataForAutoCreate(input.draft)) {
+    return null;
+  }
+
+  const existingClients = await client.client.findMany({
+    where: { workspaceId: input.workspaceId, archivedAt: null },
+    select: {
+      id: true,
+      clientId: true,
+      name: true,
+      email: true,
+      phone: true
+    }
+  });
+  const match = findMatchingClient(existingClients, {
+    name: input.draft.clientName,
+    email: input.draft.email,
+    phone: input.draft.phone
+  });
+
+  if (match.match) {
+    return match.match.id;
+  }
+
+  const clientId = getNextBusinessId({
+    kind: "client",
+    now: input.now,
+    existingIds: existingClients.map((record) => record.clientId)
+  });
+  const created = await client.client.create({
+    data: {
+      workspaceId: input.workspaceId,
+      clientId,
+      name: input.draft.clientName,
+      clientType: "private",
+      email: input.draft.email,
+      phone: input.draft.phone,
+      source: input.draft.source
+    }
+  });
+
+  return created.id;
+}
+
+function hasEnoughClientDataForAutoCreate(draft: LeadIntakeDraft): boolean {
+  return Boolean(draft.clientName?.trim() && (draft.email?.trim() || draft.phone?.trim()));
 }

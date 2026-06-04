@@ -7,7 +7,7 @@ describe("table preferences", () => {
     expect(getTablePreferencesStorageKey("editable-clients")).toBe("crm.table.editable-clients.preferences.v1");
   });
 
-  it("keeps only valid visibility and sizing values from storage", () => {
+  it("keeps only valid visibility, sizing, and order values from storage", () => {
     expect(
       normalizeTablePreferences({
         columnVisibility: {
@@ -19,7 +19,8 @@ describe("table preferences", () => {
           leadId: 180,
           rawInput: Number.POSITIVE_INFINITY,
           invalid: "wide"
-        }
+        },
+        columnOrder: ["clientName", "", 42, "projectTitle"]
       })
     ).toEqual({
       columnVisibility: {
@@ -28,7 +29,8 @@ describe("table preferences", () => {
       },
       columnSizing: {
         leadId: 180
-      }
+      },
+      columnOrder: ["clientName", "projectTitle"]
     });
   });
 });

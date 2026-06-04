@@ -3,6 +3,8 @@ import {
   canMarkLeadKpSent,
   canUndoLeadKpSent,
   clampLeadColumnSizing,
+  createDefaultLeadColumnOrder,
+  createDefaultLeadColumnVisibility,
   createLeadActionPlan,
   createLeadCalendarMonthViewModel,
   createLeadCalendarViewModel,
@@ -16,12 +18,16 @@ import {
   getLeadSourceMaterials,
   inlineEditableLeadFields,
   isInlineEditableLeadField,
+  leadEditorFieldOrder,
+  leadTableDefaultVisibleColumnKeys,
   leadMobileCardFields,
   leadMobileViewModes,
   leadTableColumns,
   leadTableViewModeStorageKey,
   leadTableViewModes,
   normalizeLeadTableViewMode,
+  normalizeLeadColumnOrder,
+  reorderLeadColumnOrder,
   resolveDeepLinkedLeadRowId,
   resolveInitialSelectedLeadId
 } from "./lead-table-store";
@@ -29,22 +35,29 @@ import {
 describe("lead table model", () => {
   it("defines all recommended lead fields as sortable table columns", () => {
     expect(leadTableColumns.map((column) => column.key)).toEqual([
+      "clientName",
+      "projectTitle",
+      "bgfM2",
+      "requestType",
+      "temperature",
+      "urgency",
+      "todo",
+      "projectAddress",
+      "phone",
+      "email",
+      "messenger",
+      "source",
+      "clientProjectCount",
       "leadId",
       "leadName",
       "clientRecordId",
       "createdDate",
-      "temperature",
-      "requestType",
-      "urgency",
       "budgetEur",
       "desiredStart",
       "desiredMoveIn",
-      "bgfM2",
       "wohnflaecheM2",
-      "projectAddress",
       "isStandard",
       "status",
-      "source",
       "rawInput",
       "missingData",
       "kpGeneratedDocumentId",
@@ -58,19 +71,106 @@ describe("lead table model", () => {
     expect(leadTableColumns.every((column) => column.enableSorting)).toBe(true);
   });
 
-  it("defines split, full, and inline lead table view modes", () => {
-    expect(leadTableViewModes.map((mode) => mode.id)).toEqual(["split", "full", "inline"]);
+  it("defaults the lead table to the client/project/commercial columns and hides the rest", () => {
+    expect(leadTableDefaultVisibleColumnKeys).toEqual([
+      "clientName",
+      "projectTitle",
+      "bgfM2",
+      "requestType",
+      "temperature",
+      "urgency",
+      "todo",
+      "projectAddress",
+      "phone",
+      "email",
+      "messenger",
+      "source",
+      "clientProjectCount"
+    ]);
+    expect(
+      leadTableColumns.filter((column) => createDefaultLeadColumnVisibility()[column.key]).map((column) => column.key)
+    ).toEqual(leadTableDefaultVisibleColumnKeys);
+    expect(createDefaultLeadColumnVisibility().leadId).toBe(false);
+    expect(createDefaultLeadColumnVisibility().rawInput).toBe(false);
+  });
+
+  it("orders the lead card editor by the visible table fields first, then the remaining editable lead fields", () => {
+    expect(leadEditorFieldOrder.slice(0, 10)).toEqual([
+      "clientName",
+      "bgfM2",
+      "requestType",
+      "temperature",
+      "urgency",
+      "projectAddress",
+      "phone",
+      "email",
+      "messenger",
+      "source"
+    ]);
+    expect(leadEditorFieldOrder.slice(10)).toEqual([
+      "clientRecordId",
+      "budgetEur",
+      "desiredStart",
+      "desiredMoveIn",
+      "wohnflaecheM2",
+      "isStandard",
+      "status",
+      "rawInput",
+      "missingData",
+      "kpGeneratedDocumentId",
+      "kpSentDate",
+      "followup1Date",
+      "followupStatus",
+      "outcome",
+      "outcomeReason",
+      "projectRecordId"
+    ]);
+    expect(leadEditorFieldOrder).not.toContain("projectTitle");
+    expect(leadEditorFieldOrder).not.toContain("todo");
+    expect(leadEditorFieldOrder).not.toContain("clientProjectCount");
+  });
+
+  it("reorders lead table columns without losing hidden or newly added columns", () => {
+    expect(createDefaultLeadColumnOrder().slice(0, 5)).toEqual([
+      "clientName",
+      "projectTitle",
+      "bgfM2",
+      "requestType",
+      "temperature"
+    ]);
+    expect(normalizeLeadColumnOrder(["projectTitle", "clientName", "projectTitle", "unknown"])).toEqual([
+      "projectTitle",
+      "clientName",
+      ...createDefaultLeadColumnOrder().filter((columnId) => !["projectTitle", "clientName"].includes(columnId))
+    ]);
+    expect(reorderLeadColumnOrder([], "email", "phone").slice(0, 11)).toEqual([
+      "clientName",
+      "projectTitle",
+      "bgfM2",
+      "requestType",
+      "temperature",
+      "urgency",
+      "todo",
+      "projectAddress",
+      "email",
+      "phone",
+      "messenger"
+    ]);
+  });
+
+  it("defines full and inline lead table view modes", () => {
+    expect(leadTableViewModes.map((mode) => mode.id)).toEqual(["full", "inline"]);
     expect(leadTableViewModeStorageKey).toBe("crm.table.leads.view-mode.v1");
     expect(normalizeLeadTableViewMode("full")).toBe("full");
     expect(normalizeLeadTableViewMode("inline")).toBe("inline");
-    expect(normalizeLeadTableViewMode("entire")).toBe("split");
+    expect(normalizeLeadTableViewMode("split")).toBe("full");
+    expect(normalizeLeadTableViewMode("entire")).toBe("full");
   });
 
   it("opens every lead view on the list without auto-selecting a lead", () => {
-    expect(resolveInitialSelectedLeadId("split", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("full", ["lead-1", "lead-2"])).toBeNull();
     expect(resolveInitialSelectedLeadId("inline", ["lead-1", "lead-2"])).toBeNull();
-    expect(resolveInitialSelectedLeadId("split", [])).toBeNull();
+    expect(resolveInitialSelectedLeadId("full", [])).toBeNull();
   });
 
   it("resolves a Telegram CRM deep link to the matching lead row", () => {
@@ -90,18 +190,45 @@ describe("lead table model", () => {
     expect(leadMobileCardFields).toEqual(["createdDate", "status", "requestType", "projectAddress", "source"]);
   });
 
-  it("limits inline editing to safe scalar workflow fields", () => {
+  it("marks lead, client, and derived column owners", () => {
+    expect(Object.fromEntries(leadTableColumns.map((column) => [column.key, column.owner]))).toMatchObject({
+      clientName: "client",
+      phone: "client",
+      email: "client",
+      messenger: "client",
+      source: "client",
+      projectTitle: "derived",
+      todo: "derived",
+      clientProjectCount: "derived",
+      bgfM2: "lead",
+      requestType: "lead",
+      projectAddress: "lead"
+    });
+  });
+
+  it("limits inline editing to safe lead fields and linked client fields", () => {
     expect(inlineEditableLeadFields).toEqual([
+      "clientName",
       "temperature",
       "requestType",
       "urgency",
       "budgetEur",
+      "bgfM2",
+      "wohnflaecheM2",
       "status",
       "projectAddress",
+      "phone",
+      "email",
+      "messenger",
+      "source",
       "followupStatus",
       "outcome"
     ]);
+    expect(isInlineEditableLeadField("clientName")).toBe(true);
+    expect(isInlineEditableLeadField("email")).toBe(true);
     expect(isInlineEditableLeadField("status")).toBe(true);
+    expect(isInlineEditableLeadField("projectTitle")).toBe(false);
+    expect(isInlineEditableLeadField("clientProjectCount")).toBe(false);
     expect(isInlineEditableLeadField("rawInput")).toBe(false);
     expect(isInlineEditableLeadField("missingData")).toBe(false);
   });
@@ -361,6 +488,14 @@ describe("lead table model", () => {
           leadId: "L-2026-001",
           displayName: "Irina Schneider - Neubau EFH in Bad Aibling",
           clientRecordId: "client-record-1",
+          client: {
+            name: "Irina Schneider",
+            email: "irina.schneider@example.com",
+            phone: "+49 160 4442211",
+            whatsapp: "+49 160 4442211",
+            source: "telegram",
+            _count: { leads: 2 }
+          },
           createdDate: new Date("2026-05-21T10:00:00.000Z"),
           temperature: "warm",
           requestType: "new_build",
@@ -389,6 +524,8 @@ describe("lead table model", () => {
 
     expect(row).toMatchObject({
       id: "lead-record-1",
+      clientName: "Irina Schneider",
+      projectTitle: "Neubau EFH in Bad Aibling",
       leadId: "L-2026-001",
       leadName: "Irina Schneider - Neubau EFH in Bad Aibling",
       createdDate: "2026-05-21",
@@ -398,9 +535,14 @@ describe("lead table model", () => {
       bgfM2: "150",
       wohnflaecheM2: "112.5",
       isStandard: "yes",
-      source: "web",
       missingData: "email",
       followup1Date: "2026-05-28",
+      todo: "Complete missing data",
+      phone: "+49 160 4442211",
+      email: "irina.schneider@example.com",
+      messenger: "+49 160 4442211",
+      source: "telegram",
+      clientProjectCount: "2",
       kpGeneratedDocumentId: "D-telegram-12345-13",
       kpDocxAttachmentId: "attachment-docx-1",
       kpPdfAttachmentId: "attachment-pdf-1"

@@ -155,6 +155,17 @@ The `Release workflow` panel summarizes the selected version as a lightweight ch
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
 
+## 0.4.25
+
+Lead table and client linking release:
+
+- Lead tables now default to the client, project, area, description, interest, urgency, todo, address, phone, email, messenger, source, and client-project-count columns.
+- Column visibility, widths, and column order are saved, and table headers can be reordered with drag handles.
+- Lead creation from Telegram or web intake links to an existing matching client, or creates and links a client when enough contact data is available.
+- Client-owned lead table fields can be edited inline through the linked client record.
+- Lead cards now order editable fields to match the default lead table first, then show the remaining fields.
+- Lead cards include a confirmed `Delete lead` action that removes the lead and its linked context/calendar rows.
+
 ## 0.4.3
 
 Telegram lead undo release:

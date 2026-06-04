@@ -6,15 +6,18 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnOrderState,
   type ColumnSizingState,
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   canMarkLeadKpSent,
   canUndoLeadKpSent,
   clampLeadColumnSizing,
+  createDefaultLeadColumnOrder,
+  createDefaultLeadColumnVisibility,
   createLeadActionPlan,
   createLeadCalendarMonthViewModel,
   createLeadCalendarViewModel,
@@ -26,12 +29,15 @@ import {
   filterLeadRowsForUrlSearch,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
+  leadEditorFieldOrder,
   leadTableColumns,
   leadTableViewModeStorageKey,
   leadMobileCardFields,
   leadMobileViewModes,
   leadTableViewModes,
   normalizeLeadTableViewMode,
+  normalizeLeadColumnOrder,
+  reorderLeadColumnOrder,
   resolveDeepLinkedLeadRowId,
   resolveInitialSelectedLeadId,
   shiftLeadCalendarMonth,
@@ -42,6 +48,7 @@ import {
   type LeadHistoryItem,
   type LeadSummaryInfoItem,
   type LeadTableColumnKey,
+  type LeadTableColumnOwner,
   type LeadTableRow,
   type LeadTableViewMode
 } from "./lead-table-store";
@@ -54,6 +61,7 @@ type LeadsTableProps = {
   markLeadKpSentAction: (formData: FormData) => Promise<void>;
   undoLeadKpSentAction: (formData: FormData) => Promise<void>;
   regenerateLeadSummaryAction: (formData: FormData) => Promise<void>;
+  deleteLeadAction: (formData: FormData) => Promise<void>;
 };
 
 export function LeadsTable({
@@ -61,36 +69,51 @@ export function LeadsTable({
   updateLeadAction,
   markLeadKpSentAction,
   undoLeadKpSentAction,
-  regenerateLeadSummaryAction
+  regenerateLeadSummaryAction,
+  deleteLeadAction
 }: LeadsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences("leads");
-  const [viewMode, setViewMode] = useState<LeadTableViewMode>("split");
+  const { columnVisibility, columnSizing, columnOrder, setColumnVisibility, setColumnSizing, setColumnOrder } = usePersistentTablePreferences("leads-v2");
+  const [viewMode, setViewMode] = useState<LeadTableViewMode>("full");
   const [isViewModeHydrated, setIsViewModeHydrated] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<LeadMobileViewMode>("cards");
+  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
+  const [optimisticRows, setOptimisticRows] = useState<LeadTableRow[]>(rows);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isMarkingKpSent, setIsMarkingKpSent] = useState(false);
   const [isUndoingKpSent, setIsUndoingKpSent] = useState(false);
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
+  const [isDeletingLead, setIsDeletingLead] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedLeadId = searchParams.get("leadId");
+  useEffect(() => {
+    setOptimisticRows(rows);
+  }, [rows]);
   const filteredRows = useMemo(
     () =>
-      filterLeadRowsForUrlSearch(rows, {
+      filterLeadRowsForUrlSearch(optimisticRows, {
         leadSearch: searchParams.get("leadSearch"),
         temperature: searchParams.get("temperature"),
         status: searchParams.get("status"),
         date: searchParams.get("date")
       }),
-    [rows, searchParams]
+    [optimisticRows, searchParams]
   );
-  const isUrlFiltered = filteredRows.length !== rows.length;
-  const selectedLead = rows.find((row) => row.id === selectedLeadId) ?? null;
+  const isUrlFiltered = filteredRows.length !== optimisticRows.length;
+  const selectedLead = optimisticRows.find((row) => row.id === selectedLeadId) ?? null;
+  const effectiveColumnVisibility = useMemo(
+    () => (Object.keys(columnVisibility).length > 0 ? columnVisibility : createDefaultLeadColumnVisibility()),
+    [columnVisibility]
+  );
   const clampedColumnSizing = useMemo(
     () => clampLeadColumnSizing(columnSizing) as ColumnSizingState,
     [columnSizing]
+  );
+  const effectiveColumnOrder = useMemo(
+    () => normalizeLeadColumnOrder(columnOrder) as ColumnOrderState,
+    [columnOrder]
   );
 
   useEffect(() => {
@@ -107,8 +130,8 @@ export function LeadsTable({
       setViewMode(storedViewMode);
       setSelectedLeadId(resolveInitialSelectedLeadId(storedViewMode, rows.map((row) => row.id)));
     } catch {
-      setViewMode("split");
-      setSelectedLeadId(resolveInitialSelectedLeadId("split", rows.map((row) => row.id)));
+      setViewMode("full");
+      setSelectedLeadId(resolveInitialSelectedLeadId("full", rows.map((row) => row.id)));
     }
     setIsViewModeHydrated(true);
   }, [deepLinkedLeadId, rows]);
@@ -131,7 +154,7 @@ export function LeadsTable({
     () =>
       leadTableColumns.map((column) => ({
         accessorKey: column.key,
-        header: column.label,
+        header: () => <LeadColumnHeader label={column.label} owner={column.owner} />,
         size: column.defaultSize,
         maxSize: column.maxSize,
         minSize: 92,
@@ -140,6 +163,7 @@ export function LeadsTable({
           viewMode === "inline" && isInlineEditableLeadField(column.key) ? (
             <InlineLeadCell
               fieldName={column.key}
+              fieldOwner={column.owner}
               row={row.original}
               isSaving={isSaving}
               onSubmit={handleInlineSubmit}
@@ -156,13 +180,14 @@ export function LeadsTable({
   const table = useReactTable({
     data: filteredRows,
     columns,
-    state: { sorting, columnVisibility, columnSizing: clampedColumnSizing },
+    state: { sorting, columnVisibility: effectiveColumnVisibility, columnSizing: clampedColumnSizing, columnOrder: effectiveColumnOrder },
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnSizingChange: setColumnSizing
+    onColumnSizingChange: setColumnSizing,
+    onColumnOrderChange: setColumnOrder
   });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -183,6 +208,7 @@ export function LeadsTable({
     setIsSaving(true);
     try {
       await updateLeadAction(formData);
+      applyOptimisticInlineValue(formData);
       router.refresh();
     } finally {
       setIsSaving(false);
@@ -239,7 +265,71 @@ export function LeadsTable({
 
   function handleViewModeChange(mode: LeadTableViewMode) {
     setViewMode(mode);
-    setSelectedLeadId(resolveInitialSelectedLeadId(mode, rows.map((row) => row.id)));
+    setSelectedLeadId(resolveInitialSelectedLeadId(mode, optimisticRows.map((row) => row.id)));
+  }
+
+  async function handleDeleteLead(lead: LeadTableRow) {
+    const confirmed = window.confirm(`Are you sure you want to delete lead ${lead.leadId}? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("id", lead.id);
+    setIsDeletingLead(true);
+    try {
+      await deleteLeadAction(formData);
+      setSelectedLeadId(null);
+      setOptimisticRows((currentRows) => currentRows.filter((row) => row.id !== lead.id));
+      router.replace("/leads");
+      router.refresh();
+    } finally {
+      setIsDeletingLead(false);
+    }
+  }
+
+  function handleResetDefaultColumns() {
+    setColumnVisibility(createDefaultLeadColumnVisibility());
+    setColumnSizing({});
+    setColumnOrder(createDefaultLeadColumnOrder());
+  }
+
+  function handleColumnDragStart(event: DragEvent<HTMLButtonElement>, columnId: string) {
+    setDraggingColumnId(columnId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", columnId);
+  }
+
+  function handleColumnDragOver(event: DragEvent<HTMLTableCellElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleColumnDrop(event: DragEvent<HTMLTableCellElement>, targetColumnId: string) {
+    event.preventDefault();
+    const sourceColumnId = event.dataTransfer.getData("text/plain") || draggingColumnId;
+
+    if (sourceColumnId) {
+      setColumnOrder(reorderLeadColumnOrder(effectiveColumnOrder, sourceColumnId, targetColumnId));
+    }
+
+    setDraggingColumnId(null);
+  }
+
+  function applyOptimisticInlineValue(formData: FormData) {
+    const id = formData.get("id");
+    const fieldName = formData.get("inlineFieldName");
+
+    if (typeof id !== "string" || typeof fieldName !== "string" || !isLeadTableColumnKey(fieldName)) {
+      return;
+    }
+
+    const value = formData.get(fieldName);
+    const nextValue = typeof value === "string" ? value : "";
+
+    setOptimisticRows((currentRows) =>
+      currentRows.map((row) => (row.id === id ? { ...row, [fieldName]: nextValue } : row))
+    );
   }
 
   return (
@@ -323,6 +413,13 @@ export function LeadsTable({
             <a href="/exports/leads" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
               Export to Excel (CSV)
             </a>
+            <button
+              type="button"
+              onClick={handleResetDefaultColumns}
+              className="rounded-lg border border-border px-3 py-2 text-sm font-semibold"
+            >
+              Default columns
+            </button>
             <div className="inline-flex rounded-lg border border-border bg-muted p-1">
               {leadTableViewModes.map((mode) => (
                 <button
@@ -359,30 +456,56 @@ export function LeadsTable({
         </div>
 
         <div className="overflow-auto">
-          <table className="w-full border-separate border-spacing-0 text-left text-sm" style={{ width: table.getTotalSize() }}>
+          <table className="min-w-full table-fixed border-separate border-spacing-0 text-left text-sm" style={{ width: table.getTotalSize() }}>
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="relative border-b border-r border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0"
+                      onDragOver={handleColumnDragOver}
+                      onDrop={(event) => handleColumnDrop(event, header.column.id)}
+                      className={`relative border-b border-r border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0 ${
+                        draggingColumnId === header.column.id ? "bg-primary/10" : ""
+                      }`}
                       style={{ width: header.getSize() }}
                     >
-                      <button
-                        type="button"
-                        onClick={header.column.getToggleSortingHandler()}
-                        className="flex w-full items-center justify-between gap-2 text-left"
-                      >
-                        <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
-                        <span className="text-[10px]">{getSortLabel(header.column.getIsSorted())}</span>
-                      </button>
+                      <div className="flex w-full items-start gap-2">
+                        <button
+                          type="button"
+                          draggable
+                          aria-label="Move column"
+                          title="Drag to move column"
+                          onDragStart={(event) => handleColumnDragStart(event, header.column.id)}
+                          onDragEnd={() => setDraggingColumnId(null)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="mt-0.5 h-5 w-5 shrink-0 cursor-grab rounded border border-border bg-surface text-[11px] leading-4 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                        >
+                          ↕
+                        </button>
+                        <button
+                          type="button"
+                          onClick={header.column.getToggleSortingHandler()}
+                          className="flex min-w-0 flex-1 items-start justify-between gap-2 text-left"
+                        >
+                          <span className="min-w-0">{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                          <span className="text-[10px]">{getSortLabel(header.column.getIsSorted())}</span>
+                        </button>
+                      </div>
                       <button
                         type="button"
                         aria-label="Resize column"
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none bg-transparent hover:bg-primary/30"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          header.getResizeHandler()(event);
+                        }}
+                        onTouchStart={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          header.getResizeHandler()(event);
+                        }}
+                        className="absolute right-0 top-0 z-10 h-full w-2 cursor-col-resize touch-none bg-transparent hover:bg-primary/30"
                       />
                     </th>
                   ))}
@@ -399,15 +522,21 @@ export function LeadsTable({
                       row.original.id === selectedLeadId ? "bg-primary/5" : "bg-surface"
                     }`}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className="border-b border-r border-border px-3 py-2 align-top last:border-r-0"
-                        style={{ width: cell.column.getSize() }}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const columnMeta = leadTableColumns.find((column) => column.key === cell.column.id);
+
+                      return (
+                        <td
+                          key={cell.id}
+                          className={`border-b border-r border-border px-3 py-2 align-top last:border-r-0 ${
+                            columnMeta?.owner === "client" ? "bg-sky-50/60 dark:bg-sky-950/20" : ""
+                          }`}
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))
               ) : (
@@ -431,11 +560,13 @@ export function LeadsTable({
             isMarkingKpSent={isMarkingKpSent}
           isUndoingKpSent={isUndoingKpSent}
           isRefreshingSummary={isRefreshingSummary}
+          isDeletingLead={isDeletingLead}
           onClose={handleCloseSelectedLead}
           onSubmit={handleSubmit}
           onMarkKpSent={() => handleMarkKpSent(selectedLead.id)}
           onUndoKpSent={() => handleUndoKpSent(selectedLead.id)}
           onRegenerateSummary={() => handleRegenerateLeadSummary(selectedLead.id)}
+          onDeleteLead={() => handleDeleteLead(selectedLead)}
           variant="fullscreen"
         />
         </div>
@@ -443,6 +574,27 @@ export function LeadsTable({
 
     </div>
   );
+}
+
+function LeadColumnHeader({ label, owner }: { label: string; owner: LeadTableColumnOwner }) {
+  return (
+    <span className="grid gap-0.5">
+      {owner === "client" ? (
+        <span className="w-fit rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200">
+          Client
+        </span>
+      ) : owner === "derived" ? (
+        <span className="w-fit rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+          Auto
+        </span>
+      ) : null}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function isLeadTableColumnKey(value: string): value is LeadTableColumnKey {
+  return leadTableColumns.some((column) => column.key === value);
 }
 
 function TruncatedCell({ value }: { value: string }) {
@@ -468,50 +620,33 @@ function SourceMaterialsCell({ value }: { value: string }) {
   );
 }
 
-const leadEditorFieldNames: LeadTableColumnKey[] = [
-  "clientRecordId",
-  "temperature",
-  "requestType",
-  "urgency",
-  "budgetEur",
-  "desiredStart",
-  "desiredMoveIn",
-  "bgfM2",
-  "wohnflaecheM2",
-  "projectAddress",
-  "isStandard",
-  "status",
-  "rawInput",
-  "missingData",
-  "kpGeneratedDocumentId",
-  "kpSentDate",
-  "followup1Date",
-  "followupStatus",
-  "outcome",
-  "outcomeReason",
-  "projectRecordId"
-];
-
 function InlineLeadCell({
   fieldName,
+  fieldOwner,
   row,
   isSaving,
   onSubmit
 }: {
   fieldName: LeadTableColumnKey;
+  fieldOwner: LeadTableColumnOwner;
   row: LeadTableRow;
   isSaving: boolean;
   onSubmit: (formData: FormData) => Promise<void>;
 }) {
   const [value, setValue] = useState(row[fieldName] ?? "");
+  const isLinkedClientField = fieldOwner === "client";
+  const canEdit = fieldOwner === "lead" || (isLinkedClientField && Boolean(row.clientRecordId));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEdit) {
+      return;
+    }
     await onSubmit(new FormData(event.currentTarget));
   }
 
   function submitIfChanged(form: HTMLFormElement | null) {
-    if (form && value !== (row[fieldName] ?? "")) {
+    if (canEdit && form && value !== (row[fieldName] ?? "")) {
       form.requestSubmit();
     }
   }
@@ -523,12 +658,22 @@ function InlineLeadCell({
     }
   }
 
+  if (!canEdit) {
+    return (
+      <span
+        className="block max-w-full truncate rounded-md border border-dashed border-sky-200 bg-sky-50/70 px-2 py-1.5 text-sm text-muted-foreground dark:border-sky-900 dark:bg-sky-950/20"
+        title="Link or create a client first to edit this client field inline."
+      >
+        {value || "-"}
+      </span>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()} className="min-w-0">
       <input type="hidden" name="id" value={row.id} />
-      {leadEditorFieldNames.map((name) =>
-        name === fieldName ? null : <input key={name} type="hidden" name={name} value={row[name] ?? ""} />
-      )}
+      <input type="hidden" name="inlineFieldName" value={fieldName} />
+      <input type="hidden" name="inlineFieldOwner" value={fieldOwner} />
       <input
         name={fieldName}
         value={value}
@@ -537,8 +682,10 @@ function InlineLeadCell({
         onChange={(event) => setValue(event.target.value)}
         onBlur={(event) => submitIfChanged(event.currentTarget.form)}
         onKeyDown={handleKeyDown}
-        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
-        title="Edit inline, then press Enter or leave the cell to save"
+        className={`h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60 ${
+          isLinkedClientField ? "font-medium text-sky-950 dark:text-sky-100" : ""
+        }`}
+        title={isLinkedClientField ? "Edit linked client inline, then press Enter or leave the cell to save" : "Edit inline, then press Enter or leave the cell to save"}
       />
     </form>
   );
@@ -551,11 +698,13 @@ function LeadEditor({
   isMarkingKpSent,
   isUndoingKpSent,
   isRefreshingSummary,
+  isDeletingLead,
   onClose,
   onSubmit,
   onMarkKpSent,
   onUndoKpSent,
   onRegenerateSummary,
+  onDeleteLead,
   variant
 }: {
   lead: LeadTableRow;
@@ -564,11 +713,13 @@ function LeadEditor({
   isMarkingKpSent: boolean;
   isUndoingKpSent: boolean;
   isRefreshingSummary: boolean;
+  isDeletingLead: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onMarkKpSent: () => void;
   onUndoKpSent: () => void;
   onRegenerateSummary: () => void;
+  onDeleteLead: () => void;
   variant: "fullscreen";
 }) {
   const sourceMaterials = getLeadSourceMaterials(lead.rawInput);
@@ -658,6 +809,10 @@ function LeadEditor({
       <SourceMaterialsPanel sourceText={sourceMaterials.sourceText} references={sourceMaterials.references} />
 
       <div id="lead-edit-fields" className="mt-4 grid gap-3">
+        {leadEditorFieldOrder.map((fieldName) => (
+          <LeadEditorField key={fieldName} fieldName={fieldName} lead={lead} />
+        ))}
+        <div className="hidden" aria-hidden="true">
         <TextField label="Client ID" name="clientRecordId" defaultValue={lead.clientRecordId} />
         <TextField label="Temperature" name="temperature" defaultValue={lead.temperature} />
         <TextField label="Request type" name="requestType" defaultValue={lead.requestType} />
@@ -679,6 +834,7 @@ function LeadEditor({
         <TextField label="Outcome" name="outcome" defaultValue={lead.outcome} />
         <TextareaField label="Outcome reason" name="outcomeReason" defaultValue={lead.outcomeReason} />
         <TextField label="Project ID" name="projectRecordId" defaultValue={lead.projectRecordId} />
+        </div>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -689,9 +845,142 @@ function LeadEditor({
         >
           {isSaving ? "Saving..." : "Save"}
         </button>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 sm:col-span-2 dark:border-red-950 dark:bg-red-950/20">
+          <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-200">Danger zone</p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="max-w-lg text-sm text-red-800 dark:text-red-100">Delete this lead and its saved context/calendar records.</p>
+            <button
+              type="button"
+              disabled={isDeletingLead}
+              onClick={onDeleteLead}
+              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {isDeletingLead ? "Deleting..." : "Delete lead"}
+            </button>
+          </div>
+        </div>
       </div>
     </form>
   );
+}
+
+type LeadEditorFieldKind = "text" | "date" | "textarea" | "select";
+
+type LeadEditorFieldConfig = {
+  label: string;
+  kind: LeadEditorFieldKind;
+  owner: LeadTableColumnOwner;
+  inputMode?: "decimal";
+  required?: boolean;
+  options?: string[];
+};
+
+function LeadEditorField({ fieldName, lead }: { fieldName: LeadTableColumnKey; lead: LeadTableRow }) {
+  const config = getLeadEditorFieldConfig(fieldName);
+  const disabled = config.owner === "client" && !lead.clientRecordId;
+  const disabledHint = disabled ? "Link or create a client first to edit this client field." : undefined;
+  const label = (
+    <span className="flex min-w-0 flex-wrap items-center gap-2">
+      <span>{config.label}</span>
+      {config.owner === "client" ? (
+        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200">
+          Client field
+        </span>
+      ) : null}
+    </span>
+  );
+
+  if (config.kind === "textarea") {
+    return <TextareaField label={label} name={fieldName} defaultValue={lead[fieldName]} disabled={disabled} title={disabledHint} />;
+  }
+
+  if (config.kind === "date") {
+    return <DateField label={label} name={fieldName} defaultValue={lead[fieldName]} disabled={disabled} title={disabledHint} />;
+  }
+
+  if (config.kind === "select") {
+    return (
+      <SelectField
+        label={label}
+        name={fieldName}
+        defaultValue={lead[fieldName]}
+        options={config.options ?? [""]}
+        disabled={disabled}
+        title={disabledHint}
+      />
+    );
+  }
+
+  return (
+    <TextField
+      label={label}
+      name={fieldName}
+      defaultValue={lead[fieldName]}
+      inputMode={config.inputMode}
+      required={config.required}
+      disabled={disabled}
+      title={disabledHint}
+    />
+  );
+}
+
+function getLeadEditorFieldConfig(fieldName: LeadTableColumnKey): LeadEditorFieldConfig {
+  switch (fieldName) {
+    case "clientName":
+      return { label: "Client", kind: "text", owner: "client", required: true };
+    case "bgfM2":
+      return { label: "Area", kind: "text", owner: "lead", inputMode: "decimal" };
+    case "requestType":
+      return { label: "Description", kind: "text", owner: "lead" };
+    case "temperature":
+      return { label: "Interest", kind: "text", owner: "lead" };
+    case "urgency":
+      return { label: "Urgency", kind: "text", owner: "lead" };
+    case "projectAddress":
+      return { label: "Address", kind: "text", owner: "lead" };
+    case "phone":
+      return { label: "Phone", kind: "text", owner: "client" };
+    case "email":
+      return { label: "Email", kind: "text", owner: "client" };
+    case "messenger":
+      return { label: "Messenger", kind: "text", owner: "client" };
+    case "source":
+      return { label: "Source", kind: "text", owner: "client" };
+    case "clientRecordId":
+      return { label: "Client ID", kind: "text", owner: "lead" };
+    case "budgetEur":
+      return { label: "Budget EUR", kind: "text", owner: "lead", inputMode: "decimal" };
+    case "desiredStart":
+      return { label: "Desired start", kind: "date", owner: "lead" };
+    case "desiredMoveIn":
+      return { label: "Desired move-in", kind: "date", owner: "lead" };
+    case "wohnflaecheM2":
+      return { label: "Wohnflaeche m2", kind: "text", owner: "lead", inputMode: "decimal" };
+    case "isStandard":
+      return { label: "Standard", kind: "select", owner: "lead", options: ["", "yes", "no"] };
+    case "status":
+      return { label: "Status", kind: "text", owner: "lead", required: true };
+    case "rawInput":
+      return { label: "Raw input", kind: "textarea", owner: "lead" };
+    case "missingData":
+      return { label: "Missing data", kind: "textarea", owner: "lead" };
+    case "kpGeneratedDocumentId":
+      return { label: "KP document", kind: "text", owner: "lead" };
+    case "kpSentDate":
+      return { label: "KP sent date", kind: "date", owner: "lead" };
+    case "followup1Date":
+      return { label: "Follow-up date", kind: "date", owner: "lead" };
+    case "followupStatus":
+      return { label: "Follow-up status", kind: "text", owner: "lead" };
+    case "outcome":
+      return { label: "Outcome", kind: "text", owner: "lead" };
+    case "outcomeReason":
+      return { label: "Outcome reason", kind: "textarea", owner: "lead" };
+    case "projectRecordId":
+      return { label: "Project ID", kind: "text", owner: "lead" };
+    default:
+      return { label: fieldName, kind: "text", owner: "derived" };
+  }
 }
 
 function LeadDownloadButtons({ lead }: { lead: LeadTableRow }) {
@@ -1286,13 +1575,17 @@ function TextField({
   name,
   defaultValue,
   inputMode,
-  required
+  required,
+  disabled,
+  title
 }: {
-  label: string;
+  label: ReactNode;
   name: string;
   defaultValue: string;
   inputMode?: "decimal";
   required?: boolean;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <label className="grid gap-1 text-sm">
@@ -1302,35 +1595,70 @@ function TextField({
         defaultValue={defaultValue}
         inputMode={inputMode}
         required={required}
-        className="rounded-md border border-border bg-surface px-3 py-2 text-foreground"
+        disabled={disabled}
+        title={title}
+        className="rounded-md border border-border bg-surface px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-60"
       />
     </label>
   );
 }
 
-function DateField({ label, name, defaultValue }: { label: string; name: string; defaultValue: string }) {
+function DateField({ label, name, defaultValue, disabled, title }: { label: ReactNode; name: string; defaultValue: string; disabled?: boolean; title?: string }) {
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <input name={name} type="date" defaultValue={defaultValue} className="rounded-md border border-border bg-surface px-3 py-2 text-foreground" />
+      <input
+        name={name}
+        type="date"
+        defaultValue={defaultValue}
+        disabled={disabled}
+        title={title}
+        className="rounded-md border border-border bg-surface px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+      />
     </label>
   );
 }
 
-function TextareaField({ label, name, defaultValue }: { label: string; name: string; defaultValue: string }) {
+function TextareaField({ label, name, defaultValue, disabled, title }: { label: ReactNode; name: string; defaultValue: string; disabled?: boolean; title?: string }) {
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <textarea name={name} defaultValue={defaultValue} className="min-h-20 rounded-md border border-border bg-surface px-3 py-2 text-foreground" />
+      <textarea
+        name={name}
+        defaultValue={defaultValue}
+        disabled={disabled}
+        title={title}
+        className="min-h-20 rounded-md border border-border bg-surface px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+      />
     </label>
   );
 }
 
-function SelectField({ label, name, defaultValue, options }: { label: string; name: string; defaultValue: string; options: string[] }) {
+function SelectField({
+  label,
+  name,
+  defaultValue,
+  options,
+  disabled,
+  title
+}: {
+  label: ReactNode;
+  name: string;
+  defaultValue: string;
+  options: string[];
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-medium text-foreground">{label}</span>
-      <select name={name} defaultValue={defaultValue} className="rounded-md border border-border bg-surface px-3 py-2 text-foreground">
+      <select
+        name={name}
+        defaultValue={defaultValue}
+        disabled={disabled}
+        title={title}
+        className="rounded-md border border-border bg-surface px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+      >
         {options.map((option) => (
           <option key={option || "empty"} value={option}>
             {option || "Unknown"}

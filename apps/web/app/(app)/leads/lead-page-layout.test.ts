@@ -40,6 +40,28 @@ describe("leads page layout", () => {
     expect(tableSource).toContain("Export to Excel (CSV)");
   });
 
+  it("offers default lead columns and non-conflicting column resizing", () => {
+    expect(tableSource).toContain('usePersistentTablePreferences("leads-v2")');
+    expect(tableSource).toContain("createDefaultLeadColumnVisibility");
+    expect(tableSource).toContain("createDefaultLeadColumnOrder");
+    expect(tableSource).toContain("Default columns");
+    expect(tableSource).toContain("setColumnSizing({})");
+    expect(tableSource).toContain("setColumnOrder(createDefaultLeadColumnOrder())");
+    expect(tableSource).toContain("event.stopPropagation()");
+    expect(tableSource).toContain("table-fixed");
+    expect(tableSource).toContain("Resize column");
+  });
+
+  it("lets users reorder lead table columns with a drag handle", () => {
+    expect(tableSource).toContain("columnOrder: effectiveColumnOrder");
+    expect(tableSource).toContain("onColumnOrderChange: setColumnOrder");
+    expect(tableSource).toContain("handleColumnDragStart");
+    expect(tableSource).toContain("handleColumnDrop");
+    expect(tableSource).toContain("reorderLeadColumnOrder");
+    expect(tableSource).toContain('aria-label="Move column"');
+    expect(tableSource).toContain("Drag to move column");
+  });
+
   it("shows lead summary info before history and keeps source blocks mobile-safe", () => {
     expect(tableSource.indexOf("<LeadActionCalendarPanel")).toBeGreaterThan(-1);
     expect(tableSource.indexOf("<LeadActionCalendarPanel")).toBeLessThan(tableSource.indexOf("<LeadSummaryInfoPanel"));

@@ -232,6 +232,95 @@ describe("telegram worker", () => {
     expect(sendBody.reply_markup.inline_keyboard[0]).toContainEqual({ text: "Undo", callback_data: "lead_undo:L-2026-002:5" });
   });
 
+  it("creates and links a client while creating a new Telegram lead with contact data", async () => {
+    const createdLeads: unknown[] = [];
+    const createdClients: unknown[] = [];
+    const client = {
+      client: {
+        findMany: vi.fn(async () => [{ id: "client-record-1", clientId: "C-2026-001", name: "Other Client", email: "other@example.com", phone: null }]),
+        create: vi.fn(async (args: unknown) => {
+          createdClients.push(args);
+          return { id: "client-record-2", clientId: "C-2026-002" };
+        })
+      },
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async (args: unknown) => {
+          createdLeads.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        bgfM2: 195,
+        projectAddress: "Gartenweg 9",
+        email: "irina@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        summary: "Standard EFH lead",
+        suggestedReply: "Danke."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 10,
+            message: {
+              message_id: 5,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "Need EFH offer"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 10 });
+
+    expect(createdClients).toEqual([
+      {
+        data: {
+          workspaceId: "workspace-demo",
+          clientId: "C-2026-002",
+          name: "Irina Schneider",
+          clientType: "private",
+          email: "irina@example.com",
+          phone: "+49 160 4442211",
+          source: "telegram"
+        }
+      }
+    ]);
+    expect(createdLeads).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientRecordId: "client-record-2"
+        })
+      })
+    ]);
+  });
+
   it("runs CRM entity extraction after creating a Telegram lead and persists extracted context", async () => {
     const savedExtractions: unknown[] = [];
     const client = {

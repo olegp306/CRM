@@ -1,6 +1,6 @@
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
-import { markLeadKpSentAction, regenerateLeadSummaryAction, undoLeadKpSentAction, updateLeadAction } from "./actions";
+import { deleteLeadAction, markLeadKpSentAction, regenerateLeadSummaryAction, undoLeadKpSentAction, updateLeadAction } from "./actions";
 import { LeadsTable } from "./leads-table";
 import { createLeadTableRows, type LeadChannelEventsByLeadId } from "./lead-table-store";
 
@@ -14,6 +14,20 @@ export default async function LeadsPage() {
       leadId: true,
       displayName: true,
       clientRecordId: true,
+      client: {
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+          whatsapp: true,
+          source: true,
+          _count: {
+            select: {
+              leads: true
+            }
+          }
+        }
+      },
       createdDate: true,
       temperature: true,
       requestType: true,
@@ -113,6 +127,7 @@ export default async function LeadsPage() {
         markLeadKpSentAction={markLeadKpSentAction}
         undoLeadKpSentAction={undoLeadKpSentAction}
         regenerateLeadSummaryAction={regenerateLeadSummaryAction}
+        deleteLeadAction={deleteLeadAction}
       />
     </section>
   );

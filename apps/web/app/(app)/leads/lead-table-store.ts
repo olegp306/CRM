@@ -1,4 +1,6 @@
 export type LeadTableColumnKey =
+  | "clientName"
+  | "projectTitle"
   | "leadId"
   | "leadName"
   | "clientRecordId"
@@ -14,7 +16,12 @@ export type LeadTableColumnKey =
   | "projectAddress"
   | "isStandard"
   | "status"
+  | "todo"
+  | "email"
+  | "phone"
+  | "messenger"
   | "source"
+  | "clientProjectCount"
   | "rawInput"
   | "missingData"
   | "kpGeneratedDocumentId"
@@ -25,15 +32,18 @@ export type LeadTableColumnKey =
   | "outcomeReason"
   | "projectRecordId";
 
+export type LeadTableColumnOwner = "lead" | "client" | "derived";
+
 export type LeadTableColumn = {
   key: LeadTableColumnKey;
   label: string;
+  owner: LeadTableColumnOwner;
   enableSorting: true;
   defaultSize: number;
   maxSize?: number;
 };
 
-export type LeadTableViewMode = "split" | "full" | "inline";
+export type LeadTableViewMode = "full" | "inline";
 
 export type LeadMobileViewMode = "cards" | "table";
 
@@ -42,6 +52,16 @@ export type LeadTableRecord = {
   leadId: string;
   displayName?: string | null;
   clientRecordId: string | null;
+  client?: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    whatsapp: string | null;
+    source: string | null;
+    _count?: {
+      leads: number;
+    };
+  } | null;
   createdDate: Date | string | null;
   temperature: string | null;
   requestType: string | null;
@@ -179,35 +199,107 @@ export type LeadSummaryInfoItem = {
 };
 
 export const leadTableColumns: LeadTableColumn[] = [
-  { key: "leadId", label: "Lead ID", enableSorting: true, defaultSize: 132 },
-  { key: "leadName", label: "Lead name", enableSorting: true, defaultSize: 240, maxSize: 420 },
-  { key: "clientRecordId", label: "Client ID", enableSorting: true, defaultSize: 160 },
-  { key: "createdDate", label: "Created", enableSorting: true, defaultSize: 124 },
-  { key: "temperature", label: "Temperature", enableSorting: true, defaultSize: 132 },
-  { key: "requestType", label: "Request type", enableSorting: true, defaultSize: 152 },
-  { key: "urgency", label: "Urgency", enableSorting: true, defaultSize: 120 },
-  { key: "budgetEur", label: "Budget EUR", enableSorting: true, defaultSize: 132 },
-  { key: "desiredStart", label: "Desired start", enableSorting: true, defaultSize: 144 },
-  { key: "desiredMoveIn", label: "Desired move-in", enableSorting: true, defaultSize: 152 },
-  { key: "bgfM2", label: "BGF m2", enableSorting: true, defaultSize: 112 },
-  { key: "wohnflaecheM2", label: "Wohnfläche m2", enableSorting: true, defaultSize: 152 },
-  { key: "projectAddress", label: "Project address", enableSorting: true, defaultSize: 220 },
-  { key: "isStandard", label: "Standard", enableSorting: true, defaultSize: 116 },
-  { key: "status", label: "Status", enableSorting: true, defaultSize: 128 },
-  { key: "source", label: "Source", enableSorting: true, defaultSize: 116 },
-  { key: "rawInput", label: "Raw input", enableSorting: true, defaultSize: 220, maxSize: 480 },
-  { key: "missingData", label: "Missing data", enableSorting: true, defaultSize: 180, maxSize: 360 },
-  { key: "kpGeneratedDocumentId", label: "KP document", enableSorting: true, defaultSize: 168 },
-  { key: "kpSentDate", label: "KP sent", enableSorting: true, defaultSize: 124 },
-  { key: "followup1Date", label: "Follow-up date", enableSorting: true, defaultSize: 152 },
-  { key: "followupStatus", label: "Follow-up status", enableSorting: true, defaultSize: 160 },
-  { key: "outcome", label: "Outcome", enableSorting: true, defaultSize: 132 },
-  { key: "outcomeReason", label: "Outcome reason", enableSorting: true, defaultSize: 200, maxSize: 360 },
-  { key: "projectRecordId", label: "Project ID", enableSorting: true, defaultSize: 160 }
+  { key: "clientName", label: "Client", owner: "client", enableSorting: true, defaultSize: 180, maxSize: 320 },
+  { key: "projectTitle", label: "Project", owner: "derived", enableSorting: true, defaultSize: 220, maxSize: 420 },
+  { key: "bgfM2", label: "Area", owner: "lead", enableSorting: true, defaultSize: 104 },
+  { key: "requestType", label: "Description", owner: "lead", enableSorting: true, defaultSize: 220, maxSize: 420 },
+  { key: "temperature", label: "Interest", owner: "lead", enableSorting: true, defaultSize: 112 },
+  { key: "urgency", label: "Urgency", owner: "lead", enableSorting: true, defaultSize: 112 },
+  { key: "todo", label: "Todo", owner: "derived", enableSorting: true, defaultSize: 180, maxSize: 360 },
+  { key: "projectAddress", label: "Address", owner: "lead", enableSorting: true, defaultSize: 220, maxSize: 420 },
+  { key: "phone", label: "Phone", owner: "client", enableSorting: true, defaultSize: 152 },
+  { key: "email", label: "Email", owner: "client", enableSorting: true, defaultSize: 188, maxSize: 320 },
+  { key: "messenger", label: "Messenger", owner: "client", enableSorting: true, defaultSize: 152 },
+  { key: "source", label: "Source", owner: "client", enableSorting: true, defaultSize: 116 },
+  { key: "clientProjectCount", label: "Client projects", owner: "derived", enableSorting: true, defaultSize: 132 },
+  { key: "leadId", label: "Lead ID", owner: "lead", enableSorting: true, defaultSize: 132 },
+  { key: "leadName", label: "Lead name", owner: "derived", enableSorting: true, defaultSize: 240, maxSize: 420 },
+  { key: "clientRecordId", label: "Client ID", owner: "lead", enableSorting: true, defaultSize: 160 },
+  { key: "createdDate", label: "Created", owner: "lead", enableSorting: true, defaultSize: 124 },
+  { key: "budgetEur", label: "Budget EUR", owner: "lead", enableSorting: true, defaultSize: 132 },
+  { key: "desiredStart", label: "Desired start", owner: "lead", enableSorting: true, defaultSize: 144 },
+  { key: "desiredMoveIn", label: "Desired move-in", owner: "lead", enableSorting: true, defaultSize: 152 },
+  { key: "wohnflaecheM2", label: "Wohnflaeche m2", owner: "lead", enableSorting: true, defaultSize: 152 },
+  { key: "isStandard", label: "Standard", owner: "lead", enableSorting: true, defaultSize: 116 },
+  { key: "status", label: "Status", owner: "lead", enableSorting: true, defaultSize: 128 },
+  { key: "rawInput", label: "Raw input", owner: "lead", enableSorting: true, defaultSize: 220, maxSize: 480 },
+  { key: "missingData", label: "Missing data", owner: "lead", enableSorting: true, defaultSize: 180, maxSize: 360 },
+  { key: "kpGeneratedDocumentId", label: "KP document", owner: "lead", enableSorting: true, defaultSize: 168 },
+  { key: "kpSentDate", label: "KP sent", owner: "lead", enableSorting: true, defaultSize: 124 },
+  { key: "followup1Date", label: "Follow-up date", owner: "lead", enableSorting: true, defaultSize: 152 },
+  { key: "followupStatus", label: "Follow-up status", owner: "lead", enableSorting: true, defaultSize: 160 },
+  { key: "outcome", label: "Outcome", owner: "lead", enableSorting: true, defaultSize: 132 },
+  { key: "outcomeReason", label: "Outcome reason", owner: "lead", enableSorting: true, defaultSize: 200, maxSize: 360 },
+  { key: "projectRecordId", label: "Project ID", owner: "lead", enableSorting: true, defaultSize: 160 }
 ];
 
+export const leadTableDefaultVisibleColumnKeys: LeadTableColumnKey[] = [
+  "clientName",
+  "projectTitle",
+  "bgfM2",
+  "requestType",
+  "temperature",
+  "urgency",
+  "todo",
+  "projectAddress",
+  "phone",
+  "email",
+  "messenger",
+  "source",
+  "clientProjectCount"
+];
+
+export function createDefaultLeadColumnVisibility(): Record<LeadTableColumnKey, boolean> {
+  const visible = new Set<LeadTableColumnKey>(leadTableDefaultVisibleColumnKeys);
+  return Object.fromEntries(leadTableColumns.map((column) => [column.key, visible.has(column.key)])) as Record<LeadTableColumnKey, boolean>;
+}
+
+export function createDefaultLeadColumnOrder(): LeadTableColumnKey[] {
+  return leadTableColumns.map((column) => column.key);
+}
+
+export function reorderLeadColumnOrder(inputOrder: string[], sourceColumnId: string, targetColumnId: string): LeadTableColumnKey[] {
+  const defaultOrder = createDefaultLeadColumnOrder();
+  const validColumnIds = new Set<string>(defaultOrder);
+  const source = sourceColumnId as LeadTableColumnKey;
+  const target = targetColumnId as LeadTableColumnKey;
+
+  if (!validColumnIds.has(source) || !validColumnIds.has(target) || source === target) {
+    return normalizeLeadColumnOrder(inputOrder);
+  }
+
+  const baseOrder = normalizeLeadColumnOrder(inputOrder);
+  const withoutSource = baseOrder.filter((columnId) => columnId !== source);
+  const targetIndex = withoutSource.indexOf(target);
+
+  if (targetIndex === -1) {
+    return baseOrder;
+  }
+
+  return [
+    ...withoutSource.slice(0, targetIndex),
+    source,
+    ...withoutSource.slice(targetIndex)
+  ];
+}
+
+export function normalizeLeadColumnOrder(inputOrder: string[]): LeadTableColumnKey[] {
+  const defaultOrder = createDefaultLeadColumnOrder();
+  const validColumnIds = new Set<string>(defaultOrder);
+  const seen = new Set<string>();
+  const normalized = inputOrder.filter((columnId): columnId is LeadTableColumnKey => {
+    if (!validColumnIds.has(columnId) || seen.has(columnId)) {
+      return false;
+    }
+
+    seen.add(columnId);
+    return true;
+  });
+
+  return [...normalized, ...defaultOrder.filter((columnId) => !seen.has(columnId))];
+}
+
 export const leadTableViewModes: Array<{ id: LeadTableViewMode; label: string; description: string }> = [
-  { id: "split", label: "Split", description: "Table with selected lead side panel." },
   { id: "full", label: "Full", description: "Full-width table with popup editor." },
   { id: "inline", label: "Inline", description: "Quick-edit safe fields directly in the table." }
 ];
@@ -215,7 +307,7 @@ export const leadTableViewModes: Array<{ id: LeadTableViewMode; label: string; d
 export const leadTableViewModeStorageKey = "crm.table.leads.view-mode.v1";
 
 export function normalizeLeadTableViewMode(input: unknown): LeadTableViewMode {
-  return leadTableViewModes.some((mode) => mode.id === input) ? (input as LeadTableViewMode) : "split";
+  return leadTableViewModes.some((mode) => mode.id === input) ? (input as LeadTableViewMode) : "full";
 }
 
 export function resolveInitialSelectedLeadId(_viewMode: LeadTableViewMode, _leadIds: string[]): string | null {
@@ -238,14 +330,50 @@ export const leadMobileViewModes: Array<{ id: LeadMobileViewMode; label: string;
 export const leadMobileCardFields: LeadTableColumnKey[] = ["createdDate", "status", "requestType", "projectAddress", "source"];
 
 export const inlineEditableLeadFields: LeadTableColumnKey[] = [
+  "clientName",
   "temperature",
   "requestType",
   "urgency",
   "budgetEur",
+  "bgfM2",
+  "wohnflaecheM2",
   "status",
   "projectAddress",
+  "phone",
+  "email",
+  "messenger",
+  "source",
   "followupStatus",
   "outcome"
+];
+
+export const leadEditorFieldOrder: LeadTableColumnKey[] = [
+  "clientName",
+  "bgfM2",
+  "requestType",
+  "temperature",
+  "urgency",
+  "projectAddress",
+  "phone",
+  "email",
+  "messenger",
+  "source",
+  "clientRecordId",
+  "budgetEur",
+  "desiredStart",
+  "desiredMoveIn",
+  "wohnflaecheM2",
+  "isStandard",
+  "status",
+  "rawInput",
+  "missingData",
+  "kpGeneratedDocumentId",
+  "kpSentDate",
+  "followup1Date",
+  "followupStatus",
+  "outcome",
+  "outcomeReason",
+  "projectRecordId"
 ];
 
 export function isInlineEditableLeadField(key: LeadTableColumnKey): boolean {
@@ -543,39 +671,54 @@ export function createLeadTableRows(
 ): LeadTableRow[] {
   const documentsById = new Map(generatedDocuments.map((document) => [document.documentId, document]));
 
-  return records.map((record) => ({
-    id: record.id,
-    leadId: record.leadId,
-    leadName: record.displayName ?? record.leadId,
-    clientRecordId: record.clientRecordId ?? "",
-    createdDate: formatDate(record.createdDate),
-    temperature: record.temperature ?? "",
-    requestType: record.requestType ?? "",
-    urgency: record.urgency ?? "",
-    budgetEur: formatScalar(record.budgetEur),
-    desiredStart: formatDate(record.desiredStart),
-    desiredMoveIn: formatDate(record.desiredMoveIn),
-    bgfM2: formatScalar(record.bgfM2),
-    wohnflaecheM2: formatScalar(record.wohnflaecheM2),
-    projectAddress: record.projectAddress ?? "",
-    isStandard: formatBoolean(record.isStandard),
-    status: record.status,
-    source: formatLeadSource(record.rawInput),
-    rawInput: record.rawInput ?? "",
-    missingData: formatMissingData(record.missingData),
-    kpGeneratedDocumentId: record.kpGeneratedDocumentId ?? "",
-    kpSentDate: formatDate(record.kpSentDate),
-    followup1Date: formatDate(record.followup1Date),
-    followupStatus: record.followupStatus ?? "",
-    outcome: record.outcome ?? "",
-    outcomeReason: record.outcomeReason ?? "",
-    projectRecordId: record.projectRecordId ?? "",
-    kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
-    kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined,
-    channelEvents: channelEventsByLeadId[record.leadId] ?? undefined,
-    contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? []),
-    calendarActions: record.calendarActions ?? []
-  }));
+  return records.map((record) => {
+    const clientName = createLeadClientName(record);
+    const row: LeadTableRow = {
+      id: record.id,
+      clientName,
+      projectTitle: createLeadProjectTitle(record, clientName),
+      leadId: record.leadId,
+      leadName: record.displayName ?? record.leadId,
+      clientRecordId: record.clientRecordId ?? "",
+      createdDate: formatDate(record.createdDate),
+      temperature: record.temperature ?? "",
+      requestType: record.requestType ?? "",
+      urgency: record.urgency ?? "",
+      budgetEur: formatScalar(record.budgetEur),
+      desiredStart: formatDate(record.desiredStart),
+      desiredMoveIn: formatDate(record.desiredMoveIn),
+      bgfM2: formatScalar(record.bgfM2),
+      wohnflaecheM2: formatScalar(record.wohnflaecheM2),
+      projectAddress: record.projectAddress ?? "",
+      isStandard: formatBoolean(record.isStandard),
+      status: record.status,
+      todo: "",
+      email: record.client?.email ?? extractEmail(record.rawInput ?? ""),
+      phone: record.client?.phone ?? extractPhone(record.rawInput ?? ""),
+      messenger: record.client?.whatsapp ?? createLeadMessenger(record.rawInput),
+      source: formatLeadSource(record.rawInput, record.client?.source),
+      clientProjectCount: record.client?._count?.leads ? String(record.client._count.leads) : "",
+      rawInput: record.rawInput ?? "",
+      missingData: formatMissingData(record.missingData),
+      kpGeneratedDocumentId: record.kpGeneratedDocumentId ?? "",
+      kpSentDate: formatDate(record.kpSentDate),
+      followup1Date: formatDate(record.followup1Date),
+      followupStatus: record.followupStatus ?? "",
+      outcome: record.outcome ?? "",
+      outcomeReason: record.outcomeReason ?? "",
+      projectRecordId: record.projectRecordId ?? "",
+      kpDocxAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.docxAttachmentId ?? undefined,
+      kpPdfAttachmentId: documentsById.get(record.kpGeneratedDocumentId ?? "")?.pdfAttachmentId ?? undefined,
+      channelEvents: channelEventsByLeadId[record.leadId] ?? undefined,
+      contextEntities: createLeadContextItemsFromRecords(record.contextEntities ?? []),
+      calendarActions: record.calendarActions ?? []
+    };
+
+    return {
+      ...row,
+      todo: createLeadActionPlan(row)[0]?.title ?? createLeadCalendarViewModel(row).nextSummary
+    };
+  });
 }
 
 export type LeadUrlSearchFilters = {
@@ -625,11 +768,16 @@ function createLeadRowSearchText(row: LeadTableRow): string {
     [
       row.leadId,
       row.leadName,
+      row.clientName,
+      row.projectTitle,
       row.clientRecordId,
       row.temperature,
       row.requestType,
       row.urgency,
       row.projectAddress,
+      row.email,
+      row.phone,
+      row.messenger,
       row.status,
       row.rawInput,
       row.missingData,
@@ -1279,7 +1427,59 @@ function formatBoolean(value: boolean | null): string {
   return value ? "yes" : "no";
 }
 
-function formatLeadSource(rawInput: string | null): string {
+function createLeadClientName(record: LeadTableRecord): string {
+  return record.client?.name?.trim() || extractLabeledValue(record.rawInput ?? "", ["client", "clientName", "name", "имя", "клиент"]) || extractLeadNamePart(record.displayName, 0) || "";
+}
+
+function createLeadProjectTitle(record: LeadTableRecord, clientName: string): string {
+  const explicitProject = extractLabeledValue(record.rawInput ?? "", ["project", "projectName", "project name", "проект", "название проекта"]);
+  if (explicitProject) {
+    return explicitProject;
+  }
+
+  const projectPart = extractLeadNamePart(record.displayName, 1);
+  if (projectPart) {
+    return projectPart;
+  }
+
+  return [record.requestType, record.projectAddress].filter(Boolean).join(" in ") || (clientName ? `${clientName} project` : record.leadId);
+}
+
+function extractLeadNamePart(displayName: string | null | undefined, index: 0 | 1): string {
+  const parts = displayName?.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean) ?? [];
+  return parts[index] ?? "";
+}
+
+function extractLabeledValue(text: string, labels: string[]): string {
+  for (const label of labels) {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`(?:^|[\\n,;])\\s*${escapedLabel}\\s*[:=-]\\s*([^\\n,;]+)`, "iu").exec(text);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+
+  return "";
+}
+
+function extractEmail(text: string): string {
+  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(text)?.[0] ?? "";
+}
+
+function extractPhone(text: string): string {
+  return /(?:\+?\d[\d\s().-]{6,}\d)/.exec(text)?.[0]?.trim() ?? "";
+}
+
+function createLeadMessenger(rawInput: string | null): string {
+  const text = rawInput ?? "";
+  if (/whats\s*app|wa\.me|ватсап|вотсап/i.test(text)) return "WhatsApp";
+  if (/telegram|t\.me/i.test(text)) return "Telegram";
+  if (/email|e-mail|@/i.test(text)) return "Email";
+  return "";
+}
+
+function formatLeadSource(rawInput: string | null, clientSource?: string | null): string {
+  if (clientSource?.trim()) return clientSource.trim();
   if (!rawInput) return "web";
   return /Telegram sources?: telegram:|^Telegram:/i.test(rawInput) ? "telegram" : "web";
 }

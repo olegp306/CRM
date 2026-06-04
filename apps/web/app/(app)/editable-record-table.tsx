@@ -6,10 +6,11 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnOrderState,
   type SortingState,
 } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type DragEvent, type FormEvent } from "react";
 import {
   getEditableEmptyStateMessage,
   getEditableMobileCardFields,
@@ -35,12 +36,18 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
   const editorFields = fields.filter((field) => field.editable);
   const mobileCardFields = useMemo(() => getEditableMobileCardFields(kind, fields), [fields, kind]);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const { columnVisibility, columnSizing, setColumnVisibility, setColumnSizing } = usePersistentTablePreferences(`editable-${kind}`);
+  const { columnVisibility, columnSizing, columnOrder, setColumnVisibility, setColumnSizing, setColumnOrder } = usePersistentTablePreferences(`editable-${kind}`);
   const [mobileViewMode, setMobileViewMode] = useState<MobileTableViewMode>("cards");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
   const selectedRow = rows.find((row) => row.id === selectedId) ?? null;
+  const defaultColumnOrder = useMemo(() => tableFields.map((field) => field.key), [tableFields]);
+  const effectiveColumnOrder = useMemo(
+    () => normalizeEditableColumnOrder(columnOrder, defaultColumnOrder) as ColumnOrderState,
+    [columnOrder, defaultColumnOrder]
+  );
 
   const columns = useMemo<Array<ColumnDef<EditableRecordRow>>>(
     () =>
@@ -58,13 +65,14 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnVisibility, columnSizing },
+    state: { sorting, columnVisibility, columnSizing, columnOrder: effectiveColumnOrder },
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    onColumnSizingChange: setColumnSizing
+    onColumnSizingChange: setColumnSizing,
+    onColumnOrderChange: setColumnOrder
   });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -77,6 +85,28 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleColumnDragStart(event: DragEvent<HTMLButtonElement>, columnId: string) {
+    setDraggingColumnId(columnId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", columnId);
+  }
+
+  function handleColumnDragOver(event: DragEvent<HTMLTableCellElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleColumnDrop(event: DragEvent<HTMLTableCellElement>, targetColumnId: string) {
+    event.preventDefault();
+    const sourceColumnId = event.dataTransfer.getData("text/plain") || draggingColumnId;
+
+    if (sourceColumnId) {
+      setColumnOrder(reorderEditableColumnOrder(effectiveColumnOrder, defaultColumnOrder, sourceColumnId, targetColumnId));
+    }
+
+    setDraggingColumnId(null);
   }
 
   return (
@@ -159,17 +189,35 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="relative border-b border-r border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0"
+                      onDragOver={handleColumnDragOver}
+                      onDrop={(event) => handleColumnDrop(event, header.column.id)}
+                      className={`relative border-b border-r border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0 ${
+                        draggingColumnId === header.column.id ? "bg-primary/10" : ""
+                      }`}
                       style={{ width: header.getSize() }}
                     >
-                      <button
-                        type="button"
-                        onClick={header.column.getToggleSortingHandler()}
-                        className="flex w-full items-center justify-between gap-2 text-left"
-                      >
-                        <span>{flexRender(header.column.columnDef.header, header.getContext())}</span>
-                        <span className="text-[10px]">{getSortLabel(header.column.getIsSorted())}</span>
-                      </button>
+                      <div className="flex w-full items-start gap-2">
+                        <button
+                          type="button"
+                          draggable
+                          aria-label="Move column"
+                          title="Drag to move column"
+                          onDragStart={(event) => handleColumnDragStart(event, header.column.id)}
+                          onDragEnd={() => setDraggingColumnId(null)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="mt-0.5 h-5 w-5 shrink-0 cursor-grab rounded border border-border bg-white text-[11px] leading-4 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                        >
+                          ↕
+                        </button>
+                        <button
+                          type="button"
+                          onClick={header.column.getToggleSortingHandler()}
+                          className="flex min-w-0 flex-1 items-start justify-between gap-2 text-left"
+                        >
+                          <span className="min-w-0">{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                          <span className="text-[10px]">{getSortLabel(header.column.getIsSorted())}</span>
+                        </button>
+                      </div>
                       <button
                         type="button"
                         aria-label="Resize column"
@@ -341,6 +389,43 @@ function EditorField({ field, value }: { field: EditableTableField; value: strin
 function getInputType(type: EditableTableField["type"]) {
   if (type === "date" || type === "email" || type === "url") return type;
   return "text";
+}
+
+function normalizeEditableColumnOrder(inputOrder: string[], defaultOrder: string[]): string[] {
+  const validColumnIds = new Set(defaultOrder);
+  const seen = new Set<string>();
+  const normalized = inputOrder.filter((columnId) => {
+    if (!validColumnIds.has(columnId) || seen.has(columnId)) {
+      return false;
+    }
+
+    seen.add(columnId);
+    return true;
+  });
+
+  return [...normalized, ...defaultOrder.filter((columnId) => !seen.has(columnId))];
+}
+
+function reorderEditableColumnOrder(inputOrder: string[], defaultOrder: string[], sourceColumnId: string, targetColumnId: string): string[] {
+  const validColumnIds = new Set(defaultOrder);
+
+  if (!validColumnIds.has(sourceColumnId) || !validColumnIds.has(targetColumnId) || sourceColumnId === targetColumnId) {
+    return normalizeEditableColumnOrder(inputOrder, defaultOrder);
+  }
+
+  const baseOrder = normalizeEditableColumnOrder(inputOrder, defaultOrder);
+  const withoutSource = baseOrder.filter((columnId) => columnId !== sourceColumnId);
+  const targetIndex = withoutSource.indexOf(targetColumnId);
+
+  if (targetIndex === -1) {
+    return baseOrder;
+  }
+
+  return [
+    ...withoutSource.slice(0, targetIndex),
+    sourceColumnId,
+    ...withoutSource.slice(targetIndex)
+  ];
 }
 
 function getSortLabel(sortState: false | "asc" | "desc") {

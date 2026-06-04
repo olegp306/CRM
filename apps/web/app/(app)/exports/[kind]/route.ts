@@ -35,7 +35,22 @@ async function createTableExportData(kind: ExportKind, workspaceId: string, requ
       select: {
         id: true,
         leadId: true,
+        displayName: true,
         clientRecordId: true,
+        client: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+            whatsapp: true,
+            source: true,
+            _count: {
+              select: {
+                leads: true
+              }
+            }
+          }
+        },
         createdDate: true,
         temperature: true,
         requestType: true,

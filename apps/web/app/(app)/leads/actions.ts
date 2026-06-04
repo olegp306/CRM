@@ -59,6 +59,31 @@ export async function createTelegramLeadAction(formData: FormData): Promise<void
 export async function updateLeadAction(formData: FormData): Promise<void> {
   const session = await getWorkspaceSession();
   const id = getRequiredFormValue(formData, "id");
+  const inlineFieldName = getOptionalFormValue(formData, "inlineFieldName");
+  const inlineFieldOwner = getOptionalFormValue(formData, "inlineFieldOwner");
+
+  if (inlineFieldName) {
+    await updateLeadInlineField({
+      workspaceId: session.workspaceId,
+      id,
+      fieldName: inlineFieldName,
+      fieldOwner: inlineFieldOwner,
+      value: getOptionalFormValue(formData, inlineFieldName)
+    });
+    revalidatePath("/leads");
+    revalidatePath("/clients");
+    return;
+  }
+
+  await updateLeadLinkedClientFields({
+    workspaceId: session.workspaceId,
+    id,
+    clientName: getOptionalFormValue(formData, "clientName"),
+    email: getOptionalFormValue(formData, "email"),
+    phone: getOptionalFormValue(formData, "phone"),
+    messenger: getOptionalFormValue(formData, "messenger"),
+    source: getOptionalFormValue(formData, "source")
+  });
 
   await prisma.lead.update({
     where: { id, workspaceId: session.workspaceId },
@@ -87,6 +112,37 @@ export async function updateLeadAction(formData: FormData): Promise<void> {
     }
   });
   revalidatePath("/leads");
+}
+
+export async function deleteLeadAction(formData: FormData): Promise<void> {
+  const session = await getWorkspaceSession();
+  const id = getRequiredFormValue(formData, "id");
+  const lead = await prisma.lead.findUnique({
+    where: { id, workspaceId: session.workspaceId },
+    select: { id: true, leadId: true }
+  });
+
+  if (!lead) {
+    throw new Error("Lead was not found.");
+  }
+
+  await prisma.$transaction([
+    prisma.leadContextEntity.deleteMany({ where: { workspaceId: session.workspaceId, leadRecordId: lead.id } }),
+    prisma.crmCalendarAction.deleteMany({ where: { workspaceId: session.workspaceId, leadRecordId: lead.id } }),
+    prisma.lead.delete({ where: { id: lead.id, workspaceId: session.workspaceId } }),
+    prisma.auditLog.create({
+      data: {
+        workspaceId: session.workspaceId,
+        actorUserId: session.userId,
+        action: "lead.delete",
+        targetType: "Lead",
+        targetId: lead.leadId,
+        metadata: { leadRecordId: lead.id }
+      }
+    })
+  ]);
+  revalidatePath("/leads");
+  revalidatePath("/today");
 }
 
 export async function markLeadKpSentAction(formData: FormData): Promise<void> {
@@ -196,6 +252,131 @@ export async function regenerateLeadSummaryAction(formData: FormData): Promise<v
   });
 
   revalidatePath("/leads");
+}
+
+async function updateLeadInlineField(input: {
+  workspaceId: string;
+  id: string;
+  fieldName: string;
+  fieldOwner: string | null;
+  value: string | null;
+}) {
+  if (input.fieldOwner === "client") {
+    await updateLinkedClientInlineField(input);
+    return;
+  }
+
+  const data = createLeadInlineUpdate(input.fieldName, input.value);
+  await prisma.lead.update({
+    where: { id: input.id, workspaceId: input.workspaceId },
+    data
+  });
+}
+
+async function updateLeadLinkedClientFields(input: {
+  workspaceId: string;
+  id: string;
+  clientName: string | null;
+  email: string | null;
+  phone: string | null;
+  messenger: string | null;
+  source: string | null;
+}) {
+  const lead = await prisma.lead.findUnique({
+    where: { id: input.id, workspaceId: input.workspaceId },
+    select: { clientRecordId: true }
+  });
+
+  if (!lead?.clientRecordId) {
+    return;
+  }
+
+  await prisma.client.updateMany({
+    where: { id: lead.clientRecordId, workspaceId: input.workspaceId },
+    data: {
+      ...(input.clientName ? { name: input.clientName } : {}),
+      email: input.email,
+      phone: input.phone,
+      whatsapp: input.messenger,
+      source: input.source
+    }
+  });
+}
+
+async function updateLinkedClientInlineField(input: {
+  workspaceId: string;
+  id: string;
+  fieldName: string;
+  value: string | null;
+}) {
+  const lead = await prisma.lead.findUnique({
+    where: { id: input.id, workspaceId: input.workspaceId },
+    select: { clientRecordId: true }
+  });
+
+  if (!lead?.clientRecordId) {
+    throw new Error("This lead is not linked to a client yet.");
+  }
+
+  const data = createClientInlineUpdate(input.fieldName, input.value);
+  const result = await prisma.client.updateMany({
+    where: { id: lead.clientRecordId, workspaceId: input.workspaceId },
+    data
+  });
+
+  if (result.count === 0) {
+    throw new Error("Linked client was not found.");
+  }
+}
+
+function createLeadInlineUpdate(fieldName: string, value: string | null) {
+  switch (fieldName) {
+    case "temperature":
+      return { temperature: value };
+    case "requestType":
+      return { requestType: value };
+    case "urgency":
+      return { urgency: value };
+    case "budgetEur":
+      return { budgetEur: value };
+    case "bgfM2":
+      return { bgfM2: value };
+    case "wohnflaecheM2":
+      return { wohnflaecheM2: value };
+    case "status":
+      if (!value) {
+        throw new Error("status is required.");
+      }
+      return { status: value };
+    case "projectAddress":
+      return { projectAddress: value };
+    case "followupStatus":
+      return { followupStatus: value };
+    case "outcome":
+      return { outcome: value };
+    default:
+      throw new Error(`Inline editing is not supported for ${fieldName}.`);
+  }
+}
+
+function createClientInlineUpdate(fieldName: string, value: string | null) {
+  switch (fieldName) {
+    case "clientName":
+      if (!value) {
+        throw new Error("clientName is required.");
+      }
+      return { name: value };
+    case "email":
+      return { email: value };
+    case "phone":
+      return { phone: value };
+    case "messenger":
+      return { whatsapp: value };
+    case "source":
+      return { source: value };
+    default:
+      throw new Error(`Inline client editing is not supported for ${fieldName}.`);
+  }
 }
 
 function getOptionalFormValue(formData: FormData, key: string): string | null {

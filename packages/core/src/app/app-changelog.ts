@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.24",
-  title: "Merged CRM orchestrator prompt",
+  version: "0.4.25",
+  title: "Lead table and client linking release",
   items: [
-    "The CRM orchestrator default prompt now uses one clean markdown source shared with the documented settings prompt.",
-    "The merged prompt keeps support/search/reply-routing guidance from test while adding the newer Telegram next-client and reminder-date rules.",
-    "Release metadata now tracks the merged orchestrator prompt as version 0.4.24."
+    "Lead tables now default to client, project, commercial, contact, and source columns with saved column order, widths, and visibility.",
+    "Telegram and web lead creation now link to an existing client or create a client when enough contact data is present.",
+    "Lead cards now edit fields in the same order as the default table and include a confirmed delete-lead action."
   ]
 };

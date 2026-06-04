@@ -32,7 +32,7 @@ import {
   type LeadFieldCommand,
   type LeadSearchRecord
 } from "@app/assistant";
-import { assertDeploymentDatabaseIsolation, getNextBusinessId } from "@app/core";
+import { assertDeploymentDatabaseIsolation, findMatchingClient, getNextBusinessId } from "@app/core";
 import { createObjectStorageFromEnv, type ObjectStorage } from "@app/core/storage";
 import {
   createAssistantGeneratedDocumentPrismaStore,
@@ -82,7 +82,7 @@ export type TelegramWorkerPrismaLike = {
     create(args: unknown): Promise<{ id: string }>;
   };
   client?: {
-    findMany?(args: unknown): Promise<Array<{ id?: string; clientId: string }>>;
+    findMany?(args: unknown): Promise<Array<{ id?: string; clientId: string; name?: string | null; email?: string | null; phone?: string | null }>>;
     create?(args: unknown): Promise<{ id?: string; clientId?: string; name?: string; email?: string | null; phone?: string | null }>;
     update?(args: unknown): Promise<{ id?: string; clientId?: string; name?: string; email?: string | null; phone?: string | null }>;
   };
@@ -1119,6 +1119,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         existingIds: existingIds.map((lead) => lead.leadId)
       });
       const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+      const clientRecordId = await resolveOrCreateTelegramClientForDraft({
+        client,
+        workspaceId: config.workspaceId,
+        draft: session.draft,
+        receivedAt: hydratedMessage.receivedAt
+      });
       const created = await client.lead.create({
         data: {
           workspaceId: config.workspaceId,
@@ -1131,7 +1137,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
           bgfM2: session.draft.bgfM2,
           isStandard: session.draft.isStandard,
           missingData: templateAwareMissingData,
-          temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
+          temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature,
+          ...(clientRecordId ? { clientRecordId } : {})
         }
       });
       const createUndoAction = createTelegramLeadUndoActionRecord({
@@ -1191,6 +1198,12 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       existingIds: existingIds.map((lead) => lead.leadId)
     });
     const templateAwareMissingData = filterMissingDataForKpRequiredFields(session.draft.missingData, config.kpRequiredFields);
+    const clientRecordId = await resolveOrCreateTelegramClientForDraft({
+      client,
+      workspaceId: config.workspaceId,
+      draft: session.draft,
+      receivedAt: hydratedMessage.receivedAt
+    });
     const created = await client.lead.create({
       data: {
         workspaceId: config.workspaceId,
@@ -1203,7 +1216,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         bgfM2: session.draft.bgfM2,
         isStandard: session.draft.isStandard,
         missingData: templateAwareMissingData,
-        temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature
+        temperature: session.draft.temperature === "unknown" ? "hot" : session.draft.temperature,
+        ...(clientRecordId ? { clientRecordId } : {})
       }
     });
     const createUndoAction = createTelegramLeadUndoActionRecord({
@@ -1494,6 +1508,12 @@ async function processTelegramLeadRecreateCallback(input: {
     now: new Date(callback.receivedAt),
     existingIds: existingIds.map((lead) => lead.leadId)
   });
+  const clientRecordId = await resolveOrCreateTelegramClientForDraft({
+    client,
+    workspaceId: config.workspaceId,
+    draft,
+    receivedAt: callback.receivedAt
+  });
   const created = await client.lead.create({
     data: {
       workspaceId: config.workspaceId,
@@ -1506,7 +1526,8 @@ async function processTelegramLeadRecreateCallback(input: {
       bgfM2: draft.bgfM2,
       isStandard: draft.isStandard,
       missingData: draft.missingData,
-      temperature: draft.temperature === "unknown" ? "hot" : draft.temperature
+      temperature: draft.temperature === "unknown" ? "hot" : draft.temperature,
+      ...(clientRecordId ? { clientRecordId } : {})
     }
   });
   const createUndoAction = createTelegramLeadUndoActionRecord({
@@ -3536,8 +3557,28 @@ async function persistTelegramLeadContactUpdate(input: {
 
   const existingClients = (await input.client.client.findMany?.({
     where: { workspaceId: input.workspaceId },
-    select: { clientId: true }
+    select: { id: true, clientId: true, name: true, email: true, phone: true }
   })) ?? [];
+  const match = findMatchingClient(
+    existingClients
+      .filter((client): client is { id: string; clientId: string; name: string; email?: string | null; phone?: string | null } => Boolean(client.id && client.name)),
+    {
+      name: input.contactData.name,
+      email: input.contactData.email,
+      phone: input.contactData.phone
+    }
+  );
+
+  if (match.match) {
+    if (input.client.client.update) {
+      await input.client.client.update({
+        where: { id: match.match.id },
+        data: input.contactData
+      });
+    }
+    return match.match.id;
+  }
+
   const created = await input.client.client.create({
     data: {
       workspaceId: input.workspaceId,
@@ -3555,6 +3596,64 @@ async function persistTelegramLeadContactUpdate(input: {
   });
 
   return created.id ?? null;
+}
+
+async function resolveOrCreateTelegramClientForDraft(input: {
+  client: TelegramWorkerPrismaLike;
+  workspaceId: string;
+  draft: {
+    clientName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
+  receivedAt: string;
+}): Promise<string | null> {
+  if (!input.client.client?.findMany || !hasEnoughTelegramClientDataForAutoCreate(input.draft)) {
+    return null;
+  }
+
+  const existingClients = await input.client.client.findMany({
+    where: { workspaceId: input.workspaceId, archivedAt: null },
+    select: { id: true, clientId: true, name: true, email: true, phone: true }
+  });
+  const matchableClients = existingClients.filter(
+    (client): client is { id: string; clientId: string; name: string; email?: string | null; phone?: string | null } => Boolean(client.id && client.name)
+  );
+  const match = findMatchingClient(matchableClients, {
+    name: input.draft.clientName,
+    email: input.draft.email,
+    phone: input.draft.phone
+  });
+
+  if (match.match) {
+    return match.match.id;
+  }
+
+  if (!input.client.client.create) {
+    return null;
+  }
+
+  const created = await input.client.client.create({
+    data: {
+      workspaceId: input.workspaceId,
+      clientId: getNextBusinessId({
+        kind: "client",
+        now: new Date(input.receivedAt),
+        existingIds: existingClients.map((client) => client.clientId)
+      }),
+      name: input.draft.clientName,
+      clientType: "private",
+      email: input.draft.email,
+      phone: input.draft.phone,
+      source: "telegram"
+    }
+  });
+
+  return created.id ?? null;
+}
+
+function hasEnoughTelegramClientDataForAutoCreate(draft: { clientName?: string | null; email?: string | null; phone?: string | null }): boolean {
+  return Boolean(draft.clientName?.trim() && (draft.email?.trim() || draft.phone?.trim()));
 }
 
 function hasTelegramContactUpdateData(contactData: { name?: string; email?: string; phone?: string }): boolean {

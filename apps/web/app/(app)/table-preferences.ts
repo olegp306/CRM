@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ColumnSizingState, VisibilityState } from "@tanstack/react-table";
+import type { ColumnOrderState, ColumnSizingState, VisibilityState } from "@tanstack/react-table";
 
 export type TablePreferences = {
   columnVisibility: VisibilityState;
   columnSizing: ColumnSizingState;
+  columnOrder: ColumnOrderState;
 };
 
 const emptyPreferences: TablePreferences = {
   columnVisibility: {},
-  columnSizing: {}
+  columnSizing: {},
+  columnOrder: []
 };
 
 export function getTablePreferencesStorageKey(tableId: string): string {
@@ -24,7 +26,8 @@ export function normalizeTablePreferences(input: unknown): TablePreferences {
 
   return {
     columnVisibility: normalizeColumnVisibility(input.columnVisibility),
-    columnSizing: normalizeColumnSizing(input.columnSizing)
+    columnSizing: normalizeColumnSizing(input.columnSizing),
+    columnOrder: normalizeColumnOrder(input.columnOrder)
   };
 }
 
@@ -32,6 +35,7 @@ export function usePersistentTablePreferences(tableId: string) {
   const [hydrated, setHydrated] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
   const storageKey = getTablePreferencesStorageKey(tableId);
 
   useEffect(() => {
@@ -39,6 +43,7 @@ export function usePersistentTablePreferences(tableId: string) {
 
     setColumnVisibility(stored.columnVisibility);
     setColumnSizing(stored.columnSizing);
+    setColumnOrder(stored.columnOrder);
     setHydrated(true);
   }, [storageKey]);
 
@@ -49,15 +54,18 @@ export function usePersistentTablePreferences(tableId: string) {
 
     writeTablePreferences(storageKey, {
       columnVisibility,
-      columnSizing
+      columnSizing,
+      columnOrder
     });
-  }, [columnSizing, columnVisibility, hydrated, storageKey]);
+  }, [columnOrder, columnSizing, columnVisibility, hydrated, storageKey]);
 
   return {
     columnVisibility,
     columnSizing,
+    columnOrder,
     setColumnVisibility,
-    setColumnSizing
+    setColumnSizing,
+    setColumnOrder
   };
 }
 
@@ -99,6 +107,14 @@ function normalizeColumnSizing(input: unknown): ColumnSizingState {
   return Object.fromEntries(
     Object.entries(input).filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]))
   );
+}
+
+function normalizeColumnOrder(input: unknown): ColumnOrderState {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {
