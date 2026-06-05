@@ -13,6 +13,27 @@ Use this runbook only on a test workspace, test database, and test Telegram bot.
 5. Save the setting.
 6. Confirm the page shows `Current runtime: langgraph`.
 
+## Optional Synthetic Worker Smoke
+
+After saving `Current runtime: langgraph`, you can run one local synthetic worker pass before polling the real test bot. This uses the same worker entrypoint, reads the workspace Telegram runtime setting, and injects a single test update instead of calling `getUpdates`.
+
+PowerShell example for the test VM:
+
+```powershell
+$env:TELEGRAM_TEST_CHAT_ID="12345"
+$env:TELEGRAM_TEST_MESSAGE_ID="9001"
+$env:TELEGRAM_TEST_RECEIVED_AT="2026-06-05T10:00:00.000Z"
+$env:TELEGRAM_TEST_MESSAGE="Следующий потенциальный клиент: Ирина Шнайдер, нужен КП на архитектуру для Neubau EFH. Адрес Gartenweg 9, Bad Aibling. BGF 195 м2. Email irina.schneider@example.com, телефон +49 160 4442211."
+pnpm worker:telegram
+```
+
+Expected result:
+
+- The worker processes one synthetic update.
+- A lead is created in the test database.
+- Telegram polling is not used for this run.
+- The setting still controls the route: switch back to `Legacy` to compare behavior.
+
 ## Required Telegram Checks
 
 ### 1. Create Lead
