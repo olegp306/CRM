@@ -6,9 +6,13 @@ import {
   CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+  TELEGRAM_RUNTIME_DEFAULT_MODEL,
+  TELEGRAM_RUNTIME_DEFAULT_PROMPT,
   WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
   WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
-  createWorkspaceAiSettingPrismaStore
+  createTelegramRuntimePrompt,
+  createWorkspaceAiSettingPrismaStore,
+  parseTelegramRuntimeConfig
 } from "./workspace-ai-setting-prisma-store";
 
 describe("workspace ai setting prisma store", () => {
@@ -304,5 +308,71 @@ describe("workspace ai setting prisma store", () => {
       }
     });
     expect(setting.role).toBe("workspace_people_context");
+  });
+
+  it("returns the built-in Telegram runtime defaults when no row exists", async () => {
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(async () => null),
+        upsert: vi.fn()
+      }
+    });
+
+    const setting = await store.getTelegramRuntime("workspace-demo");
+
+    expect(setting).toEqual({
+      workspaceId: "workspace-demo",
+      role: "telegram_runtime",
+      model: TELEGRAM_RUNTIME_DEFAULT_MODEL,
+      prompt: TELEGRAM_RUNTIME_DEFAULT_PROMPT,
+      updatedAt: null
+    });
+    expect(parseTelegramRuntimeConfig(setting.prompt)).toEqual({ runtime: "legacy" });
+  });
+
+  it("upserts the Telegram runtime mode and model for one workspace", async () => {
+    const prompt = createTelegramRuntimePrompt({ runtime: "langgraph" });
+    const upsert = vi.fn(async (args: unknown) => ({
+      id: "setting-5",
+      workspaceId: "workspace-demo",
+      role: "telegram_runtime",
+      model: "gpt-5.2",
+      prompt,
+      createdAt: new Date("2026-06-05T08:00:00.000Z"),
+      updatedAt: new Date("2026-06-05T08:05:00.000Z")
+    }));
+    const store = createWorkspaceAiSettingPrismaStore({
+      workspaceAiSetting: {
+        findUnique: vi.fn(),
+        upsert
+      }
+    });
+
+    const setting = await store.upsertTelegramRuntime({
+      workspaceId: "workspace-demo",
+      model: "gpt-5.2",
+      prompt
+    });
+
+    expect(upsert).toHaveBeenCalledWith({
+      where: {
+        workspaceId_role: {
+          workspaceId: "workspace-demo",
+          role: "telegram_runtime"
+        }
+      },
+      create: {
+        workspaceId: "workspace-demo",
+        role: "telegram_runtime",
+        model: "gpt-5.2",
+        prompt
+      },
+      update: {
+        model: "gpt-5.2",
+        prompt
+      }
+    });
+    expect(setting.role).toBe("telegram_runtime");
+    expect(parseTelegramRuntimeConfig(setting.prompt)).toEqual({ runtime: "langgraph" });
   });
 });

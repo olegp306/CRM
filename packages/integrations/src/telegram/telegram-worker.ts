@@ -15,6 +15,7 @@ import {
   createCrmEntityPersistencePlan,
   createOpenAiCrmEntityExtractor,
   createOpenAiCrmOrchestrator,
+  runCrmLangGraphOrchestrator,
   createLeadReminderDraft,
   createReminderHistorySummary,
   decideIncomingLeadMatch,
@@ -27,6 +28,7 @@ import {
   type AssistantChannelEvent,
   type AssistantChannelMessage,
   type CrmEntityExtractorClient,
+  type CrmLangGraphResult,
   type CrmOrchestratorDecision,
   type CrmOrchestratorClient,
   type LeadFieldCommand,
@@ -42,6 +44,7 @@ import {
   prisma as defaultPrisma
 } from "@app/db";
 import type { SaveLeadEntityExtractionInput, WorkspaceAiSettingRecord, WorkspaceAiSettingStore } from "@app/db";
+import { parseTelegramRuntimeConfig, type TelegramRuntimeMode } from "@app/db";
 import { createLibreOfficeDocxToPdfConverter } from "@app/documents";
 import { loadRootEnv } from "../env/root-env";
 import { createOpenAiAudioTranscriber, type TelegramAudioTranscriber } from "./openai-audio-transcriber";
@@ -190,6 +193,7 @@ export type TelegramWorkerConfig = {
   crmOrchestrator?: CrmOrchestratorClient;
   crmEntityExtractor?: CrmEntityExtractorClient;
   clientMaterialAnalysisPrompt?: string;
+  telegramRuntime?: TelegramRuntimeMode;
   saveLeadEntityExtraction?: (input: SaveLeadEntityExtractionInput) => Promise<void>;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
@@ -367,6 +371,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
   for (const message of messageBatches) {
     let telegramReplySent = false;
     let processingAcknowledgementSent = false;
+    let langGraphResultForMessage: CrmLangGraphResult | null = null;
     const sendWorkerTelegramMessage: typeof sendTelegramMessage = async (input) => {
       const sent = await sendTelegramMessage(input);
       telegramReplySent = true;
@@ -486,6 +491,36 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         )
       : null;
 
+    if (config.telegramRuntime === "langgraph") {
+      langGraphResultForMessage = await runCrmLangGraphOrchestrator({
+        workspaceId: config.workspaceId,
+        channel: "telegram",
+        chatId: message.chatId,
+        messageId: String(message.messageId),
+        text: message.text,
+        receivedAt: message.receivedAt,
+        replyToLeadId: repliedLead?.leadId ?? null,
+        attachments: message.attachments?.map((attachment) => ({
+          id: attachment.fileId,
+          kind: toLangGraphAttachmentKind(attachment.kind),
+          fileName: attachment.fileName ?? null
+        }))
+      });
+
+      if (!shouldExecuteTelegramLangGraphActionWithExistingTools(langGraphResultForMessage)) {
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: createTelegramLangGraphResponseText(langGraphResultForMessage),
+          parseMode: "HTML",
+          replyMarkup: createTelegramLangGraphReplyMarkup(langGraphResultForMessage, config.crmBaseUrl),
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+    }
+
     if (
       repliedLead &&
       message.replyToMessageId === undefined &&
@@ -582,7 +617,9 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    const searchFilterResponse = await createTelegramSearchFilterResponse(config, client, message);
+    const searchFilterResponse = langGraphResultForMessage
+      ? null
+      : await createTelegramSearchFilterResponse(config, client, message);
     if (searchFilterResponse) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
@@ -596,7 +633,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (!forceCreateLeadFromCommand) {
+    if (!forceCreateLeadFromCommand && !langGraphResultForMessage) {
       const generalAssistantResponse = createTelegramGeneralAssistantResponse(
         config.workspaceId,
         message,
@@ -1949,6 +1986,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       model: aiSettings.crmEntityExtractor.model || env.OPENAI_MODEL || "gpt-4o-mini",
       prompt: aiSettings.crmEntityExtractor.prompt
     }),
+    telegramRuntime: parseTelegramRuntimeConfig(aiSettings.telegramRuntime.prompt).runtime,
     clientMaterialAnalysisPrompt: clientMaterialAnalysisSetting.prompt,
     saveLeadEntityExtraction: crmEntityStore.saveLeadEntityExtraction,
     parser: createOpenAiLeadParserClient({
@@ -1971,12 +2009,14 @@ export async function resolveTelegramAiSettings(store: WorkspaceAiSettingStore, 
   crmOrchestrator: WorkspaceAiSettingRecord;
   crmEntityExtractor: WorkspaceAiSettingRecord;
   workspacePeopleContext: WorkspaceAiSettingRecord;
+  telegramRuntime: WorkspaceAiSettingRecord;
 }> {
-  const [clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor, workspacePeopleContext] = await Promise.all([
+  const [clientMaterialAnalysis, crmOrchestrator, crmEntityExtractor, workspacePeopleContext, telegramRuntime] = await Promise.all([
     store.getClientMaterialAnalysis(workspaceId),
     store.getCrmOrchestrator(workspaceId),
     store.getCrmEntityExtractor(workspaceId),
-    store.getWorkspacePeopleContext(workspaceId)
+    store.getWorkspacePeopleContext(workspaceId),
+    store.getTelegramRuntime(workspaceId)
   ]);
   const peopleContext = workspacePeopleContext.prompt;
 
@@ -1984,7 +2024,8 @@ export async function resolveTelegramAiSettings(store: WorkspaceAiSettingStore, 
     clientMaterialAnalysis: withWorkspacePromptContext(clientMaterialAnalysis, peopleContext),
     crmOrchestrator: withWorkspacePromptContext(crmOrchestrator, peopleContext),
     crmEntityExtractor: withWorkspacePromptContext(crmEntityExtractor, peopleContext),
-    workspacePeopleContext
+    workspacePeopleContext,
+    telegramRuntime
   };
 }
 
@@ -2203,6 +2244,59 @@ function createTelegramLimitedActionsText(leadId?: string): string {
     "Use new lead to create a lead, or search lead to find one.",
     "After a lead card is shown, reply to that card to update the lead, add a note, or add a reminder."
   ].join("\n");
+}
+
+function createTelegramLangGraphResponseText(result: CrmLangGraphResult): string {
+  const action = result.action;
+
+  if (action.type === "clarify") {
+    return escapeHtml(action.question);
+  }
+
+  if (action.type === "no_action") {
+    return escapeHtml(action.message);
+  }
+
+  const lines = [
+    "<b>LangGraph</b>",
+    escapeHtml(result.responseText),
+    escapeHtml(action.reason)
+  ];
+
+  return lines.join("\n");
+}
+
+function createTelegramLangGraphReplyMarkup(result: CrmLangGraphResult, crmBaseUrl: string | undefined): unknown | undefined {
+  const action = result.action;
+  const leadId =
+    action.type === "update_lead" || action.type === "create_reminder" || action.type === "add_context_note" ? action.leadId : null;
+
+  if (!leadId) {
+    return undefined;
+  }
+
+  return createTelegramResponseReplyMarkup([{ label: "CRM", url: `/leads?leadId=${encodeURIComponent(leadId)}` }], crmBaseUrl);
+}
+
+function shouldExecuteTelegramLangGraphActionWithExistingTools(result: CrmLangGraphResult): boolean {
+  return (
+    result.action.type === "create_lead" ||
+    result.action.type === "update_lead" ||
+    result.action.type === "create_reminder" ||
+    result.action.type === "add_context_note"
+  );
+}
+
+function toLangGraphAttachmentKind(kind: TelegramPendingAttachment["kind"]): "image" | "pdf" | "audio" | "unknown" {
+  if (kind === "photo") {
+    return "image";
+  }
+
+  if (kind === "pdf" || kind === "audio") {
+    return kind;
+  }
+
+  return "unknown";
 }
 
 function createTelegramSourceAttachmentStore(client: TelegramSourceAttachmentPrismaLike, objectStorage: ObjectStorage) {

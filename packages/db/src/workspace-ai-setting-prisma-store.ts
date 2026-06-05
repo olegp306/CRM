@@ -100,6 +100,21 @@ export const WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT = [
   "- Client identity, project address, budget, area, deadlines, and contact channels must come from the actual client/source material, not from internal operator names.",
   "- When uncertain whether a person is client, intermediary, sender, architect, or developer, keep the uncertainty explicit and ask for clarification rather than inventing a role."
 ].join("\n");
+export const TELEGRAM_RUNTIME_ROLE = "telegram_runtime" as const;
+export const TELEGRAM_RUNTIME_DEFAULT_MODEL = "gpt-4.1-mini";
+export const TELEGRAM_RUNTIME_DEFAULT_PROMPT = JSON.stringify(
+  {
+    runtime: "legacy"
+  },
+  null,
+  2
+);
+
+export type TelegramRuntimeMode = "legacy" | "langgraph";
+
+export type TelegramRuntimeConfig = {
+  runtime: TelegramRuntimeMode;
+};
 export const CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT = [
   "# CRM Entity Extractor Agent",
   "",
@@ -183,7 +198,8 @@ export type WorkspaceAiSettingRole =
   | typeof CLIENT_MATERIAL_ANALYSIS_ROLE
   | typeof CRM_ORCHESTRATOR_ROLE
   | typeof CRM_ENTITY_EXTRACTOR_ROLE
-  | typeof WORKSPACE_PEOPLE_CONTEXT_ROLE;
+  | typeof WORKSPACE_PEOPLE_CONTEXT_ROLE
+  | typeof TELEGRAM_RUNTIME_ROLE;
 
 type WorkspaceAiSettingRow = {
   id: string;
@@ -227,6 +243,12 @@ export type UpsertWorkspacePeopleContextSettingInput = {
   prompt: string;
 };
 
+export type UpsertTelegramRuntimeSettingInput = {
+  workspaceId: string;
+  model: string;
+  prompt: string;
+};
+
 export type WorkspaceAiSettingPrismaClientLike = {
   workspaceAiSetting: {
     findUnique(args: unknown): Promise<WorkspaceAiSettingRow | null>;
@@ -243,6 +265,8 @@ export type WorkspaceAiSettingStore = {
   upsertCrmEntityExtractor(input: UpsertCrmEntityExtractorSettingInput): Promise<WorkspaceAiSettingRecord>;
   getWorkspacePeopleContext(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
   upsertWorkspacePeopleContext(input: UpsertWorkspacePeopleContextSettingInput): Promise<WorkspaceAiSettingRecord>;
+  getTelegramRuntime(workspaceId: string): Promise<WorkspaceAiSettingRecord>;
+  upsertTelegramRuntime(input: UpsertTelegramRuntimeSettingInput): Promise<WorkspaceAiSettingRecord>;
 };
 
 export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPrismaClientLike): WorkspaceAiSettingStore {
@@ -389,6 +413,42 @@ export function createWorkspaceAiSettingPrismaStore(client: WorkspaceAiSettingPr
       });
 
       return toWorkspaceAiSettingRecord(row);
+    },
+
+    async getTelegramRuntime(workspaceId) {
+      const row = await client.workspaceAiSetting.findUnique({
+        where: {
+          workspaceId_role: {
+            workspaceId,
+            role: TELEGRAM_RUNTIME_ROLE
+          }
+        }
+      });
+
+      return row ? toWorkspaceAiSettingRecord(row) : createDefaultTelegramRuntimeSetting(workspaceId);
+    },
+
+    async upsertTelegramRuntime(input) {
+      const row = await client.workspaceAiSetting.upsert({
+        where: {
+          workspaceId_role: {
+            workspaceId: input.workspaceId,
+            role: TELEGRAM_RUNTIME_ROLE
+          }
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          role: TELEGRAM_RUNTIME_ROLE,
+          model: input.model,
+          prompt: input.prompt
+        },
+        update: {
+          model: input.model,
+          prompt: input.prompt
+        }
+      });
+
+      return toWorkspaceAiSettingRecord(row);
     }
   };
 }
@@ -433,6 +493,33 @@ export function createDefaultWorkspacePeopleContextSetting(workspaceId: string):
   };
 }
 
+export function createDefaultTelegramRuntimeSetting(workspaceId: string): WorkspaceAiSettingRecord {
+  return {
+    workspaceId,
+    role: TELEGRAM_RUNTIME_ROLE,
+    model: TELEGRAM_RUNTIME_DEFAULT_MODEL,
+    prompt: TELEGRAM_RUNTIME_DEFAULT_PROMPT,
+    updatedAt: null
+  };
+}
+
+export function createTelegramRuntimePrompt(config: TelegramRuntimeConfig): string {
+  return JSON.stringify(config, null, 2);
+}
+
+export function parseTelegramRuntimeConfig(prompt: string | null | undefined): TelegramRuntimeConfig {
+  if (!prompt) {
+    return { runtime: "legacy" };
+  }
+
+  try {
+    const parsed = JSON.parse(prompt) as Partial<TelegramRuntimeConfig>;
+    return parsed.runtime === "langgraph" ? { runtime: "langgraph" } : { runtime: "legacy" };
+  } catch {
+    return { runtime: "legacy" };
+  }
+}
+
 function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSettingRecord {
   return {
     workspaceId: row.workspaceId,
@@ -443,7 +530,9 @@ function toWorkspaceAiSettingRecord(row: WorkspaceAiSettingRow): WorkspaceAiSett
           ? CRM_ENTITY_EXTRACTOR_ROLE
           : row.role === WORKSPACE_PEOPLE_CONTEXT_ROLE
             ? WORKSPACE_PEOPLE_CONTEXT_ROLE
-          : CLIENT_MATERIAL_ANALYSIS_ROLE,
+            : row.role === TELEGRAM_RUNTIME_ROLE
+              ? TELEGRAM_RUNTIME_ROLE
+              : CLIENT_MATERIAL_ANALYSIS_ROLE,
     model: row.model,
     prompt: row.prompt,
     updatedAt: row.updatedAt

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createTelegramRuntimePrompt, parseTelegramRuntimeConfig } from "@app/db";
 import {
   createMemoryWorkspaceAiSettingStore,
   CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS,
@@ -17,7 +18,9 @@ describe("ai intake store", () => {
       getCrmEntityExtractor: vi.fn(),
       upsertCrmEntityExtractor: vi.fn(),
       getWorkspacePeopleContext: vi.fn(),
-      upsertWorkspacePeopleContext: vi.fn()
+      upsertWorkspacePeopleContext: vi.fn(),
+      getTelegramRuntime: vi.fn(),
+      upsertTelegramRuntime: vi.fn()
     };
 
     const store = selectWorkspaceAiSettingStoreRuntime({
@@ -113,5 +116,21 @@ describe("ai intake store", () => {
         prompt: "Oleg and Katya are CRM operators, not clients by default."
       })
     );
+  });
+
+  it("persists Telegram runtime mode in memory runtime", async () => {
+    const store = createMemoryWorkspaceAiSettingStore();
+    const prompt = createTelegramRuntimePrompt({ runtime: "langgraph" });
+
+    const saved = await store.upsertTelegramRuntime({
+      workspaceId: "workspace-demo",
+      model: "gpt-5.2",
+      prompt
+    });
+
+    expect(saved.role).toBe("telegram_runtime");
+    expect(saved.model).toBe("gpt-5.2");
+    expect(parseTelegramRuntimeConfig(saved.prompt)).toEqual({ runtime: "langgraph" });
+    await expect(store.getTelegramRuntime("workspace-demo")).resolves.toEqual(saved);
   });
 });

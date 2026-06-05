@@ -48,7 +48,15 @@ describe("telegram worker", () => {
         prompt: "Oleg and Katya are CRM operators, not clients by default.",
         updatedAt: null
       })),
-      upsertWorkspacePeopleContext: vi.fn()
+      upsertWorkspacePeopleContext: vi.fn(),
+      getTelegramRuntime: vi.fn(async () => ({
+        workspaceId: "workspace-demo",
+        role: "telegram_runtime" as const,
+        model: "gpt-5.2",
+        prompt: JSON.stringify({ runtime: "langgraph" }),
+        updatedAt: null
+      })),
+      upsertTelegramRuntime: vi.fn()
     };
 
     await expect(resolveTelegramAiSettings(store, "workspace-demo")).resolves.toEqual({
@@ -71,12 +79,18 @@ describe("telegram worker", () => {
         role: "workspace_people_context",
         model: "context",
         prompt: "Oleg and Katya are CRM operators, not clients by default."
+      }),
+      telegramRuntime: expect.objectContaining({
+        role: "telegram_runtime",
+        model: "gpt-5.2",
+        prompt: JSON.stringify({ runtime: "langgraph" })
       })
     });
     expect(store.getClientMaterialAnalysis).toHaveBeenCalledWith("workspace-demo");
     expect(store.getCrmOrchestrator).toHaveBeenCalledWith("workspace-demo");
     expect(store.getCrmEntityExtractor).toHaveBeenCalledWith("workspace-demo");
     expect(store.getWorkspacePeopleContext).toHaveBeenCalledWith("workspace-demo");
+    expect(store.getTelegramRuntime).toHaveBeenCalledWith("workspace-demo");
   });
 
   it("creates a synthetic Telegram update from local test env", () => {
@@ -96,6 +110,49 @@ describe("telegram worker", () => {
         text: "Hallo, wir brauchen ein EFH Angebot."
       }
     });
+  });
+
+  it("routes allowed non-action Telegram messages through LangGraph when that runtime is enabled", async () => {
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 55 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 5,
+            message: {
+              message_id: 5,
+              date: 1779300000,
+              chat: { id: 12345 },
+              text: "plain unrelated sentence about the weather"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          telegramRuntime: "langgraph",
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 5 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/sendMessage")) as unknown as [string, { body?: unknown }];
+    const body = JSON.parse(String(sendCall[1].body));
+    expect(body.text).toContain("create leads");
+    expect(body.text).toContain("update a replied lead");
   });
 
   it("registers the Telegram bot command menu before polling updates", async () => {
@@ -230,6 +287,79 @@ describe("telegram worker", () => {
     expect(sendBody.text).not.toContain("<b>KP document</b>");
     expect(sendBody.reply_markup.inline_keyboard[0]).toContainEqual({ text: "CRM", url: "https://crm.example.com/leads?leadId=L-2026-002" });
     expect(sendBody.reply_markup.inline_keyboard[0]).toContainEqual({ text: "Undo", callback_data: "lead_undo:L-2026-002:5" });
+  });
+
+  it("creates a CRM lead through the LangGraph-selected create path", async () => {
+    const created: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [{ leadId: "L-2026-001", rawInput: "old" }]),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-2", leadId: "L-2026-002", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Irina Schneider",
+        requestType: "new_build",
+        urgency: "high" as const,
+        temperature: "hot" as const,
+        bgfM2: 195,
+        projectAddress: "Gartenweg 9",
+        email: "irina@example.com",
+        phone: "+49 160 4442211",
+        missingData: [],
+        summary: "Standard EFH lead",
+        suggestedReply: "Danke."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 11,
+            message: {
+              message_id: 6,
+              date: 1779296400,
+              chat: { id: 12345 },
+              text: "new lead: Irina Schneider wants an EFH proposal, BGF 195 m2, Gartenweg 9"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 11 });
+
+    expect(parser.parseLead).toHaveBeenCalled();
+    expect(created).toEqual([
+      {
+        data: expect.objectContaining({
+          workspaceId: "workspace-demo",
+          leadId: "L-2026-002",
+          requestType: "new_build",
+          projectAddress: "Gartenweg 9",
+          rawInput: expect.stringContaining("Telegram sources: telegram:12345:6")
+        })
+      }
+    ]);
   });
 
   it("creates and links a client while creating a new Telegram lead with contact data", async () => {
@@ -4455,6 +4585,7 @@ describe("telegram worker", () => {
           crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
@@ -5724,6 +5855,7 @@ describe("telegram worker", () => {
           saveAuditEvent: async (event) => {
             auditEvents.push(event);
           },
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
@@ -5805,6 +5937,7 @@ describe("telegram worker", () => {
           saveAuditEvent: async (event) => {
             auditEvents.push(event);
           },
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
@@ -5888,6 +6021,7 @@ describe("telegram worker", () => {
           saveAuditEvent: async (event) => {
             auditEvents.push(event);
           },
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
@@ -5975,6 +6109,7 @@ describe("telegram worker", () => {
           saveAuditEvent: async (event) => {
             auditEvents.push(event);
           },
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )

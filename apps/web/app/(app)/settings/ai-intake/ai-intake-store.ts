@@ -5,14 +5,18 @@ import {
   CRM_ENTITY_EXTRACTOR_DEFAULT_PROMPT,
   CRM_ORCHESTRATOR_DEFAULT_MODEL,
   CRM_ORCHESTRATOR_DEFAULT_PROMPT,
+  TELEGRAM_RUNTIME_DEFAULT_MODEL,
+  TELEGRAM_RUNTIME_DEFAULT_PROMPT,
   WORKSPACE_PEOPLE_CONTEXT_DEFAULT_MODEL,
   WORKSPACE_PEOPLE_CONTEXT_DEFAULT_PROMPT,
   createDefaultClientMaterialAnalysisSetting,
   createDefaultCrmEntityExtractorSetting,
   createDefaultCrmOrchestratorSetting,
+  createDefaultTelegramRuntimeSetting,
   createDefaultWorkspacePeopleContextSetting,
   createWorkspaceAiSettingPrismaStore,
   prisma,
+  type UpsertTelegramRuntimeSettingInput,
   type UpsertClientMaterialAnalysisSettingInput,
   type UpsertCrmEntityExtractorSettingInput,
   type UpsertCrmOrchestratorSettingInput,
@@ -58,6 +62,15 @@ export const CRM_ENTITY_EXTRACTOR_MODEL_OPTIONS = [
 ] as const;
 
 export const WORKSPACE_PEOPLE_CONTEXT_MODEL_OPTIONS = [{ id: "context", label: "Context only" }] as const;
+
+export const TELEGRAM_RUNTIME_MODEL_OPTIONS = [
+  { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+  { id: "gpt-4.1", label: "GPT-4.1" },
+  { id: "gpt-5", label: "GPT-5" },
+  { id: "gpt-5.1", label: "GPT-5.1" },
+  { id: "gpt-5.2", label: "GPT-5.2" },
+  { id: "gpt-5.2-pro", label: "GPT-5.2 pro" }
+] as const;
 
 function getMemorySettings(): WorkspaceAiSettingRecord[] {
   if (!globalForAiIntake.workspaceAiSettings) {
@@ -175,6 +188,32 @@ export function createMemoryWorkspaceAiSettingStore(settings = getMemorySettings
       }
 
       return record;
+    },
+
+    async getTelegramRuntime(workspaceId) {
+      return (
+        settings.find((setting) => setting.workspaceId === workspaceId && setting.role === "telegram_runtime") ??
+        createDefaultTelegramRuntimeSetting(workspaceId)
+      );
+    },
+
+    async upsertTelegramRuntime(input: UpsertTelegramRuntimeSettingInput) {
+      const existingIndex = settings.findIndex((setting) => setting.workspaceId === input.workspaceId && setting.role === "telegram_runtime");
+      const record: WorkspaceAiSettingRecord = {
+        workspaceId: input.workspaceId,
+        role: "telegram_runtime",
+        model: input.model || TELEGRAM_RUNTIME_DEFAULT_MODEL,
+        prompt: input.prompt || TELEGRAM_RUNTIME_DEFAULT_PROMPT,
+        updatedAt: new Date()
+      };
+
+      if (existingIndex >= 0) {
+        settings[existingIndex] = record;
+      } else {
+        settings.push(record);
+      }
+
+      return record;
     }
   };
 }
@@ -250,4 +289,12 @@ export async function saveWorkspacePeopleContextSetting(
   input: UpsertWorkspacePeopleContextSettingInput
 ): Promise<WorkspaceAiSettingRecord> {
   return getWorkspaceAiSettingStore().upsertWorkspacePeopleContext(input);
+}
+
+export async function getTelegramRuntimeSetting(workspaceId: string): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().getTelegramRuntime(workspaceId);
+}
+
+export async function saveTelegramRuntimeSetting(input: UpsertTelegramRuntimeSettingInput): Promise<WorkspaceAiSettingRecord> {
+  return getWorkspaceAiSettingStore().upsertTelegramRuntime(input);
 }
