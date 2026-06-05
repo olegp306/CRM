@@ -164,12 +164,13 @@ export function AssistantDrawer() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-50 inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg transition hover:opacity-90"
+        className="fixed bottom-4 right-4 z-50 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-lg transition hover:opacity-90 sm:h-10 sm:gap-2 sm:px-3.5 sm:text-sm"
         aria-label={hasUnreadOnboarding ? "Open Assistant, new onboarding message" : "Open Assistant"}
         title={hasUnreadOnboarding ? "Open Assistant, new onboarding message" : "Open Assistant"}
       >
-        <MessageSquareText aria-hidden="true" className="h-4 w-4" />
-        Assistant
+        <MessageSquareText aria-hidden="true" className="hidden h-4 w-4 sm:block" />
+        <span className="sm:hidden">Chat</span>
+        <span className="hidden sm:inline">Assistant</span>
         {hasUnreadOnboarding ? (
           <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-500" aria-hidden="true" />
         ) : null}

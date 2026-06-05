@@ -13,6 +13,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type DragEvent, type FormEvent } from "react";
 import {
   getEditableEmptyStateMessage,
+  getEditableFieldOwner,
+  getEditableFieldOwnerLabel,
+  getEditableFieldOwnerTooltip,
   getEditableMobileCardFields,
   type EditableRecordKind,
   type EditableRecordRow,
@@ -55,7 +58,7 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
     () =>
       tableFields.map((field) => ({
         accessorKey: field.key,
-        header: field.label,
+        header: () => <EditableColumnHeader field={field} />,
         size: field.width ?? 160,
         minSize: 104,
         enableSorting: true,
@@ -261,15 +264,26 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
                     }}
                     className={`${viewMode === "full" ? "cursor-pointer" : ""} bg-white transition hover:bg-muted/60`}
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className="border-b border-r border-border px-3 py-2 align-top last:border-r-0"
-                        style={{ width: cell.column.getSize() }}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map((cell) => {
+                      const field = tableFields.find((item) => item.key === cell.column.id);
+                      const owner = field ? getEditableFieldOwner(field) : "record";
+
+                      return (
+                        <td
+                          key={cell.id}
+                          className={`border-b border-r border-border px-3 py-2 align-top last:border-r-0 ${
+                            owner === "linked"
+                              ? "bg-sky-50/60 dark:bg-sky-950/20"
+                              : owner === "derived"
+                                ? "bg-muted/40"
+                                : ""
+                          }`}
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))
               ) : (
@@ -334,6 +348,31 @@ function TruncatedCell({ value }: { value: string }) {
   );
 }
 
+function EditableColumnHeader({ field }: { field: EditableTableField }) {
+  const owner = getEditableFieldOwner(field);
+  const ownerLabel = getEditableFieldOwnerLabel(field);
+  const ownerTooltip = getEditableFieldOwnerTooltip(field);
+
+  return (
+    <span className="grid gap-0.5">
+      {ownerLabel ? (
+        <span
+          className={`w-fit rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            owner === "linked"
+              ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200"
+              : "bg-muted text-muted-foreground"
+          }`}
+          title={ownerTooltip}
+          aria-label={ownerTooltip}
+        >
+          {ownerLabel}
+        </span>
+      ) : null}
+      <span>{field.label}</span>
+    </span>
+  );
+}
+
 function InlineEditableCell({
   row,
   field,
@@ -348,6 +387,8 @@ function InlineEditableCell({
   const [value, setValue] = useState(row[field.key] ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
+  const owner = getEditableFieldOwner(field);
+  const ownerTooltip = getEditableFieldOwnerTooltip(field);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -392,8 +433,10 @@ function InlineEditableCell({
             event.currentTarget.form?.requestSubmit();
           }
         }}
-        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
-        title="Edit inline, then press Enter or leave the cell to save"
+        className={`h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60 ${
+          owner === "linked" ? "font-medium text-sky-950 dark:text-sky-100" : ""
+        }`}
+        title={ownerTooltip ? `${ownerTooltip} Edit inline, then press Enter or leave the cell to save.` : "Edit inline, then press Enter or leave the cell to save"}
       />
     </form>
   );
@@ -474,11 +517,32 @@ function getMobileCardMeta(row: EditableRecordRow, fields: EditableTableField[])
 
 function EditorField({ field, value }: { field: EditableTableField; value: string }) {
   const commonClassName = "rounded-md border border-border px-3 py-2 text-sm";
+  const owner = getEditableFieldOwner(field);
+  const ownerLabel = getEditableFieldOwnerLabel(field);
+  const ownerTooltip = getEditableFieldOwnerTooltip(field);
+  const label = (
+    <span className="flex min-w-0 flex-wrap items-center gap-2">
+      <span>{field.label}</span>
+      {ownerLabel ? (
+        <span
+          className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            owner === "linked"
+              ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200"
+              : "bg-muted text-muted-foreground"
+          }`}
+          title={ownerTooltip}
+          aria-label={ownerTooltip}
+        >
+          {ownerLabel}
+        </span>
+      ) : null}
+    </span>
+  );
 
   if (field.type === "textarea") {
     return (
       <label className="grid gap-1 text-sm md:col-span-2">
-        <span className="font-medium text-foreground">{field.label}</span>
+        <span className="font-medium text-foreground">{label}</span>
         <textarea name={field.key} defaultValue={value} required={field.required} className={`${commonClassName} min-h-24`} />
       </label>
     );
@@ -486,7 +550,7 @@ function EditorField({ field, value }: { field: EditableTableField; value: strin
 
   return (
     <label className="grid gap-1 text-sm">
-      <span className="font-medium text-foreground">{field.label}</span>
+      <span className="font-medium text-foreground">{label}</span>
       <input
         name={field.key}
         defaultValue={value}

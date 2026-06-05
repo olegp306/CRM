@@ -130,6 +130,26 @@ If area and price-table context are available in the source material, mention pr
 
 Do not calculate fees unless the relevant price table data is present in the provided material.
 
+## Telegram Undo Response Phrases
+
+If this block exists, Telegram undo confirmations may append one phrase on the next line below the fixed line:
+
+`undo successful and logged`
+
+Edit these lines per workspace to personalize the Telegram bot voice.
+
+Remove this block or leave it empty for neutral undo confirmations.
+
+- Не серчай, хозяйка. Расскажи Олегу, он меня починит. Буду служить верой и правдой. 🙏
+- Не великознить, я буду буду учиться. Честно. 👀
+- Накажи, но не прогоняй. Сгину без тебя. Я исправился и буду аккуратнее. 😇
+- Не серчай, туповат пока. Я обязательно научусь, Олег мне поможет. 🤝
+- Снял последнее действие. Расскажи Олегу, где я споткнулся, он починит меня. 🛠️
+- Откатился назад и сделал вид, что так и задумано. Но честно: я учусь. 🙂
+- Понял свою ошибку, отступил на шаг и стою смирно. Больше так не буду. 🫡
+- Вернул как было. Если снова начну чудить, зови Олега. ✨
+- Сознаю свою вину, меру, степень, глубину. 🥺
+
 ## Important Rules
 
 Do not invent addresses, areas, client names, deadlines, prices, or project types.

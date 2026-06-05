@@ -27,6 +27,7 @@ import {
   createKpDownloadBaseName,
   createLeadSummaryInfo,
   filterLeadRowsForUrlSearch,
+  getLeadColumnOwnerTooltip,
   getLeadSourceMaterials,
   isInlineEditableLeadField,
   leadEditorFieldOrder,
@@ -154,7 +155,7 @@ export function LeadsTable({
     () =>
       leadTableColumns.map((column) => ({
         accessorKey: column.key,
-        header: () => <LeadColumnHeader label={column.label} owner={column.owner} />,
+        header: () => <LeadColumnHeader column={column} />,
         size: column.defaultSize,
         maxSize: column.maxSize,
         minSize: 92,
@@ -576,19 +577,29 @@ export function LeadsTable({
   );
 }
 
-function LeadColumnHeader({ label, owner }: { label: string; owner: LeadTableColumnOwner }) {
+function LeadColumnHeader({ column }: { column: (typeof leadTableColumns)[number] }) {
+  const tooltip = getLeadColumnOwnerTooltip(column);
+
   return (
     <span className="grid gap-0.5">
-      {owner === "client" ? (
-        <span className="w-fit rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200">
+      {column.owner === "client" ? (
+        <span
+          className="w-fit rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200"
+          title={tooltip}
+          aria-label={tooltip}
+        >
           Client
         </span>
-      ) : owner === "derived" ? (
-        <span className="w-fit rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+      ) : column.owner === "derived" ? (
+        <span
+          className="w-fit rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted-foreground"
+          title={tooltip}
+          aria-label={tooltip}
+        >
           Auto
         </span>
       ) : null}
-      <span>{label}</span>
+      <span>{column.label}</span>
     </span>
   );
 }
@@ -887,11 +898,16 @@ function LeadEditorField({ fieldName, lead }: { fieldName: LeadTableColumnKey; l
   const config = getLeadEditorFieldConfig(fieldName);
   const disabled = config.owner === "client" && !lead.clientRecordId;
   const disabledHint = disabled ? "Link or create a client first to edit this client field." : undefined;
+  const ownerTooltip = getLeadColumnOwnerTooltip({ key: fieldName, owner: config.owner, label: config.label });
   const label = (
     <span className="flex min-w-0 flex-wrap items-center gap-2">
       <span>{config.label}</span>
       {config.owner === "client" ? (
-        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200">
+        <span
+          className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-700 dark:bg-sky-950 dark:text-sky-200"
+          title={ownerTooltip}
+          aria-label={ownerTooltip}
+        >
           Client field
         </span>
       ) : null}

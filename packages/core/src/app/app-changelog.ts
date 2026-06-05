@@ -5,11 +5,12 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.26",
-  title: "Feedback audit and release notes",
+  version: "0.4.27",
+  title: "Telegram undo voice and table ownership polish",
   items: [
-    "The repository now includes a dated changelog for the work completed from 2026-06-04 noon through 2026-06-05.",
-    "The release notes summarize the delivered lead table, inline editing, client linking, Telegram routing, undo, and reminder reliability changes.",
-    "Current version metadata is bumped to 0.4.26 so feedback captured after this audit can be traced to the refreshed main build."
+    "Telegram undo replies now start with the fixed base line `undo successful and logged`, followed by an optional personalized phrase from AI Intake settings.",
+    "Lead table Client and Auto badges now explain linked-table fields and automatically calculated values on hover.",
+    "Shared editable tables now support the same linked-field and auto-field ownership hints for future CRM tables.",
+    "The mobile web assistant launcher is smaller so it covers less of the working area."
   ]
 };

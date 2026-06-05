@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createEditableRecordRows,
   getEditableEmptyStateMessage,
+  getEditableFieldOwner,
+  getEditableFieldOwnerLabel,
+  getEditableFieldOwnerTooltip,
   getEditableMobileCardFields,
   type EditableTableField
 } from "./editable-record-table-store";
@@ -74,5 +77,33 @@ describe("editable record table store", () => {
         { key: "notes", label: "Notes", type: "textarea", table: false, editable: true }
       ]).map((field) => field.key)
     ).toEqual(["createdDate", "status", "name", "email"]);
+  });
+
+  it("provides shared owner labels and hover copy for linked and auto fields", () => {
+    const linkedField: EditableTableField = {
+      key: "clientName",
+      label: "Client",
+      type: "text",
+      table: true,
+      editable: true,
+      owner: "linked",
+      ownerLabel: "Client"
+    };
+    const derivedField: EditableTableField = {
+      key: "projectCount",
+      label: "Projects",
+      type: "number",
+      table: true,
+      editable: false,
+      owner: "derived",
+      ownerTooltip: "Projects is calculated from linked leads."
+    };
+
+    expect(getEditableFieldOwner(fields[0])).toBe("record");
+    expect(getEditableFieldOwnerLabel(linkedField)).toBe("Client");
+    expect(getEditableFieldOwnerTooltip(linkedField)).toContain("linked CRM table");
+    expect(getEditableFieldOwnerLabel(derivedField)).toBe("Auto");
+    expect(getEditableFieldOwnerTooltip(derivedField)).toBe("Projects is calculated from linked leads.");
+    expect(getEditableFieldOwnerTooltip(fields[0])).toBeUndefined();
   });
 });

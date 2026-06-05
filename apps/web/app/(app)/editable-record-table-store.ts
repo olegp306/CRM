@@ -1,4 +1,5 @@
 export type EditableTableFieldType = "text" | "textarea" | "date" | "number" | "email" | "url";
+export type EditableTableFieldOwner = "record" | "linked" | "derived";
 
 export type EditableTableField = {
   key: string;
@@ -6,6 +7,9 @@ export type EditableTableField = {
   type: EditableTableFieldType;
   table: boolean;
   editable: boolean;
+  owner?: EditableTableFieldOwner;
+  ownerLabel?: string;
+  ownerTooltip?: string;
   width?: number;
   required?: boolean;
 };
@@ -64,6 +68,42 @@ export function getEditableEmptyStateMessage(kind: EditableRecordKind): string {
   };
 
   return `No ${labels[kind]} found yet.`;
+}
+
+export function getEditableFieldOwner(field: EditableTableField): EditableTableFieldOwner {
+  return field.owner ?? "record";
+}
+
+export function getEditableFieldOwnerLabel(field: EditableTableField): string | undefined {
+  const owner = getEditableFieldOwner(field);
+
+  if (owner === "linked") {
+    return field.ownerLabel ?? "Linked";
+  }
+
+  if (owner === "derived") {
+    return field.ownerLabel ?? "Auto";
+  }
+
+  return undefined;
+}
+
+export function getEditableFieldOwnerTooltip(field: EditableTableField): string | undefined {
+  if (field.ownerTooltip) {
+    return field.ownerTooltip;
+  }
+
+  const owner = getEditableFieldOwner(field);
+
+  if (owner === "linked") {
+    return `${field.label} comes from a linked CRM table. Edits here update the source record when the link is available.`;
+  }
+
+  if (owner === "derived") {
+    return `${field.label} is calculated automatically from CRM data and is refreshed when the source data changes.`;
+  }
+
+  return undefined;
 }
 
 function formatEditableValue(value: unknown, type: EditableTableFieldType): string {

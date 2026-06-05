@@ -15,6 +15,7 @@ import {
   createLeadSummaryInfo,
   createLeadTableRows,
   filterLeadRowsForUrlSearch,
+  getLeadColumnOwnerTooltip,
   getLeadSourceMaterials,
   inlineEditableLeadFields,
   isInlineEditableLeadField,
@@ -204,6 +205,22 @@ describe("lead table model", () => {
       requestType: "lead",
       projectAddress: "lead"
     });
+  });
+
+  it("explains linked client columns and auto-calculated columns for table hints", () => {
+    expect(getLeadColumnOwnerTooltip({ key: "phone", label: "Phone", owner: "client" })).toContain(
+      "linked Clients table"
+    );
+    expect(getLeadColumnOwnerTooltip({ key: "projectTitle", label: "Project", owner: "derived" })).toContain(
+      "request, project address, source materials"
+    );
+    expect(getLeadColumnOwnerTooltip({ key: "todo", label: "Todo", owner: "derived" })).toContain(
+      "next action"
+    );
+    expect(getLeadColumnOwnerTooltip({ key: "clientProjectCount", label: "Client projects", owner: "derived" })).toContain(
+      "linked to the same client"
+    );
+    expect(getLeadColumnOwnerTooltip({ key: "bgfM2", label: "Area", owner: "lead" })).toBeUndefined();
   });
 
   it("limits inline editing to safe lead fields and linked client fields", () => {

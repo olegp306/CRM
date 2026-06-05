@@ -233,6 +233,29 @@ export const leadTableColumns: LeadTableColumn[] = [
   { key: "projectRecordId", label: "Project ID", owner: "lead", enableSorting: true, defaultSize: 160 }
 ];
 
+export function getLeadColumnOwnerTooltip(column: Pick<LeadTableColumn, "key" | "owner" | "label">): string | undefined {
+  if (column.owner === "client") {
+    return `${column.label} is stored in the linked Clients table. Edits here update the client record and can be reused by other leads.`;
+  }
+
+  if (column.owner !== "derived") {
+    return undefined;
+  }
+
+  switch (column.key) {
+    case "projectTitle":
+      return "Auto: calculated from the lead request, project address, source materials, and client context.";
+    case "todo":
+      return "Auto: shows the next action calculated from the lead status, KP data, and planned follow-ups.";
+    case "clientProjectCount":
+      return "Auto: counts how many leads/projects are linked to the same client record.";
+    case "leadName":
+      return "Auto: generated from the client name plus the service or project context, limited to a compact lead title.";
+    default:
+      return `Auto: ${column.label} is calculated from the current lead and linked CRM data.`;
+  }
+}
+
 export const leadTableDefaultVisibleColumnKeys: LeadTableColumnKey[] = [
   "clientName",
   "projectTitle",

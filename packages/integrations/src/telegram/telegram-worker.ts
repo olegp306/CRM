@@ -189,6 +189,7 @@ export type TelegramWorkerConfig = {
   audioTranscriber?: TelegramAudioTranscriber;
   crmOrchestrator?: CrmOrchestratorClient;
   crmEntityExtractor?: CrmEntityExtractorClient;
+  clientMaterialAnalysisPrompt?: string;
   saveLeadEntityExtraction?: (input: SaveLeadEntityExtractionInput) => Promise<void>;
   prisma?: TelegramWorkerPrismaLike;
   fetchImpl?: typeof fetch;
@@ -1374,6 +1375,64 @@ function createTelegramUndoOnlyReplyMarkup(leadId: string, actionId: string): un
   };
 }
 
+function createTelegramUndoSuccessMessage(input: {
+  leadId: string;
+  actionId: string;
+  actionType: TelegramLeadUndoActionType;
+  prompt?: string;
+  detail: string;
+}): string {
+  const phrase = selectTelegramUndoPromptPhrase(input.prompt, `${input.leadId}:${input.actionId}:${input.actionType}`);
+  return ["undo successful and logged", phrase, input.detail].filter(Boolean).join("\n");
+}
+
+function selectTelegramUndoPromptPhrase(prompt: string | undefined, seed: string): string {
+  const phrases = extractTelegramUndoPromptPhrases(prompt);
+  if (phrases.length === 0) {
+    return "";
+  }
+
+  const index = Math.abs(hashTelegramMessageSeed(seed)) % phrases.length;
+  return phrases[index]!;
+}
+
+function extractTelegramUndoPromptPhrases(prompt: string | undefined): string[] {
+  if (!prompt) {
+    return [];
+  }
+
+  const lines = prompt.split(/\r?\n/);
+  const startIndex = lines.findIndex((line) => /^#+\s*TELEGRAM UNDO RESPONSE PHRASES\s*$/i.test(line.trim()));
+  if (startIndex === -1) {
+    return [];
+  }
+
+  const phrases: string[] = [];
+  for (const line of lines.slice(startIndex + 1)) {
+    const trimmed = line.trim();
+    if (/^#+\s+/.test(trimmed)) {
+      break;
+    }
+
+    const phrase = /^[-*]\s+(.+)$/.exec(trimmed)?.[1]?.trim();
+    if (phrase) {
+      phrases.push(phrase);
+    }
+  }
+
+  return phrases;
+}
+
+function hashTelegramMessageSeed(seed: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
+  }
+
+  return hash;
+}
+
 async function safeAnswerTelegramCallbackQuery(config: Parameters<typeof answerTelegramCallbackQuery>[0]): Promise<void> {
   try {
     await answerTelegramCallbackQuery(config);
@@ -1432,7 +1491,13 @@ async function processTelegramLeadUndoCallback(input: {
     await sendTelegramMessage({
       botToken: config.botToken,
       chatId: callback.chatId,
-      text: `Undo done. Lead <b>${escapeHtml(record.leadId)}</b> was ${client.lead.delete ? "removed" : "archived"}.`,
+      text: createTelegramUndoSuccessMessage({
+        leadId: record.leadId,
+        actionId: record.actionId,
+        actionType: record.actionType,
+        prompt: config.clientMaterialAnalysisPrompt,
+        detail: `лид <b>${escapeHtml(record.leadId)}</b> ${client.lead.delete ? "удален" : "перенесен в архив"}.`
+      }),
       parseMode: "HTML",
       fetchImpl
     });
@@ -1460,7 +1525,13 @@ async function processTelegramLeadUndoCallback(input: {
   await sendTelegramMessage({
     botToken: config.botToken,
     chatId: callback.chatId,
-    text: `Undo done. Lead <b>${escapeHtml(record.leadId)}</b> was restored to the previous state.`,
+    text: createTelegramUndoSuccessMessage({
+      leadId: record.leadId,
+      actionId: record.actionId,
+      actionType: record.actionType,
+      prompt: config.clientMaterialAnalysisPrompt,
+      detail: `лид <b>${escapeHtml(record.leadId)}</b> восстановлен до предыдущего состояния.`
+    }),
     parseMode: "HTML",
     replyMarkup: createTelegramUndoUpdateDoneReplyMarkup(config.crmBaseUrl, record),
     fetchImpl
@@ -1878,6 +1949,7 @@ export async function runTelegramWorkerFromEnv(env = process.env): Promise<Teleg
       model: aiSettings.crmEntityExtractor.model || env.OPENAI_MODEL || "gpt-4o-mini",
       prompt: aiSettings.crmEntityExtractor.prompt
     }),
+    clientMaterialAnalysisPrompt: clientMaterialAnalysisSetting.prompt,
     saveLeadEntityExtraction: crmEntityStore.saveLeadEntityExtraction,
     parser: createOpenAiLeadParserClient({
       apiKey,
@@ -3259,14 +3331,8 @@ function createTelegramAmbiguousAudioClarificationMessage(): string {
   ].join("\n");
 }
 
-function createTelegramNewLeadStartedMessage(session: TelegramLeadDraftSession): string {
-  return [
-    "New lead draft started.",
-    "",
-    ...createTelegramDraftFieldLines(session),
-    "",
-    "Send text, photos, or PDF documents. I will collect the fields needed for a KP."
-  ].join("\n");
+function createTelegramNewLeadStartedMessage(_session: TelegramLeadDraftSession): string {
+  return "открыта сессия создания нового лида.";
 }
 
 function createTelegramPossibleDifferentLeadMessage(

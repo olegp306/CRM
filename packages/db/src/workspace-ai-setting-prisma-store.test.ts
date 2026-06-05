@@ -41,6 +41,8 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.prompt).toContain("Russian");
     expect(setting.prompt).toContain("Return strictly valid JSON");
     expect(setting.prompt).toContain("Do not invent missing fields");
+    expect(setting.prompt).toContain("TELEGRAM UNDO RESPONSE PHRASES");
+    expect(setting.prompt).toContain("undo successful and logged");
   });
 
   it("upserts the client material analysis prompt and model for one workspace", async () => {

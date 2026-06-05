@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.4.3`
+Current stable version: `0.4.27`
 
 Stable tag format:
 
@@ -28,6 +28,9 @@ v0.4.0
 v0.4.1
 v0.4.2
 v0.4.3
+v0.4.25
+v0.4.26
+v0.4.27
 ```
 
 ## Branch Workflow
@@ -154,6 +157,16 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.4.27
+
+Telegram undo voice and table ownership polish:
+
+- Telegram undo confirmations now start with the fixed base line `undo successful and logged`.
+- Personalized Telegram undo phrases from AI Intake settings are appended on the next line when configured.
+- Lead table `Client` and `Auto` badges explain linked-table fields and automatically calculated values on hover.
+- Shared editable tables now support the same linked-field and auto-field ownership metadata for future CRM tables.
+- The mobile web assistant launcher is more compact so it covers less of the working area.
 
 ## 0.4.26
 

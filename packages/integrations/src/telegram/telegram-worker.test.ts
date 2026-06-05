@@ -2787,7 +2787,7 @@ describe("telegram worker", () => {
     });
     expect(client.lead.create).not.toHaveBeenCalled();
     const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
-    expect(JSON.parse(String(sendCall[1]?.body)).text).toContain("New lead draft started");
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toBe("открыта сессия создания нового лида.");
   });
 
   it("does not start a lead draft from the incomplete /new command", async () => {
@@ -4264,6 +4264,12 @@ describe("telegram worker", () => {
       crmBaseUrl: "https://crm.example.com",
       parser,
       prisma: client,
+      clientMaterialAnalysisPrompt: [
+        "# AI Intake",
+        "",
+        "# TELEGRAM UNDO RESPONSE PHRASES",
+        "- Я Олегу обязательно расскажу про этот случай. 👀"
+      ].join("\n"),
       saveAuditEvent: async (event: unknown) => {
         auditEvents.push(event);
       },
@@ -4313,8 +4319,10 @@ describe("telegram worker", () => {
     expect(deleted).toEqual([{ where: { id: "lead-record-2" } }]);
     const undoCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const undoBody = JSON.parse(String(undoCall[1].body));
-    expect(undoBody.text).toContain("Undo done");
+    expect(undoBody.text).toContain("undo successful and logged");
+    expect(undoBody.text).toMatch(/^undo successful and logged\n/);
     expect(undoBody.text).toContain("L-2026-002");
+    expect(undoBody.text).toContain("Я Олегу обязательно расскажу про этот случай. 👀");
   });
 
   it("asks for clarification when a Telegram user types a lead undo request without pressing the Undo button", async () => {
@@ -4942,7 +4950,8 @@ describe("telegram worker", () => {
     });
     const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const sendBody = JSON.parse(String(sendCall[1].body));
-    expect(sendBody.text).toContain("Undo done");
+    expect(sendBody.text).toContain("undo successful and logged");
+    expect(sendBody.text).not.toMatch(/Олег|не серчай|Накажи|Вернул|Понял|Откатился|Сознаю/i);
     expect(sendBody.reply_markup.inline_keyboard.flat()).toContainEqual({
       text: "Create new lead from this source",
       callback_data: "lead_recreate:L-2026-002:331"
@@ -5224,7 +5233,8 @@ describe("telegram worker", () => {
     );
     const undoCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
     const undoBody = JSON.parse(String(undoCall[1].body));
-    expect(undoBody.text).toContain("Undo done");
+    expect(undoBody.text).toContain("undo successful and logged");
+    expect(undoBody.text).not.toMatch(/Олег|не серчай|Накажи|Вернул|Понял|Откатился|Сознаю/i);
 
     await expect(
       processTelegramUpdates(
