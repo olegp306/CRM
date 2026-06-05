@@ -31,6 +31,10 @@ flowchart TD
 6. Add tests for settings storage, graph routing, and Telegram worker handoff.
 7. Verify package typechecks and focused test suites before any PR or merge.
 
+## Test Runbook
+
+Use `docs/langgraph-telegram-test-runbook.md` for the manual test-stand gate before enabling LangGraph outside the test workspace.
+
 ## Non-Goals
 
 - No production deployment from this chat.
