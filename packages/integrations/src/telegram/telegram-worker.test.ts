@@ -343,6 +343,7 @@ describe("telegram worker", () => {
           crmBaseUrl: "https://crm.example.com",
           parser,
           prisma: client,
+          telegramRuntime: "langgraph",
           fetchImpl: fetchMock as unknown as typeof fetch
         }
       )
