@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { getAppNavigationItems, getNavigationDisplayHref, getNavigationPendingLabel } from "./app-navigation";
 
 describe("getAppNavigationItems", () => {
-  it("covers the first-card workspace shell routes in order", () => {
+  it("covers the workspace shell routes in order without a separate projects tab", () => {
     expect(getAppNavigationItems("en").map((item) => ({ href: item.href, label: item.label }))).toEqual([
       { href: "/today", label: "Today" },
       { href: "/clients", label: "Clients" },
-      { href: "/leads", label: "Leads" },
-      { href: "/projects", label: "Projects" },
+      { href: "/leads", label: "Leads (Projects)" },
       { href: "/outreach", label: "Cold Targets" },
       { href: "/content", label: "Content" },
       { href: "/assistant/preview", label: "Assistant" },

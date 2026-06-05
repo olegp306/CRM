@@ -635,7 +635,8 @@ function InlineLeadCell({
 }) {
   const [value, setValue] = useState(row[fieldName] ?? "");
   const isLinkedClientField = fieldOwner === "client";
-  const canEdit = fieldOwner === "lead" || (isLinkedClientField && Boolean(row.clientRecordId));
+  const canCreateClientFromInlineField = isLinkedClientField && !row.clientRecordId && ["phone", "email"].includes(fieldName);
+  const canEdit = fieldOwner === "lead" || (isLinkedClientField && Boolean(row.clientRecordId)) || canCreateClientFromInlineField;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -674,6 +675,7 @@ function InlineLeadCell({
       <input type="hidden" name="id" value={row.id} />
       <input type="hidden" name="inlineFieldName" value={fieldName} />
       <input type="hidden" name="inlineFieldOwner" value={fieldOwner} />
+      <input type="hidden" name="clientName" value={row.clientName} />
       <input
         name={fieldName}
         value={value}
@@ -685,7 +687,13 @@ function InlineLeadCell({
         className={`h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60 ${
           isLinkedClientField ? "font-medium text-sky-950 dark:text-sky-100" : ""
         }`}
-        title={isLinkedClientField ? "Edit linked client inline, then press Enter or leave the cell to save" : "Edit inline, then press Enter or leave the cell to save"}
+        title={
+          canCreateClientFromInlineField
+            ? "Enter a client phone or email to create and link a client record."
+            : isLinkedClientField
+              ? "Edit linked client inline, then press Enter or leave the cell to save"
+              : "Edit inline, then press Enter or leave the cell to save"
+        }
       />
     </form>
   );

@@ -582,6 +582,41 @@ describe("lead table model", () => {
     expect(row.leadName).toBe("L-2026-099");
   });
 
+  it("does not treat Telegram source ids as client phone numbers", () => {
+    const [row] = createLeadTableRows([
+      {
+        id: "lead-record-no-client",
+        leadId: "L-2026-101",
+        displayName: "Thomas Wachter - interior design in Munich",
+        clientRecordId: null,
+        createdDate: "2026-05-21",
+        temperature: "warm",
+        requestType: "interior design",
+        urgency: null,
+        budgetEur: null,
+        desiredStart: null,
+        desiredMoveIn: null,
+        bgfM2: null,
+        wohnflaecheM2: null,
+        projectAddress: "Munich",
+        isStandard: null,
+        status: "new",
+        rawInput: "Telegram sources: telegram:410849134:71\nAuthor: Oleg Panyukov (@olegpanyukov)",
+        missingData: [],
+        kpGeneratedDocumentId: null,
+        kpSentDate: null,
+        followup1Date: null,
+        followupStatus: null,
+        outcome: null,
+        outcomeReason: null,
+        projectRecordId: null
+      }
+    ]);
+
+    expect(row.phone).toBe("");
+    expect(row.email).toBe("");
+  });
+
   it("attaches persisted channel events to serialized lead rows", () => {
     const [row] = createLeadTableRows(
       [

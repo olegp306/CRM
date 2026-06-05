@@ -25,7 +25,7 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
     navigation: {
       today: "Today",
       clients: "Clients",
-      leads: "Leads",
+      leads: "Leads (Projects)",
       projects: "Projects",
       outreach: "Cold Targets",
       content: "Content",
@@ -42,7 +42,7 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
     navigation: {
       today: "Heute",
       clients: "Kunden",
-      leads: "Leads",
+      leads: "Leads (Projects)",
       projects: "Projekte",
       outreach: "Cold Targets",
       content: "Content",
@@ -59,7 +59,7 @@ const dictionaries: Record<SupportedLocale, Dictionary> = {
     navigation: {
       today: "Сегодня",
       clients: "Клиенты",
-      leads: "Лиды",
+      leads: "Лиды (Projects)",
       projects: "Проекты",
       outreach: "Cold Targets",
       content: "Контент",

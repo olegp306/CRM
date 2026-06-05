@@ -30,6 +30,7 @@ type EditableRecordTableProps = {
 };
 
 type MobileTableViewMode = "cards" | "table";
+type EditableTableViewMode = "full" | "inline";
 
 export function EditableRecordTable({ title, kind, fields, rows, updateAction, exportHref }: EditableRecordTableProps) {
   const tableFields = fields.filter((field) => field.table);
@@ -38,6 +39,7 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
   const [sorting, setSorting] = useState<SortingState>([]);
   const { columnVisibility, columnSizing, columnOrder, setColumnVisibility, setColumnSizing, setColumnOrder } = usePersistentTablePreferences(`editable-${kind}`);
   const [mobileViewMode, setMobileViewMode] = useState<MobileTableViewMode>("cards");
+  const [viewMode, setViewMode] = useState<EditableTableViewMode>("full");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,9 +59,14 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
         size: field.width ?? 160,
         minSize: 104,
         enableSorting: true,
-        cell: ({ getValue }) => <TruncatedCell value={String(getValue() ?? "")} />
+        cell: ({ row, getValue }) =>
+          viewMode === "inline" && field.editable ? (
+            <InlineEditableCell row={row.original} field={field} fields={editorFields} updateAction={updateAction} />
+          ) : (
+            <TruncatedCell value={String(getValue() ?? "")} />
+          )
       })),
-    [tableFields]
+    [editorFields, tableFields, updateAction, viewMode]
   );
 
   const table = useReactTable({
@@ -109,6 +116,12 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
     setDraggingColumnId(null);
   }
 
+  function handleResetDefaultColumns() {
+    setColumnVisibility({});
+    setColumnSizing({});
+    setColumnOrder(defaultColumnOrder as ColumnOrderState);
+  }
+
   return (
     <>
       <section className="grid gap-3 md:hidden">
@@ -150,14 +163,20 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-base font-semibold">{title}</h2>
-            <p className="text-sm text-muted-foreground">Sort, resize, hide columns, then click a row to edit.</p>
+            <p className="text-sm text-muted-foreground">
+              {viewMode === "inline" ? "Sort, resize, hide columns, then edit cells directly." : "Sort, resize, hide columns, then click a row to edit."}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
             {exportHref ? (
               <a href={exportHref} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
                 Export to Excel (CSV)
               </a>
             ) : null}
+            <button type="button" onClick={handleResetDefaultColumns} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+              Default columns
+            </button>
             <div className="md:hidden">
               <MobileViewModeToggle value={mobileViewMode} onChange={setMobileViewMode} />
             </div>
@@ -207,7 +226,7 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
                           onClick={(event) => event.stopPropagation()}
                           className="mt-0.5 h-5 w-5 shrink-0 cursor-grab rounded border border-border bg-white text-[11px] leading-4 text-muted-foreground hover:text-foreground active:cursor-grabbing"
                         >
-                          ↕
+                          ::
                         </button>
                         <button
                           type="button"
@@ -235,8 +254,12 @@ export function EditableRecordTable({ title, kind, fields, rows, updateAction, e
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={row.id}
-                    onClick={() => setSelectedId(row.original.id)}
-                    className="cursor-pointer bg-white transition hover:bg-muted/60"
+                    onClick={() => {
+                      if (viewMode === "full") {
+                        setSelectedId(row.original.id);
+                      }
+                    }}
+                    className={`${viewMode === "full" ? "cursor-pointer" : ""} bg-white transition hover:bg-muted/60`}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td
@@ -308,6 +331,96 @@ function TruncatedCell({ value }: { value: string }) {
     <span className="block max-w-full truncate text-foreground" title={value}>
       {value || "-"}
     </span>
+  );
+}
+
+function InlineEditableCell({
+  row,
+  field,
+  fields,
+  updateAction
+}: {
+  row: EditableRecordRow;
+  field: EditableTableField;
+  fields: EditableTableField[];
+  updateAction: (formData: FormData) => Promise<void>;
+}) {
+  const [value, setValue] = useState(row[field.key] ?? "");
+  const [isSaving, setIsSaving] = useState(false);
+  const router = useRouter();
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (value === (row[field.key] ?? "")) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateAction(new FormData(event.currentTarget));
+      router.refresh();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleBlur(event: FormEvent<HTMLFormElement>) {
+    if (value !== (row[field.key] ?? "")) {
+      event.currentTarget.requestSubmit();
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} onBlur={handleBlur} onClick={(event) => event.stopPropagation()} className="min-w-0">
+      <input type="hidden" name="id" value={row.id} />
+      {fields
+        .filter((item) => item.key !== field.key)
+        .map((item) => (
+          <input key={item.key} type="hidden" name={item.key} value={row[item.key] ?? ""} />
+        ))}
+      <input
+        name={field.key}
+        value={value}
+        required={field.required}
+        type={getInputType(field.type)}
+        inputMode={field.type === "number" ? "decimal" : undefined}
+        disabled={isSaving}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        className="h-8 w-full min-w-28 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none hover:border-border hover:bg-surface focus:border-primary focus:bg-surface focus:ring-2 focus:ring-primary/15 disabled:opacity-60"
+        title="Edit inline, then press Enter or leave the cell to save"
+      />
+    </form>
+  );
+}
+
+function ViewModeToggle({
+  value,
+  onChange
+}: {
+  value: EditableTableViewMode;
+  onChange: (value: EditableTableViewMode) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+      {(["full", "inline"] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          className={`h-8 rounded-md px-3 text-xs font-semibold capitalize transition ${
+            value === mode ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {mode}
+        </button>
+      ))}
+    </div>
   );
 }
 

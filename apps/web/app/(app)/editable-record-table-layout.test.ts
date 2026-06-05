@@ -11,11 +11,19 @@ describe("editable record table CSV export controls", () => {
   it("renders an optional CSV export link in shared editable tables", () => {
     expect(tableSource).toContain("exportHref");
     expect(tableSource).toContain("Export to Excel (CSV)");
+    expect(tableSource).toContain("Default columns");
+    expect(tableSource).toContain("ViewModeToggle");
+    expect(tableSource).toContain("InlineEditableCell");
+    expect(tableSource).toContain("columnOrder: effectiveColumnOrder");
   });
 
   it("wires CSV export links for the shared CRM tables", () => {
     expect(clientsPageSource).toContain('exportHref="/exports/clients"');
     expect(projectsPageSource).toContain('exportHref="/exports/projects"');
     expect(outreachPageSource).toContain('exportHref="/exports/cold-targets"');
+  });
+
+  it("shows the cold targets table before the import form", () => {
+    expect(outreachPageSource.indexOf("<EditableRecordTable")).toBeLessThan(outreachPageSource.indexOf("<form action={replaceColdTargets}"));
   });
 });

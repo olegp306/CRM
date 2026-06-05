@@ -1,11 +1,10 @@
-import { Bot, CalendarDays, FileText, FolderKanban, Home, Megaphone, Settings, UsersRound } from "lucide-react";
+import { Bot, CalendarDays, FileText, Home, Megaphone, Settings, UsersRound } from "lucide-react";
 import { getDictionary, type SupportedLocale } from "@app/ui";
 
 const navigationItems = [
   { key: "today", href: "/today", icon: Home },
   { key: "clients", href: "/clients", icon: UsersRound },
   { key: "leads", href: "/leads", icon: CalendarDays },
-  { key: "projects", href: "/projects", icon: FolderKanban },
   { key: "outreach", href: "/outreach", icon: Megaphone },
   { key: "content", href: "/content", icon: FileText },
   { key: "assistant", href: "/assistant/preview", icon: Bot },

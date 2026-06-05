@@ -693,8 +693,8 @@ export function createLeadTableRows(
       isStandard: formatBoolean(record.isStandard),
       status: record.status,
       todo: "",
-      email: record.client?.email ?? extractEmail(record.rawInput ?? ""),
-      phone: record.client?.phone ?? extractPhone(record.rawInput ?? ""),
+      email: record.client?.email ?? "",
+      phone: record.client?.phone ?? "",
       messenger: record.client?.whatsapp ?? createLeadMessenger(record.rawInput),
       source: formatLeadSource(record.rawInput, record.client?.source),
       clientProjectCount: record.client?._count?.leads ? String(record.client._count.leads) : "",
@@ -1460,14 +1460,6 @@ function extractLabeledValue(text: string, labels: string[]): string {
   }
 
   return "";
-}
-
-function extractEmail(text: string): string {
-  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(text)?.[0] ?? "";
-}
-
-function extractPhone(text: string): string {
-  return /(?:\+?\d[\d\s().-]{6,}\d)/.exec(text)?.[0]?.trim() ?? "";
 }
 
 function createLeadMessenger(rawInput: string | null): string {

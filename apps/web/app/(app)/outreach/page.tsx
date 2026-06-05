@@ -144,7 +144,20 @@ export default async function OutreachPage() {
         <p className="text-sm text-muted-foreground">Cold targets and cadence execution.</p>
       </div>
 
+      <EditableRecordTable
+        title="Cold targets table"
+        kind="coldTargets"
+        fields={coldTargetFields}
+        rows={rows}
+        updateAction={updateColdTargetAction}
+        exportHref="/exports/cold-targets"
+      />
+
       <form action={replaceColdTargets} className="grid gap-3 rounded-lg border border-border bg-white p-4">
+        <div>
+          <h2 className="text-base font-semibold">Import cold targets</h2>
+          <p className="text-sm text-muted-foreground">Paste or upload target_id TSV/CSV when you need to replace the table.</p>
+        </div>
         <textarea
           name="coldTargetsText"
           className="min-h-32 rounded-md border border-border px-3 py-2 text-sm"
@@ -157,15 +170,6 @@ export default async function OutreachPage() {
           </button>
         </div>
       </form>
-
-      <EditableRecordTable
-        title="Cold targets table"
-        kind="coldTargets"
-        fields={coldTargetFields}
-        rows={rows}
-        updateAction={updateColdTargetAction}
-        exportHref="/exports/cold-targets"
-      />
     </section>
   );
 }

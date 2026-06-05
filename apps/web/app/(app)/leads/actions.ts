@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createKpSentLeadUpdate, createLeadIntakeDraft, createTelegramLeadIntakeDraft } from "@app/core";
+import { createKpSentLeadUpdate, createLeadIntakeDraft, createTelegramLeadIntakeDraft, findMatchingClient, getNextBusinessId } from "@app/core";
 import { appendWorkspacePromptContext, createOpenAiAssistantLeadParserClient } from "@app/assistant";
 import { prisma } from "@app/db";
 import { getWorkspaceSession } from "../../workspace-session";
@@ -311,14 +311,32 @@ async function updateLinkedClientInlineField(input: {
 }) {
   const lead = await prisma.lead.findUnique({
     where: { id: input.id, workspaceId: input.workspaceId },
-    select: { clientRecordId: true }
+    select: { clientRecordId: true, displayName: true, leadId: true }
   });
 
-  if (!lead?.clientRecordId) {
-    throw new Error("This lead is not linked to a client yet.");
+  if (!lead) {
+    throw new Error("Lead was not found.");
   }
 
   const data = createClientInlineUpdate(input.fieldName, input.value);
+
+  if (!lead.clientRecordId) {
+    const clientRecordId = await resolveOrCreateClientFromInlineContact({
+      workspaceId: input.workspaceId,
+      leadId: input.id,
+      leadDisplayName: lead.displayName,
+      leadBusinessId: lead.leadId,
+      fieldName: input.fieldName,
+      value: input.value
+    });
+
+    if (!clientRecordId) {
+      throw new Error("Add a phone or email before creating a linked client from this lead.");
+    }
+
+    return;
+  }
+
   const result = await prisma.client.updateMany({
     where: { id: lead.clientRecordId, workspaceId: input.workspaceId },
     data
@@ -327,6 +345,84 @@ async function updateLinkedClientInlineField(input: {
   if (result.count === 0) {
     throw new Error("Linked client was not found.");
   }
+}
+
+async function resolveOrCreateClientFromInlineContact(input: {
+  workspaceId: string;
+  leadId: string;
+  leadDisplayName: string | null;
+  leadBusinessId: string;
+  fieldName: string;
+  value: string | null;
+}): Promise<string | null> {
+  if (!["phone", "email"].includes(input.fieldName) || !input.value) {
+    return null;
+  }
+
+  const name = createClientNameFromLeadDisplayName(input.leadDisplayName, input.leadBusinessId);
+  if (!name) {
+    return null;
+  }
+
+  const contact = {
+    name,
+    email: input.fieldName === "email" ? input.value : null,
+    phone: input.fieldName === "phone" ? input.value : null
+  };
+  const existingClients = await prisma.client.findMany({
+    where: { workspaceId: input.workspaceId, archivedAt: null },
+    select: { id: true, clientId: true, name: true, email: true, phone: true }
+  });
+  const match = findMatchingClient(existingClients, contact);
+  const clientRecordId = match.match
+    ? match.match.id
+    : (
+        await prisma.client.create({
+          data: {
+            workspaceId: input.workspaceId,
+            clientId: getNextBusinessId({
+              kind: "client",
+              now: new Date(),
+              existingIds: existingClients.map((client) => client.clientId)
+            }),
+            name,
+            clientType: "private",
+            email: contact.email,
+            phone: contact.phone,
+            source: "web_inline"
+          }
+        })
+      ).id;
+
+  if (match.match) {
+    await prisma.client.updateMany({
+      where: { id: clientRecordId, workspaceId: input.workspaceId },
+      data: {
+        ...(contact.email ? { email: contact.email } : {}),
+        ...(contact.phone ? { phone: contact.phone } : {})
+      }
+    });
+  }
+
+  await prisma.lead.update({
+    where: { id: input.leadId, workspaceId: input.workspaceId },
+    data: { clientRecordId }
+  });
+
+  return clientRecordId;
+}
+
+function createClientNameFromLeadDisplayName(displayName: string | null, leadId: string): string | null {
+  const name = (displayName ?? "")
+    .split(" - ")[0]
+    .replace(/\s+в\s*$/i, "")
+    .trim();
+
+  if (!name || name === leadId) {
+    return null;
+  }
+
+  return name;
 }
 
 function createLeadInlineUpdate(fieldName: string, value: string | null) {
