@@ -5,11 +5,11 @@ export type AppChangelogEntry = {
 };
 
 export const currentAppChangelog: AppChangelogEntry = {
-  version: "0.4.25",
-  title: "Lead table and client linking release",
+  version: "0.4.26",
+  title: "Feedback audit and release notes",
   items: [
-    "Lead tables now default to client, project, commercial, contact, and source columns with saved column order, widths, and visibility.",
-    "Telegram and web lead creation now link to an existing client or create a client when enough contact data is present.",
-    "Lead cards now edit fields in the same order as the default table and include a confirmed delete-lead action."
+    "The repository now includes a dated changelog for the work completed from 2026-06-04 noon through 2026-06-05.",
+    "The release notes summarize the delivered lead table, inline editing, client linking, Telegram routing, undo, and reminder reliability changes.",
+    "Current version metadata is bumped to 0.4.26 so feedback captured after this audit can be traced to the refreshed main build."
   ]
 };

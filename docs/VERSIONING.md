@@ -155,6 +155,14 @@ The `Release workflow` panel summarizes the selected version as a lightweight ch
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
 
+## 0.4.26
+
+Feedback audit and release notes:
+
+- Added a repository changelog for work completed from 2026-06-04 noon through 2026-06-05.
+- Documented the delivered lead table defaults, saved column preferences, inline editing, linked-client updates, Telegram new-lead routing, undo, and reminder accumulation fixes.
+- Bumped app metadata so new feedback can be traced to this refreshed main build.
+
 ## 0.4.25
 
 Lead table and client linking release:
