@@ -373,9 +373,10 @@ function createSharedCapabilityMessage(channel: "web" | "telegram"): string {
       ? [
           "Here is the simple Telegram flow:",
           "1. Use new lead to create a lead, then send the client text, photos, PDFs, voice messages, or audio files.",
-          "2. Use search lead to find a lead, then describe what you are looking for: project name, client, address, tag, phone, email, status, or date.",
+          "2. Use search lead to find a lead. I show the latest 6 leads first, then you can search by project name, client, address, tag, phone, email, status, date, budget, BGF, missing fields, or source text.",
           "3. To change a lead, first find or create it, open its Telegram lead card, and reply to that card with the update, note, reminder, or extra files.",
-          "Examples: \"Find project Schneider EFH\", \"Show last 10 leads\", \"Find warm leads from last month\", \"Search by tag residential\"."
+          "4. To forward WhatsApp/Mail material directly to an existing lead, add a caption like \"к лиду 009\" or \"to lead L-2026-009\".",
+          "Examples: \"Find project Schneider EFH\", \"Show last 10 leads\", \"Find warm leads from last month\", \"Search by tag residential\", \"Search 45\"."
         ].join("\n")
       : "I can create and update leads, read source materials, track missing KP fields, prepare KP documents, mark KP as sent, and explain what is waiting next.";
 

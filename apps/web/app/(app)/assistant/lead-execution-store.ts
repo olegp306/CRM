@@ -165,14 +165,23 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
         leadId: true,
         displayName: true,
         searchTags: true,
+        rawInput: true,
         createdDate: true,
         status: true,
         temperature: true,
         requestType: true,
         projectAddress: true,
+        bgfM2: true,
+        budgetEur: true,
+        desiredStart: true,
+        desiredMoveIn: true,
+        urgency: true,
+        missingData: true,
         client: {
           select: {
-            name: true
+            name: true,
+            email: true,
+            phone: true
           }
         }
       }
@@ -188,7 +197,16 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
       temperature: record.temperature,
       requestType: record.requestType,
       projectAddress: record.projectAddress,
-      clientName: record.client?.name ?? null
+      rawInput: record.rawInput,
+      bgfM2: record.bgfM2?.toString() ?? null,
+      budgetEur: record.budgetEur?.toString() ?? null,
+      desiredStart: record.desiredStart?.toISOString() ?? null,
+      desiredMoveIn: record.desiredMoveIn?.toISOString() ?? null,
+      urgency: record.urgency,
+      missingData: normalizeLeadSearchTags(record.missingData),
+      clientName: record.client?.name ?? null,
+      email: record.client?.email ?? null,
+      phone: record.client?.phone ?? null
     }));
   }
 
@@ -204,7 +222,10 @@ export async function listAssistantLeadSearchRecords(workspaceId: string): Promi
       temperature: lead.temperature,
       requestType: lead.requestType,
       projectAddress: lead.projectAddress,
-      clientName: lead.clientName
+      rawInput: lead.rawInput,
+      clientName: lead.clientName,
+      email: lead.email,
+      phone: lead.phone
     }));
 }
 

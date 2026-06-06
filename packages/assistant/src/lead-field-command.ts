@@ -121,7 +121,7 @@ const LEAD_FIELD_COMMAND_GUIDE: LeadFieldCommandGuideItem[] = [
 const ACTION_SIGNAL = /(?:\b(?:update|set|replace|take|extract|change|rename|use|save|find)\b|(?:\u043e\u0431\u043d\u043e\u0432\u0438|\u043f\u043e\u0441\u0442\u0430\u0432\u044c|\u0437\u0430\u0434\u0430\u0439|\u0437\u0430\u043c\u0435\u043d\u0438|\u0432\u043e\u0437\u044c\u043c\u0438|\u0434\u043e\u0441\u0442\u0430\u043d\u044c|\u0438\u0437\u0432\u043b\u0435\u043a\u0438|\u0438\u0437\u043c\u0435\u043d\u0438|\u043f\u0435\u0440\u0435\u0438\u043c\u0435\u043d\u0443\u0439|\u043d\u0430\u0437\u043e\u0432\u0438|\u0443\u043a\u0430\u0436\u0438|\u0441\u043e\u0445\u0440\u0430\u043d\u0438|\u043d\u0430\u0439\u0434\u0438))/i;
 
 export function detectLeadFieldCommand(content: string): LeadFieldCommand | null {
-  const text = content.trim();
+  const text = stripGeneratedTelegramAttachmentMarkers(content).trim();
   if (!text) {
     return null;
   }
@@ -148,6 +148,13 @@ export function detectLeadFieldCommand(content: string): LeadFieldCommand | null
     valueHint: primary.field === "displayName" ? extractDisplayNameHint(text) : null,
     confidence: hasActionSignal ? "high" : "medium"
   };
+}
+
+function stripGeneratedTelegramAttachmentMarkers(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/^\[Telegram (?:image|audio|PDF) attachment:/i.test(line.trim()))
+    .join("\n");
 }
 
 export function getLeadFieldCommandGuide(): LeadFieldCommandGuideItem[] {
