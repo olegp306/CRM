@@ -75,9 +75,9 @@ export function filterLeadSearchRecords(
 ): LeadSearchRecord[] {
   const now = options.now ?? new Date();
   const range = createDateRange(request.filters.datePreset, now);
+  const query = request.filters.query;
 
-  return records
-    .filter((record) => {
+  const filtered = records.filter((record) => {
       const createdAt = new Date(record.createdDate);
 
       if (range && (createdAt < range.from || createdAt >= range.to)) {
@@ -92,13 +92,28 @@ export function filterLeadSearchRecords(
         return false;
       }
 
-      if (request.filters.query && !doesLeadMatchQuery(record, request.filters.query)) {
+      if (query && !doesLeadMatchQuery(record, query)) {
         return false;
       }
 
       return true;
-    })
-    .sort((left, right) => new Date(right.createdDate).getTime() - new Date(left.createdDate).getTime());
+    });
+
+  const recordsToRank =
+    query && filtered.some((record) => getLeadSearchPrimaryScore(record, query) > 0)
+      ? filtered.filter((record) => getLeadSearchPrimaryScore(record, query) > 0)
+      : filtered;
+
+  return recordsToRank.sort((left, right) => {
+    if (query) {
+      const scoreDelta = getLeadSearchScore(right, query) - getLeadSearchScore(left, query);
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+    }
+
+    return new Date(right.createdDate).getTime() - new Date(left.createdDate).getTime();
+  });
 }
 
 export function createLeadSearchFilterResponse(
@@ -237,31 +252,7 @@ function formatLeadSearchLine(record: LeadSearchRecord): string {
 
 function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
   const normalizedQuery = normalizeSearchText(query);
-  const haystackValues = [
-    record.leadId,
-    record.displayName,
-    record.clientName,
-    record.temperature,
-    record.status,
-    record.requestType,
-    record.projectAddress,
-    record.email,
-    record.phone,
-    record.rawInput,
-    record.summary,
-    record.bgfM2 === undefined || record.bgfM2 === null ? null : String(record.bgfM2),
-    record.budgetEur === undefined || record.budgetEur === null ? null : String(record.budgetEur),
-    record.desiredStart,
-    record.desiredMoveIn,
-    record.urgency,
-    record.source,
-    record.messenger,
-    record.communicationChannel,
-    ...(record.missingData ?? []),
-    ...(record.searchTags ?? [])
-  ]
-    .filter((value): value is string => Boolean(value))
-    .map(normalizeSearchText);
+  const haystackValues = getLeadSearchValues(record).map(normalizeSearchText);
   const haystack = haystackValues.join("_");
 
   if (haystack.includes(normalizedQuery)) {
@@ -276,6 +267,78 @@ function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
   const matchedTokens = queryTokens.filter((token) => doesSearchTokenMatch(token, haystackValues));
   const requiredMatches = queryTokens.length === 1 ? 1 : Math.max(2, Math.ceil(queryTokens.length * 0.6));
   return matchedTokens.length >= requiredMatches;
+}
+
+function getLeadSearchScore(record: LeadSearchRecord, query: string): number {
+  return getLeadSearchPrimaryScore(record, query) + getLeadSearchSecondaryScore(record, query);
+}
+
+function getLeadSearchPrimaryScore(record: LeadSearchRecord, query: string): number {
+  return scoreSearchValues(getLeadSearchPrimaryValues(record), query, 10);
+}
+
+function getLeadSearchSecondaryScore(record: LeadSearchRecord, query: string): number {
+  return scoreSearchValues(getLeadSearchSecondaryValues(record), query, 1);
+}
+
+function scoreSearchValues(values: Array<string | null | undefined>, query: string, weight: number): number {
+  const normalizedValues = values.filter((value): value is string => Boolean(value)).map(normalizeSearchText);
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = tokenizeSearchText(query);
+  const joined = normalizedValues.join("_");
+
+  let score = 0;
+  if (normalizedQuery && normalizedValues.some((value) => value === normalizedQuery)) {
+    score += 100 * weight;
+  }
+
+  if (normalizedQuery && normalizedValues.some((value) => value.includes(normalizedQuery))) {
+    score += 40 * weight;
+  }
+
+  for (const token of tokens) {
+    if (doesSearchTokenMatch(token, normalizedValues)) {
+      score += 8 * weight;
+    }
+  }
+
+  if (tokens.length > 1 && tokens.every((token) => joined.includes(normalizeSearchText(token)))) {
+    score += 20 * weight;
+  }
+
+  return score;
+}
+
+function getLeadSearchValues(record: LeadSearchRecord): string[] {
+  return [...getLeadSearchPrimaryValues(record), ...getLeadSearchSecondaryValues(record)].filter((value): value is string => Boolean(value));
+}
+
+function getLeadSearchPrimaryValues(record: LeadSearchRecord): Array<string | null | undefined> {
+  return [
+    record.leadId,
+    record.displayName,
+    record.clientName,
+    record.temperature,
+    record.status,
+    record.requestType,
+    record.projectAddress,
+    record.email,
+    record.phone,
+    record.bgfM2 === undefined || record.bgfM2 === null ? null : String(record.bgfM2),
+    record.budgetEur === undefined || record.budgetEur === null ? null : String(record.budgetEur),
+    record.desiredStart,
+    record.desiredMoveIn,
+    record.urgency,
+    record.source,
+    record.messenger,
+    record.communicationChannel,
+    ...(record.missingData ?? []),
+    ...(record.searchTags ?? [])
+  ];
+}
+
+function getLeadSearchSecondaryValues(record: LeadSearchRecord): Array<string | null | undefined> {
+  return [record.rawInput, record.summary];
 }
 
 function createLeadCrmButtonLabel(record: LeadSearchRecord): string {
@@ -404,7 +467,7 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
   }
 
   const explicit =
-    /\b(?:find|search|show|list|open|pull\s+up)\s+(?:leads?|projects?|clients?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about|named|by\s+name|by\s+title)\s+)?([A-Za-z0-9_ -]{2,80})/i.exec(trimmed) ??
+    /\b(?:find|search|show|list|open|pull\s+up)\s+(?:leads?|projects?|clients?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about|named|by\s+name|by\s+title)\s+)?([\p{L}0-9_ -]{2,80})/iu.exec(trimmed) ??
     /(?:найди|покажи|найти|ищи|открой)\s+(?:лид[а-яё]*|проект[а-яё]*|клиент[а-яё]*)?\s*(?:(по\s+тегу|с\s+тегом|про|по\s+названию|по\s+имени)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{2,80})/i.exec(trimmed) ??
     null;
 

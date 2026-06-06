@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runCrmLangGraphOrchestrator } from "./crm-langgraph-orchestrator";
+import type { CrmOrchestratorClient } from "./openai-crm-orchestrator";
 
 describe("crm langgraph orchestrator", () => {
   it("routes Telegram source material to lead creation", async () => {
@@ -27,6 +28,36 @@ describe("crm langgraph orchestrator", () => {
       messageId: "10",
       text:
         "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0439 \u043f\u043e\u0442\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u043a\u043b\u0438\u0435\u043d\u0442: \u0418\u0440\u0438\u043d\u0430 \u0428\u043d\u0430\u0439\u0434\u0435\u0440, \u043d\u0443\u0436\u043d\u043e \u041a\u041f \u043d\u0430 \u0430\u0440\u0445\u0438\u0442\u0435\u043a\u0442\u0443\u0440\u0443, \u0430\u0434\u0440\u0435\u0441 Gartenweg 9, BGF 195 \u043c2.",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "create_lead"
+    });
+  });
+
+  it("routes bare new-lead requests to a new lead session instead of parsing an empty lead", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "19",
+      text: "/newlead",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "start_new_lead_session"
+    });
+  });
+
+  it("routes natural Russian another-new-lead wording to lead creation", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "18",
+      text: "Ещё новый лид: снова Максим, Швейцария, частный дом",
       receivedAt: "2026-06-05T10:00:00.000Z"
     });
 
@@ -168,6 +199,165 @@ describe("crm langgraph orchestrator", () => {
     expect(result.action).toMatchObject({
       type: "search_leads",
       query: "show last 10 leads"
+    });
+  });
+
+  it("routes a plain message in active search mode to the search tool", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "20",
+      activeMode: "search",
+      text: "Schneider Chiemsee",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "search_leads",
+      query: "Schneider Chiemsee"
+    });
+  });
+
+  it("routes a non-replied message to the selected lead context", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "21",
+      selectedLeadId: "L-2026-777",
+      text: "phone +49 160 111222",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "update_lead",
+      leadId: "L-2026-777"
+    });
+  });
+
+  it("uses the CRM orchestrator client as the LangGraph classifier for natural lead search", async () => {
+    const crmOrchestrator: CrmOrchestratorClient = {
+      route: async () => ({
+        intent: "SEARCH_LEAD",
+        reasoning: "The user wants to find a lead by human-language text.",
+        action: "Lead Search Agent",
+        status: "ready",
+        message: "Searching leads."
+      })
+    };
+
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "22",
+      text: "Максим Тютюник",
+      crmOrchestrator,
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "search_leads",
+      query: "Максим Тютюник"
+    });
+  });
+
+  it("uses the CRM orchestrator client decision to start a new lead session", async () => {
+    const crmOrchestrator: CrmOrchestratorClient = {
+      route: async () => ({
+        intent: "START_NEW_LEAD_SESSION",
+        reasoning: "The user wants to begin a new lead flow without source material yet.",
+        action: "New Lead Session Agent",
+        status: "ready",
+        message: "Starting a new lead session."
+      })
+    };
+
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "25",
+      text: "хочу создать нового лида",
+      crmOrchestrator,
+      requireModelDecision: true,
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "start_new_lead_session"
+    });
+  });
+
+  it("does not use deterministic fallback when model decisions are required", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "26",
+      text: "new lead: Irina Schneider wants an EFH proposal",
+      requireModelDecision: true,
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "clarify",
+      question: expect.stringContaining("CRM orchestrator")
+    });
+  });
+
+  it("uses the CRM orchestrator client decision to create a new lead even when a lead is selected", async () => {
+    const crmOrchestrator: CrmOrchestratorClient = {
+      route: async () => ({
+        intent: "CREATE_LEAD",
+        reasoning: "The user says this is a separate new lead.",
+        action: "Lead Creation Agent",
+        status: "ready",
+        message: "Creating a new lead."
+      })
+    };
+
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "23",
+      selectedLeadId: "L-2026-010",
+      text: "Это отдельная новая заявка по другому клиенту",
+      crmOrchestrator,
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "create_lead"
+    });
+  });
+
+  it("uses the CRM orchestrator client question for ambiguous updates", async () => {
+    const crmOrchestrator: CrmOrchestratorClient = {
+      route: async () => ({
+        intent: "CLARIFICATION_REQUIRED",
+        reasoning: "The user wants to update something but no target lead is known.",
+        action: "clarification",
+        status: "need_clarification",
+        message: "Which lead should I update?"
+      })
+    };
+
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "24",
+      text: "Добавь телефон клиента",
+      crmOrchestrator,
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "clarify",
+      question: "Which lead should I update?"
     });
   });
 });

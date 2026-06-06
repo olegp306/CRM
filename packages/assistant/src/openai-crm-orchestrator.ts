@@ -103,12 +103,12 @@ function createCrmOrchestratorJsonSchema() {
     properties: {
       intent: {
         type: "string",
-        enum: ["CREATE_LEAD", "UPDATE_LEAD", "SEARCH_LEAD", "CREATE_REMINDER", "SUPPORT_REQUEST", "CLARIFICATION_REQUIRED"]
+        enum: ["START_NEW_LEAD_SESSION", "CREATE_LEAD", "UPDATE_LEAD", "SEARCH_LEAD", "CREATE_REMINDER", "SUPPORT_REQUEST", "CLARIFICATION_REQUIRED"]
       },
       reasoning: { type: "string" },
       action: {
         type: "string",
-        enum: ["Lead Creation Agent", "Lead Update Agent", "Lead Search Agent", "Reminder Agent", "Support Agent", "clarification"]
+        enum: ["New Lead Session Agent", "Lead Creation Agent", "Lead Update Agent", "Lead Search Agent", "Reminder Agent", "Support Agent", "clarification"]
       },
       status: {
         type: "string",
@@ -140,6 +140,7 @@ function normalizeCrmOrchestratorDecision(value: unknown): CrmOrchestratorDecisi
 
 function normalizeIntent(value: unknown): CrmOrchestratorIntent {
   const allowed: CrmOrchestratorIntent[] = [
+    "START_NEW_LEAD_SESSION",
     "CREATE_LEAD",
     "UPDATE_LEAD",
     "SEARCH_LEAD",
@@ -160,6 +161,7 @@ function normalizeAction(value: unknown, status: CrmOrchestratorStatus): CrmOrch
   }
 
   const allowed: Array<Exclude<CrmOrchestratorDecision["action"], "clarification">> = [
+    "New Lead Session Agent",
     "Lead Creation Agent",
     "Lead Update Agent",
     "Lead Search Agent",

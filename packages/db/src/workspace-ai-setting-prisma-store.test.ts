@@ -375,4 +375,10 @@ describe("workspace ai setting prisma store", () => {
     expect(setting.role).toBe("telegram_runtime");
     expect(parseTelegramRuntimeConfig(setting.prompt)).toEqual({ runtime: "langgraph" });
   });
+
+  it("parses the Telegram LangGraph primary test runtime", () => {
+    const prompt = createTelegramRuntimePrompt({ runtime: "langgraph_primary" });
+
+    expect(parseTelegramRuntimeConfig(prompt)).toEqual({ runtime: "langgraph_primary" });
+  });
 });

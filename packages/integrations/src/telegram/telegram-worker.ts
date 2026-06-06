@@ -21,6 +21,7 @@ import {
   createReminderHistorySummary,
   decideIncomingLeadMatch,
   decideLeadFlow,
+  isNewLeadCommand,
   isLeadInteractionNoteCommand,
   isLeadNaturalContextNote,
   isReminderRequest,
@@ -271,6 +272,7 @@ const telegramUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>()
 const telegramCompletedUndoActionMemory = new Map<string, TelegramLeadUndoActionRecord>();
 const telegramUndoneActionMemory = new Set<string>();
 const telegramSearchModeMemory = new Set<string>();
+const telegramSelectedLeadMemory = new Map<string, string>();
 const telegramBotCommandMenuMemory = new Set<string>();
 const TELEGRAM_BOT_COMMANDS = [
   { command: "newlead", description: "create a new lead" },
@@ -302,6 +304,7 @@ export function resetTelegramWorkerMemoryForTests(): void {
   telegramCompletedUndoActionMemory.clear();
   telegramUndoneActionMemory.clear();
   telegramSearchModeMemory.clear();
+  telegramSelectedLeadMemory.clear();
   telegramBotCommandMenuMemory.clear();
 }
 
@@ -375,6 +378,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     let telegramReplySent = false;
     let processingAcknowledgementSent = false;
     let langGraphResultForMessage: CrmLangGraphResult | null = null;
+    const isLangGraphPrimaryRuntime = config.telegramRuntime === "langgraph_primary";
     const sendWorkerTelegramMessage: typeof sendTelegramMessage = async (input) => {
       const sent = await sendTelegramMessage(input);
       telegramReplySent = true;
@@ -382,7 +386,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
     };
 
     try {
-    if (isTelegramLeadUndoClarificationRequest(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramLeadUndoClarificationRequest(message)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -393,7 +397,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (isTelegramSearchModeStartCommand(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramSearchModeStartCommand(message)) {
       telegramSearchModeMemory.add(createTelegramSearchModeKey(config.workspaceId, message.chatId));
       const searchModeResponse = await createTelegramSearchModeStartedResponse(config, client);
       await sendWorkerTelegramMessage({
@@ -414,7 +418,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       leadFlowDecision.source === "new_lead_command" &&
       !isBareTelegramNewLeadCommand(message.text);
 
-    if (leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command" && !forceCreateLeadFromCommand) {
+    if (!isLangGraphPrimaryRuntime && leadFlowDecision.kind === "start_draft" && leadFlowDecision.source === "new_lead_command" && !forceCreateLeadFromCommand) {
       telegramSearchModeMemory.delete(createTelegramSearchModeKey(config.workspaceId, message.chatId));
       await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
       const session = createTelegramLeadDraftSession({
@@ -435,7 +439,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (isTelegramStartRequest(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramStartRequest(message)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -447,7 +451,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (isTelegramSearchModeActive(config.workspaceId, message.chatId) && !isExplicitTelegramHelpCommand(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramSearchModeActive(config.workspaceId, message.chatId) && !isExplicitTelegramHelpCommand(message)) {
       const searchFilterResponse = await createTelegramSearchFilterResponse(config, client, message);
       if (searchFilterResponse) {
         await sendWorkerTelegramMessage({
@@ -463,7 +467,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }
     }
 
-    if (isTelegramHelpRequest(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramHelpRequest(message)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -475,7 +479,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (isTelegramSearchCapabilityQuestion(message)) {
+    if (!isLangGraphPrimaryRuntime && isTelegramSearchCapabilityQuestion(message)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -499,10 +503,13 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       })
     );
     const explicitLeadReferenceResolution = await resolveLeadByTelegramExplicitReference(client, config.workspaceId, message.text);
-    const repliedLead =
+    const selectedLeadId = isLangGraphPrimaryRuntime ? getTelegramSelectedLead(config.workspaceId, message.chatId) : null;
+    const selectedLead = selectedLeadId ? await findLeadByLeadId(client, config.workspaceId, selectedLeadId) : null;
+    let repliedLead =
       (message.replyToMessageId ? await findLeadByTelegramReplyContext(client, config.workspaceId, message) : null) ??
       (explicitLeadReferenceResolution.kind === "single" ? explicitLeadReferenceResolution.lead : null) ??
-      (await findLeadByTelegramTextContext(client, config.workspaceId, message.text));
+      (await findLeadByTelegramTextContext(client, config.workspaceId, message.text)) ??
+      selectedLead;
     const replyLeadFlowDecision = repliedLead
       ? decideLeadFlow(
           createTelegramAssistantChannelMessage(config.workspaceId, message, {
@@ -512,7 +519,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         )
       : null;
 
-    if (config.telegramRuntime === "langgraph") {
+    if (config.telegramRuntime === "langgraph" || config.telegramRuntime === "langgraph_primary") {
       langGraphResultForMessage = await runCrmLangGraphOrchestrator({
         workspaceId: config.workspaceId,
         channel: "telegram",
@@ -520,7 +527,11 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         messageId: String(message.messageId),
         text: message.text,
         receivedAt: message.receivedAt,
+        activeMode: isTelegramSearchModeActive(config.workspaceId, message.chatId) ? "search" : null,
         replyToLeadId: repliedLead?.leadId ?? null,
+        selectedLeadId,
+        crmOrchestrator: isLangGraphPrimaryRuntime ? config.crmOrchestrator : undefined,
+        requireModelDecision: isLangGraphPrimaryRuntime,
         attachments: message.attachments?.map((attachment) => ({
           id: attachment.fileId,
           kind: toLangGraphAttachmentKind(attachment.kind),
@@ -542,12 +553,38 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       }
     }
 
+    if (isLangGraphPrimaryRuntime && langGraphResultForMessage?.action.type === "create_lead") {
+      repliedLead = null;
+    }
+
+    if (langGraphResultForMessage?.action.type === "start_new_lead_session") {
+      telegramSearchModeMemory.delete(createTelegramSearchModeKey(config.workspaceId, message.chatId));
+      clearTelegramSelectedLead(config.workspaceId, message.chatId);
+      await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
+      const session = createTelegramLeadDraftSession({
+        chatId: message.chatId,
+        workspaceId: config.workspaceId,
+        receivedAt: message.receivedAt,
+        sourceMessageIds: message.sourceMessageIds,
+        draft: createEmptyTelegramLeadDraft(message)
+      });
+      const sent = await sendWorkerTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramNewLeadStartedMessage(session),
+        fetchImpl
+      });
+      await telegramDraftStore.save({ ...session, telegramDraftMessageId: sent.messageId });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     if (langGraphResultForMessage?.action.type === "search_leads") {
-      const searchFilterResponse = await createTelegramLeadSearchResponse(
-        config,
-        client,
-        langGraphResultForMessage.action.query ?? `show last ${TELEGRAM_SEARCH_MODE_PAGE_SIZE} leads`
-      );
+      const searchFilterResponse = langGraphResultForMessage.action.query
+        ? await createTelegramLeadSearchResponse(config, client, langGraphResultForMessage.action.query)
+        : await createTelegramSearchModeStartedResponse(config, client);
+      telegramSearchModeMemory.add(createTelegramSearchModeKey(config.workspaceId, message.chatId));
+      clearTelegramSelectedLead(config.workspaceId, message.chatId);
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
         chatId: message.chatId,
@@ -579,9 +616,14 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    const langGraphExistingLeadAction = langGraphResultForMessage?.action;
+    const isLangGraphReminderAction = langGraphExistingLeadAction?.type === "create_reminder";
+    const isLangGraphContextNoteAction = langGraphExistingLeadAction?.type === "add_context_note";
+
     if (
       repliedLead &&
       message.replyToMessageId === undefined &&
+      !isLangGraphPrimaryRuntime &&
       (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text) || isLeadNaturalContextNote(message.text))
     ) {
       await sendWorkerTelegramMessage({
@@ -596,9 +638,15 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    if (repliedLead && message.replyToMessageId !== undefined && (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text) || isLeadNaturalContextNote(message.text))) {
-      const isExplicitNote = isLeadInteractionNoteCommand(message.text);
-      const isReminder = !isExplicitNote && isReminderRequest(message.text);
+    if (
+      repliedLead &&
+      ((message.replyToMessageId !== undefined &&
+        (isLeadInteractionNoteCommand(message.text) || isReminderRequest(message.text) || isLeadNaturalContextNote(message.text))) ||
+        isLangGraphReminderAction ||
+        isLangGraphContextNoteAction)
+    ) {
+      const isExplicitNote = isLangGraphContextNoteAction || isLeadInteractionNoteCommand(message.text);
+      const isReminder = isLangGraphReminderAction || (!isExplicitNote && isReminderRequest(message.text));
       const summary = isExplicitNote
         ? createLeadInteractionNoteSummary(message.text)
         : isReminder
@@ -804,6 +852,33 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    const preloadedReplySession = message.replyToMessageId
+      ? await telegramDraftStore.getByTelegramMessage?.({
+          workspaceId: config.workspaceId,
+          chatId: message.chatId,
+          messageId: message.replyToMessageId
+        })
+      : null;
+    const preloadedActiveSession = preloadedReplySession ?? (await telegramDraftStore.getActive({ workspaceId: config.workspaceId, chatId: message.chatId }));
+
+    if (
+      !repliedLead &&
+      !preloadedActiveSession &&
+      !forceCreateLeadFromCommand &&
+      !isNewLeadCommand(message.text) &&
+      shouldBlockStandaloneFieldCommandWithoutLeadContext(message.text)
+    ) {
+      await sendWorkerTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramFieldCommandNeedsLeadContextMessage(),
+        parseMode: "HTML",
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
     processingAcknowledgementSent = await sendTelegramProcessingAcknowledgement({
       botToken: config.botToken,
       chatId: message.chatId,
@@ -983,14 +1058,8 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
-    const replySession = message.replyToMessageId
-      ? await telegramDraftStore.getByTelegramMessage?.({
-          workspaceId: config.workspaceId,
-          chatId: message.chatId,
-          messageId: message.replyToMessageId
-        })
-      : null;
-    let activeSession = replySession ?? (await telegramDraftStore.getActive({ workspaceId: config.workspaceId, chatId: message.chatId }));
+    const replySession = preloadedReplySession;
+    let activeSession = replySession ?? preloadedActiveSession;
 
     if (forceCreateLeadFromCommand && activeSession) {
       await telegramDraftStore.clear({ workspaceId: config.workspaceId, chatId: message.chatId });
@@ -1284,6 +1353,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         });
       }
       await telegramDraftStore.save({ ...session, leadId: created.leadId, telegramDraftMessageId: sent.messageId ?? session.telegramDraftMessageId });
+      setTelegramSelectedLead(config.workspaceId, message.chatId, created.leadId);
       processed += 1;
       continue;
     }
@@ -1425,6 +1495,7 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         }
       });
     }
+    setTelegramSelectedLead(config.workspaceId, message.chatId, created.leadId);
     processed += 1;
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
@@ -1749,6 +1820,10 @@ async function processTelegramLeadOpenCallback(input: {
     fetchImpl: input.fetchImpl
   });
   await saveTelegramLeadCardReplyContext(input.config, input.client, input.callback.chatId, lead, sent.messageId);
+  if (lead) {
+    telegramSearchModeMemory.delete(createTelegramSearchModeKey(input.config.workspaceId, input.callback.chatId));
+    setTelegramSelectedLead(input.config.workspaceId, input.callback.chatId, lead.leadId);
+  }
 }
 
 async function processTelegramSearchNextCallback(input: {
@@ -2296,6 +2371,33 @@ function createTelegramLeadParseFailureMessage(): string {
   ].join("\n");
 }
 
+function createTelegramFieldCommandNeedsLeadContextMessage(): string {
+  return [
+    "I see a field update, but I do not know which lead to update.",
+    "Use <b>search lead</b>, open the right lead card in Telegram, then reply to that card.",
+    "If this is a separate client, use <b>new lead</b> first."
+  ].join("\n");
+}
+
+function shouldBlockStandaloneFieldCommandWithoutLeadContext(text: string): boolean {
+  const command = detectLeadFieldCommand(text);
+  if (!command) {
+    return false;
+  }
+
+  const trimmed = text.trim();
+  if (trimmed.length > 90 || /[,;\n]/.test(trimmed)) {
+    return false;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  const multipleFieldSignals =
+    /\b(project address|site address|request type|project type|bgf|budget|phone|email|e-mail)\b/i.test(normalized) ||
+    /(адрес|проект|запрос|бгф|бюджет|телефон|почта|email|ватсап|whatsapp)/iu.test(normalized);
+
+  return !multipleFieldSignals || command.field === "clientName";
+}
+
 function createTelegramLimitedActionsText(leadId?: string): string {
   return [
     leadId ? `Lead <b>${escapeHtml(leadId)}</b> found.` : "Telegram actions are limited right now.",
@@ -2340,6 +2442,7 @@ function createTelegramLangGraphReplyMarkup(result: CrmLangGraphResult, crmBaseU
 
 function shouldExecuteTelegramLangGraphActionWithExistingTools(result: CrmLangGraphResult): boolean {
   return (
+    result.action.type === "start_new_lead_session" ||
     result.action.type === "create_lead" ||
     result.action.type === "update_lead" ||
     result.action.type === "create_reminder" ||
@@ -2566,6 +2669,22 @@ function createTelegramSearchModeKey(workspaceId: string, chatId: string): strin
 
 function isTelegramSearchModeActive(workspaceId: string, chatId: string): boolean {
   return telegramSearchModeMemory.has(createTelegramSearchModeKey(workspaceId, chatId));
+}
+
+function createTelegramSelectedLeadKey(workspaceId: string, chatId: string): string {
+  return `${workspaceId}:${chatId}`;
+}
+
+function getTelegramSelectedLead(workspaceId: string, chatId: string): string | null {
+  return telegramSelectedLeadMemory.get(createTelegramSelectedLeadKey(workspaceId, chatId)) ?? null;
+}
+
+function setTelegramSelectedLead(workspaceId: string, chatId: string, leadId: string): void {
+  telegramSelectedLeadMemory.set(createTelegramSelectedLeadKey(workspaceId, chatId), leadId);
+}
+
+function clearTelegramSelectedLead(workspaceId: string, chatId: string): void {
+  telegramSelectedLeadMemory.delete(createTelegramSelectedLeadKey(workspaceId, chatId));
 }
 
 function isTelegramSearchCapabilityQuestion(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {

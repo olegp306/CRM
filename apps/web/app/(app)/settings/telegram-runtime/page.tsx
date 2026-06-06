@@ -36,6 +36,15 @@ export default async function TelegramRuntimeSettingsPage() {
               </span>
             </span>
           </label>
+          <label className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+            <input type="radio" name="runtime" value="langgraph_primary" defaultChecked={config.runtime === "langgraph_primary"} className="mt-1" />
+            <span>
+              <span className="block font-semibold text-amber-950">LangGraph primary test</span>
+              <span className="block text-amber-900">
+                Test-bot mode: route natural Telegram messages through LangGraph first, then execute existing CRM tools.
+              </span>
+            </span>
+          </label>
         </fieldset>
 
         <label className="grid gap-1 text-sm">
@@ -50,8 +59,8 @@ export default async function TelegramRuntimeSettingsPage() {
         </label>
 
         <div className="rounded-lg border border-border bg-muted p-3 text-xs leading-5 text-muted-foreground">
-          Current runtime: <span className="font-semibold text-foreground">{config.runtime}</span>. Keep production on Legacy until
-          LangGraph has been tested with the separate test Telegram bot and test database.
+          Current runtime: <span className="font-semibold text-foreground">{config.runtime}</span>. Keep production away from
+          LangGraph primary until it is verified with the separate test Telegram bot and test database.
         </div>
 
         <button type="submit" className="w-fit rounded-md bg-foreground px-4 py-2 text-sm font-semibold text-white">

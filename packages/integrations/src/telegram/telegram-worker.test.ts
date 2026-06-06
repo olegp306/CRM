@@ -1454,6 +1454,231 @@ describe("telegram worker", () => {
     });
   });
 
+  it("uses LangGraph primary to enter search mode and then search a plain next message", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-10",
+            leadId: "L-2026-010",
+            displayName: "Максим Тютюник - Architekturprojekt LP 1-9",
+            createdDate: new Date("2026-06-02T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "Architekturprojekt LP 1-9",
+            projectAddress: "Schweiz",
+            client: { name: "Максим Тютюник" },
+            rawInput: "telegram"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SEARCH_LEAD" as const,
+        reasoning: "The user is searching leads.",
+        action: "Lead Search Agent" as const,
+        status: "ready" as const,
+        message: "Searching leads."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo-langgraph-primary-search",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      crmOrchestrator,
+      telegramRuntime: "langgraph_primary" as const,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 247,
+          message: {
+            message_id: 147,
+            date: 1779296520,
+            chat: { id: 12345 },
+            text: "/searchlead"
+          }
+        }
+      ],
+      config
+    );
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 248,
+          message: {
+            message_id: 148,
+            date: 1779296580,
+            chat: { id: 12345 },
+            text: "Максим Тютюник"
+          }
+        }
+      ],
+      config
+    );
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("search mode <b>latest 6 leads</b>");
+    expect(sendBodies[1].text).toContain("Found 1 leads");
+    expect(sendBodies[1].text).toContain("L-2026-010 · <b>Максим Тютюник</b>");
+  });
+
+  it("uses the CRM orchestrator inside LangGraph primary to search from natural language without commands", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => [
+          {
+            id: "lead-record-10",
+            leadId: "L-2026-010",
+            displayName: "Максим Тютюник - Architekturprojekt LP 1-9",
+            createdDate: new Date("2026-06-02T10:00:00.000Z"),
+            status: "new",
+            temperature: "warm",
+            requestType: "Architekturprojekt LP 1-9",
+            projectAddress: "Schweiz",
+            client: { name: "Максим Тютюник" },
+            rawInput: "telegram"
+          }
+        ]),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SEARCH_LEAD" as const,
+        reasoning: "The user is searching by a client/project name.",
+        action: "Lead Search Agent" as const,
+        status: "ready" as const,
+        message: "Searching leads."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 849,
+            message: {
+              message_id: 849,
+              date: 1779296580,
+              chat: { id: 12345 },
+              text: "найди Максим Тютюник"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo-langgraph-primary-natural-search",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          crmOrchestrator,
+          telegramRuntime: "langgraph_primary" as const,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toMatchObject({ processed: 0, ignored: 1, lastUpdateId: 849 });
+
+    expect(crmOrchestrator.route).toHaveBeenCalled();
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("Found 1 leads");
+    expect(sendBodies[0].text).toContain("L-2026-010 · <b>Максим Тютюник</b>");
+  });
+
+  it("uses LangGraph primary for identity/help questions instead of the legacy help shortcut", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "SUPPORT_REQUEST" as const,
+        reasoning: "The user asks what the Telegram assistant can do.",
+        action: "Support Agent" as const,
+        status: "ready" as const,
+        message: "I can create leads, search leads, update selected leads, and add reminders in this CRM."
+      }))
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 850,
+          message: {
+            message_id: 850,
+            date: 1779296580,
+            chat: { id: 12345 },
+            text: "Кто ты и что умеешь?"
+          }
+        }
+      ],
+      {
+        allowedChatIds: new Set(["12345"]),
+        botToken: "telegram-token",
+        workspaceId: "workspace-demo-langgraph-primary-help",
+        crmBaseUrl: "https://crm.example.com",
+        parser,
+        prisma: client,
+        crmOrchestrator,
+        telegramRuntime: "langgraph_primary" as const,
+        fetchImpl: fetchMock as unknown as typeof fetch
+      }
+    );
+
+    expect(crmOrchestrator.route).toHaveBeenCalled();
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    const sendBodies = (fetchMock.mock.calls as unknown as Array<[string, { body?: unknown }]>)
+      .filter(([url]) => String(url).includes("/sendMessage"))
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(sendBodies[0].text).toContain("I can create leads, search leads");
+  });
+
   it("asks for at least two characters for free-text Telegram search mode queries", async () => {
     const client = {
       lead: {
@@ -1925,6 +2150,161 @@ describe("telegram worker", () => {
       .map(([, init]) => JSON.parse(String(init.body)));
     expect(sendBodies.at(-1).text).toContain("<b>L-2026-010</b> updated in CRM.");
     expect(sendBodies.at(-1).text).not.toContain("Server error occurred");
+  });
+
+  it("uses LangGraph primary selected lead context to update after opening a search result without reply", async () => {
+    let rawInput = "telegram";
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { leadId?: string; rawInput?: { contains?: string } } }).where;
+          if (where?.leadId === "L-2026-010" || where?.rawInput?.contains || !where?.leadId) {
+            return [
+              {
+                id: "lead-record-1",
+                leadId: "L-2026-010",
+                displayName: "Frau Schneider - Neubau EFH am Chiemsee",
+                searchTags: ["schneider", "chiemsee"],
+                createdDate: new Date("2026-06-02T10:00:00.000Z"),
+                status: "needs_data",
+                temperature: "warm",
+                requestType: "Neubau EFH",
+                projectAddress: "Bad Aibling",
+                bgfM2: 195,
+                missingData: ["phone"],
+                client: { name: "Frau Schneider", email: "frau.schneider@example.com", phone: null },
+                rawInput
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-1", leadId: "L-2026-010", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "",
+        requestType: "",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: undefined,
+        bgfM2: undefined,
+        email: null,
+        phone: "+49 160 111222",
+        missingData: [],
+        summary: "Phone update",
+        suggestedReply: "Updated."
+      }))
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async (message: { content: string }) =>
+        message.content.includes("phone")
+          ? {
+              intent: "UPDATE_LEAD" as const,
+              reasoning: "The user wants to update the selected lead.",
+              action: "Lead Update Agent" as const,
+              status: "ready" as const,
+              message: "Updating the selected lead."
+            }
+          : {
+              intent: "SEARCH_LEAD" as const,
+              reasoning: "The user is opening lead search.",
+              action: "Lead Search Agent" as const,
+              status: "ready" as const,
+              message: "Searching leads."
+            }
+      )
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/answerCallbackQuery")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 902 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const config = {
+      allowedChatIds: new Set(["12345"]),
+      botToken: "telegram-token",
+      workspaceId: "workspace-demo-langgraph-primary-selected-lead",
+      crmBaseUrl: "https://crm.example.com",
+      parser,
+      prisma: client,
+      crmOrchestrator,
+      telegramRuntime: "langgraph_primary" as const,
+      fetchImpl: fetchMock as unknown as typeof fetch
+    };
+
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 841,
+          message: {
+            message_id: 841,
+            date: 1779296520,
+            chat: { id: 12345 },
+            text: "/searchlead"
+          }
+        }
+      ],
+      config
+    );
+    await processTelegramUpdates(
+      [
+        {
+          update_id: 842,
+          callback_query: {
+            id: "callback-open-lead-primary",
+            data: "lead_open:L-2026-010",
+            message: {
+              message_id: 842,
+              date: 1779296580,
+              chat: { id: 12345 }
+            }
+          }
+        }
+      ],
+      config
+    );
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 843,
+            message: {
+              message_id: 843,
+              date: 1779296640,
+              chat: { id: 12345 },
+              text: "phone +49 160 111222"
+            }
+          }
+        ],
+        config
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 843 });
+
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(parser.parseLead).toHaveBeenCalledWith(expect.objectContaining({ text: "phone +49 160 111222" }));
+    expect(updates).toContainEqual(
+      expect.objectContaining({
+        where: { id: "lead-record-1" },
+        data: expect.objectContaining({
+          rawInput: expect.stringContaining("phone +49 160 111222"),
+          status: "new"
+        })
+      })
+    );
   });
 
   it("uses the CRM orchestrator fallback for ambiguous Telegram search requests", async () => {
@@ -3261,6 +3641,72 @@ describe("telegram worker", () => {
     expect(JSON.parse(String(sendCall[1]?.body)).text).toBe("открыта сессия создания нового лида.");
   });
 
+  it("uses LangGraph primary to start an empty lead draft from the new lead command", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(),
+        create: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const crmOrchestrator = {
+      route: vi.fn(async () => ({
+        intent: "START_NEW_LEAD_SESSION" as const,
+        reasoning: "The user wants to start a new lead session without source material yet.",
+        action: "New Lead Session Agent" as const,
+        status: "ready" as const,
+        message: "Starting a new lead session."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 912 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 122,
+            message: {
+              message_id: 72,
+              date: 1779296500,
+              chat: { id: 12345 },
+              text: "/newlead"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo-langgraph-primary-newlead",
+          parser,
+          prisma: client,
+          crmOrchestrator,
+          telegramDraftStore,
+          telegramRuntime: "langgraph_primary",
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 122 });
+
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo-langgraph-primary-newlead", chatId: "12345" })).resolves.toMatchObject({
+      draft: {
+        missingData: ["clientName", "requestType", "projectAddress"]
+      }
+    });
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls[0] as unknown as [string, { body?: unknown }];
+    expect(JSON.parse(String(sendCall[1]?.body)).text).toBe("открыта сессия создания нового лида.");
+  });
+
   it("does not start a lead draft from the incomplete /new command", async () => {
     const client = {
       lead: {
@@ -3536,6 +3982,139 @@ describe("telegram worker", () => {
     expect(updates).toEqual([
       {
         where: { id: "lead-record-3" },
+        data: { rawInput: expect.stringContaining("Telegram lead card: telegram-bot:12345:1900") }
+      }
+    ]);
+    await expect(telegramDraftStore.getActive({ workspaceId: "workspace-demo", chatId: "12345" })).resolves.toBeNull();
+  });
+
+  it("creates a fresh lead from natural another-new-lead wording even when the previous lead has the same client", async () => {
+    const created: unknown[] = [];
+    const updates: unknown[] = [];
+    const client = {
+      lead: {
+        findMany: vi.fn(async (args: unknown) => {
+          const where = (args as { where?: { OR?: unknown[]; workspaceId?: string } }).where;
+          if (where?.OR) {
+            return [];
+          }
+
+          if (where?.workspaceId) {
+            return [
+              {
+                id: "lead-record-10",
+                leadId: "L-2026-010",
+                status: "new",
+                rawInput: "Old Maxim lead",
+                displayName: "Максим Тютюник - LP 1-9",
+                requestType: "Architekturprojekt LP 1-9",
+                projectAddress: "Deutschland",
+                bgfM2: 3609,
+                missingData: [],
+                client: { name: "Максим Тютюник", email: null, phone: null }
+              }
+            ];
+          }
+
+          return [];
+        }),
+        create: vi.fn(async (args: unknown) => {
+          created.push(args);
+          return { id: "lead-record-11", leadId: "L-2026-011", status: "new" };
+        }),
+        update: vi.fn(async (args: unknown) => {
+          updates.push(args);
+          return { id: "lead-record-11", leadId: "L-2026-011", status: "new" };
+        })
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn(async () => ({
+        clientName: "Максим Тютюник",
+        requestType: "Частный дом",
+        urgency: "medium" as const,
+        temperature: "warm" as const,
+        projectAddress: "Швейцария",
+        bgfM2: 240,
+        email: null,
+        phone: null,
+        missingData: [],
+        summary: "Another new Maxim lead in Switzerland.",
+        suggestedReply: "Created."
+      }))
+    };
+    const telegramDraftStore = createMemoryTelegramLeadDraftSessionStore();
+    await telegramDraftStore.save({
+      chatId: "12345",
+      workspaceId: "workspace-demo",
+      startedAt: "2026-06-04T11:50:52.000Z",
+      updatedAt: "2026-06-04T11:50:52.000Z",
+      sourceMessageIds: [1857],
+      telegramDraftMessageId: 1858,
+      leadId: "L-2026-010",
+      draft: {
+        source: "telegram",
+        clientName: "Максим Тютюник",
+        requestType: "Architekturprojekt LP 1-9",
+        projectAddress: "Deutschland",
+        bgfM2: 3609,
+        email: null,
+        phone: null,
+        rawInput: "Old Maxim lead",
+        missingData: [],
+        telegramSourceExternalId: "telegram:12345:1857",
+        temperature: "warm",
+        isStandard: false
+      }
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 1900 } }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 229,
+            message: {
+              message_id: 1860,
+              date: 1779297000,
+              chat: { id: 12345 },
+              text: "Ещё новый лид: снова Максим Тютюник, Швейцария, частный дом, BGF 240"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          crmBaseUrl: "https://crm.example.com",
+          parser,
+          prisma: client,
+          telegramDraftStore,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 1, ignored: 0, lastUpdateId: 229 });
+
+    expect(created).toHaveLength(1);
+    expect(created[0]).toEqual({
+      data: expect.objectContaining({
+        leadId: "L-2026-011",
+        rawInput: expect.stringContaining("Ещё новый лид"),
+        displayName: expect.stringContaining("Максим Тютюник"),
+        projectAddress: "Швейцария",
+        bgfM2: 240,
+        searchTags: expect.arrayContaining(["максим_тютюник"])
+      })
+    });
+    expect(updates).toEqual([
+      {
+        where: { id: "lead-record-11" },
         data: { rawInput: expect.stringContaining("Telegram lead card: telegram-bot:12345:1900") }
       }
     ]);
@@ -5740,6 +6319,58 @@ describe("telegram worker", () => {
       text: "Undo",
       callback_data: "lead_undo:L-2026-003:952"
     });
+  });
+
+  it("asks for lead context instead of creating a junk lead from a standalone field update", async () => {
+    const client = {
+      lead: {
+        findMany: vi.fn(async () => []),
+        create: vi.fn(),
+        update: vi.fn()
+      }
+    };
+    const parser: OpenAiLeadParserClient = {
+      parseLead: vi.fn()
+    };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/sendMessage")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    await expect(
+      processTelegramUpdates(
+        [
+          {
+            update_id: 230,
+            message: {
+              message_id: 1861,
+              date: 1779297000,
+              chat: { id: 12345 },
+              text: "Имя клиента - Максим Тютюник"
+            }
+          }
+        ],
+        {
+          allowedChatIds: new Set(["12345"]),
+          botToken: "telegram-token",
+          workspaceId: "workspace-demo",
+          parser,
+          prisma: client,
+          fetchImpl: fetchMock as unknown as typeof fetch
+        }
+      )
+    ).resolves.toEqual({ processed: 0, ignored: 1, lastUpdateId: 230 });
+
+    expect(parser.parseLead).not.toHaveBeenCalled();
+    expect(client.lead.create).not.toHaveBeenCalled();
+    expect(client.lead.update).not.toHaveBeenCalled();
+    const sendCall = fetchMock.mock.calls.at(-1) as unknown as [string, { body?: unknown }];
+    const sendBody = JSON.parse(String(sendCall[1].body));
+    expect(sendBody.text).toContain("I see a field update");
+    expect(sendBody.text).toContain("search lead");
   });
 
   it("does not show unknown placeholder values in Telegram lead update cards", async () => {

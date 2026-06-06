@@ -163,6 +163,35 @@ describe("lead search/filter agent", () => {
     expect(filterLeadSearchRecords([...records, russianLead], request)).toEqual([russianLead]);
   });
 
+  it("ranks primary lead identity matches above newer raw-input-only matches", () => {
+    const matchingLead: LeadSearchRecord = {
+      id: "lead-10",
+      leadId: "L-2026-010",
+      createdDate: "2026-06-01T10:00:00.000Z",
+      status: "new",
+      displayName: "Максим Тютюник - Architekturprojekt LP 1-9",
+      clientName: "Максим Тютюник",
+      requestType: "Architekturprojekt LP 1-9",
+      projectAddress: "Schweiz"
+    };
+    const noisyNewerLead: LeadSearchRecord = {
+      id: "lead-13",
+      leadId: "L-2026-013",
+      createdDate: "2026-06-05T10:00:00.000Z",
+      status: "new",
+      displayName: "Konz bei Trier - LP 1-9",
+      clientName: "Other client",
+      requestType: "LP 1-9",
+      projectAddress: "Konz bei Trier",
+      rawInput: "Forwarded context mentioned Максим Тютюник in an unrelated previous message."
+    };
+    const request = parseLeadSearchFilterRequest("search Максим Тютюник", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(filterLeadSearchRecords([noisyNewerLead, matchingLead], request)).toEqual([matchingLead]);
+  });
+
   it("parses latest lead list requests with a result limit", () => {
     const request = parseLeadSearchFilterRequest("Покажи последние 10 лидов", {
       now: new Date("2026-06-10T12:00:00.000Z")

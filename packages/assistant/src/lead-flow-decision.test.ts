@@ -45,6 +45,14 @@ describe("lead flow decision", () => {
         })
       ).toEqual({ kind: "start_draft", source: "new_lead_command" });
     }
+
+    expect(
+      decideLeadFlow({
+        ...baseMessage,
+        channel: "telegram",
+        content: "Ещё новый лид: снова Максим, Швейцария, частный дом"
+      })
+    ).toEqual({ kind: "start_draft", source: "new_lead_command" });
   });
 
   it("updates a selected web lead when source material is attached", () => {

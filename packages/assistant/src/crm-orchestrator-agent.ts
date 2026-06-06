@@ -2,6 +2,7 @@ import type { AssistantChannelMessage } from "./channel-message";
 import { isReminderRequest } from "./lead-reminder";
 
 export type CrmOrchestratorIntent =
+  | "START_NEW_LEAD_SESSION"
   | "CREATE_LEAD"
   | "UPDATE_LEAD"
   | "SEARCH_LEAD"
@@ -14,7 +15,7 @@ export type CrmOrchestratorStatus = "ready" | "need_clarification";
 export type CrmOrchestratorDecision = {
   intent: CrmOrchestratorIntent;
   reasoning: string;
-  action: "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "Support Agent" | "clarification";
+  action: "New Lead Session Agent" | "Lead Creation Agent" | "Lead Update Agent" | "Lead Search Agent" | "Reminder Agent" | "Support Agent" | "clarification";
   status: CrmOrchestratorStatus;
   message: string;
 };
@@ -37,18 +38,24 @@ You do not work with CRM records directly.
 You never create, update, delete, or search CRM data by yourself.
 You only classify the request, check whether required data is present, and prepare a clear handoff to the next layer.
 
-## Telegram Command Areas
+## Telegram Natural-Language Areas
 
-Telegram lead work has only two explicit entry commands:
+Telegram users can work in natural language. Commands are optional shortcuts, not required.
 
-- \`new lead\` - start creating a new lead.
-- \`search lead\` - enter lead search mode.
+Understand phrases such as:
+
+- "new lead", "new record", "new client", "create a new lead", "новый лид", "новая заявка", "создай нового лида" as starting or creating lead work.
+- "search lead", "find client", "show recent leads", "найди лида", "покажи последние заявки" as lead search.
+- Replies or selected-lead context with changes, files, voice messages, notes, reminders, or field updates as work on that lead.
+
+Use \`START_NEW_LEAD_SESSION\` when the user only asks to begin a new lead/new record flow but does not provide enough source material yet.
+Use \`CREATE_LEAD\` when the message contains actual new lead source material that can be parsed into a lead draft.
 
 Updates, reminders, notes, and extra source materials in Telegram must be tied to an existing lead card by replying to that lead card.
 
 If a Telegram user asks to update a lead, add a note, add a reminder, attach extra source material, or change lead data without replying to a lead card, route to Search Lead or Clarification Required so the user first finds/opens the lead card.
 
-The Telegram bot menu may send \`/newlead\` or \`/searchlead\` because Telegram command payloads cannot contain spaces. Treat those as the same as \`new lead\` and \`search lead\`.
+The Telegram bot menu may send \`/newlead\` or \`/searchlead\` because Telegram command payloads cannot contain spaces. Treat those as optional shortcuts for \`new lead\` and \`search lead\`, not as the only way to work.
 Do not treat unrelated aliases such as \`/new_lead\`, \`/lead\`, \`/search\`, \`/exit\`, \`/done\`, or \`/stop\` as valid command areas.
 
 ## Internal Actors And Testers

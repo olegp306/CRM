@@ -110,7 +110,7 @@ export const TELEGRAM_RUNTIME_DEFAULT_PROMPT = JSON.stringify(
   2
 );
 
-export type TelegramRuntimeMode = "legacy" | "langgraph";
+export type TelegramRuntimeMode = "legacy" | "langgraph" | "langgraph_primary";
 
 export type TelegramRuntimeConfig = {
   runtime: TelegramRuntimeMode;
@@ -514,6 +514,10 @@ export function parseTelegramRuntimeConfig(prompt: string | null | undefined): T
 
   try {
     const parsed = JSON.parse(prompt) as Partial<TelegramRuntimeConfig>;
+    if (parsed.runtime === "langgraph_primary") {
+      return { runtime: "langgraph_primary" };
+    }
+
     return parsed.runtime === "langgraph" ? { runtime: "langgraph" } : { runtime: "legacy" };
   } catch {
     return { runtime: "legacy" };

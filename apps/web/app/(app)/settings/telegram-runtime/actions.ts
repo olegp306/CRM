@@ -6,7 +6,7 @@ import { getWorkspaceSession } from "../../../workspace-session";
 import { TELEGRAM_RUNTIME_MODEL_OPTIONS, saveTelegramRuntimeSetting } from "../ai-intake/ai-intake-store";
 
 const allowedModels = new Set(TELEGRAM_RUNTIME_MODEL_OPTIONS.map((option) => option.id));
-const allowedRuntimes = new Set(["legacy", "langgraph"]);
+const allowedRuntimes = new Set(["legacy", "langgraph", "langgraph_primary"]);
 
 export async function updateTelegramRuntimeSettingsAction(formData: FormData): Promise<void> {
   const session = await getWorkspaceSession();
@@ -24,7 +24,9 @@ export async function updateTelegramRuntimeSettingsAction(formData: FormData): P
   await saveTelegramRuntimeSetting({
     workspaceId: session.workspaceId,
     model,
-    prompt: createTelegramRuntimePrompt({ runtime: runtime === "langgraph" ? "langgraph" : "legacy" })
+    prompt: createTelegramRuntimePrompt({
+      runtime: runtime === "langgraph_primary" ? "langgraph_primary" : runtime === "langgraph" ? "langgraph" : "legacy"
+    })
   });
 
   revalidatePath("/settings/telegram-runtime");

@@ -1,7 +1,10 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import type { AssistantChannelMessage } from "./channel-message";
 import { type LeadFieldCommand, detectLeadFieldCommand } from "./lead-field-command";
 import { isLeadInteractionNoteCommand, isLeadNaturalContextNote } from "./lead-interaction-note";
 import { createLeadReminderDraft, isReminderRequest } from "./lead-reminder";
+import type { CrmOrchestratorDecision } from "./crm-orchestrator-agent";
+import type { CrmOrchestratorClient } from "./openai-crm-orchestrator";
 
 export type CrmLangGraphMessageInput = {
   workspaceId: string;
@@ -10,8 +13,11 @@ export type CrmLangGraphMessageInput = {
   messageId?: string;
   text: string;
   receivedAt?: string;
+  activeMode?: "search" | "new_lead" | null;
   replyToLeadId?: string | null;
   selectedLeadId?: string | null;
+  crmOrchestrator?: CrmOrchestratorClient;
+  requireModelDecision?: boolean;
   attachments?: Array<{
     id?: string;
     kind: "image" | "pdf" | "audio" | "document" | "unknown";
@@ -21,6 +27,10 @@ export type CrmLangGraphMessageInput = {
 };
 
 export type CrmLangGraphAction =
+  | {
+      type: "start_new_lead_session";
+      reason: string;
+    }
   | {
       type: "create_lead";
       reason: string;
@@ -76,11 +86,14 @@ export type CrmLangGraphResult = {
   responseText: string;
 };
 
+type CrmLangGraphAttachment = NonNullable<CrmLangGraphMessageInput["attachments"]>[number];
 type CrmLangGraphRoute = CrmLangGraphAction["type"];
 
 const GraphState = Annotation.Root({
   input: Annotation<CrmLangGraphMessageInput>(),
   route: Annotation<CrmLangGraphRoute>(),
+  clarificationQuestion: Annotation<string | null>(),
+  noActionMessage: Annotation<string | null>(),
   result: Annotation<CrmLangGraphResult>()
 });
 
@@ -93,6 +106,7 @@ export async function runCrmLangGraphOrchestrator(input: CrmLangGraphMessageInpu
 export function createCrmLangGraphOrchestrator() {
   return new StateGraph(GraphState)
     .addNode("classify", classifyNode)
+    .addNode("startNewLeadSession", startNewLeadSessionNode)
     .addNode("createLead", createLeadNode)
     .addNode("attachMaterialToLead", attachMaterialToLeadNode)
     .addNode("updateLead", updateLeadNode)
@@ -103,6 +117,7 @@ export function createCrmLangGraphOrchestrator() {
     .addNode("noAction", noActionNode)
     .addEdge(START, "classify")
     .addConditionalEdges("classify", (state) => state.route, {
+      start_new_lead_session: "startNewLeadSession",
       create_lead: "createLead",
       attach_material_to_lead: "attachMaterialToLead",
       update_lead: "updateLead",
@@ -112,6 +127,7 @@ export function createCrmLangGraphOrchestrator() {
       clarify: "clarify",
       no_action: "noAction"
     })
+    .addEdge("startNewLeadSession", END)
     .addEdge("createLead", END)
     .addEdge("attachMaterialToLead", END)
     .addEdge("updateLead", END)
@@ -123,13 +139,47 @@ export function createCrmLangGraphOrchestrator() {
     .compile();
 }
 
-function classifyNode(state: typeof GraphState.State): Partial<typeof GraphState.State> {
+async function classifyNode(state: typeof GraphState.State): Promise<Partial<typeof GraphState.State>> {
   const input = state.input;
   const text = input.text.trim();
   const targetLeadId = input.replyToLeadId ?? input.selectedLeadId ?? null;
 
   if (!text && (input.attachments?.length ?? 0) === 0) {
     return { route: "no_action" };
+  }
+
+  if (input.crmOrchestrator) {
+    try {
+      const decision = await input.crmOrchestrator.route(createCrmLangGraphChannelMessage(input));
+      return routeCrmLangGraphDecision(input, decision);
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : error);
+      if (input.requireModelDecision) {
+        return {
+          route: "clarify",
+          clarificationQuestion: "I could not route this safely through the CRM orchestrator. Please try again in a moment."
+        };
+      }
+    }
+  }
+
+  if (input.requireModelDecision) {
+    return {
+      route: "clarify",
+      clarificationQuestion: "I need the CRM orchestrator to understand this message before I can change CRM data."
+    };
+  }
+
+  if (isBareNewLeadSessionRequest(text)) {
+    return { route: "start_new_lead_session" };
+  }
+
+  if (input.activeMode === "search" && !targetLeadId && !hasNewLeadSignal(text)) {
+    return { route: "search_leads" };
+  }
+
+  if (hasNewLeadSignal(text)) {
+    return { route: "create_lead" };
   }
 
   if (targetLeadId && isReminderRequest(text)) {
@@ -152,7 +202,7 @@ function classifyNode(state: typeof GraphState.State): Partial<typeof GraphState
     return { route: "attach_material_to_lead" };
   }
 
-  if (hasNewLeadSignal(text) || (input.attachments?.length ?? 0) > 0) {
+  if ((input.attachments?.length ?? 0) > 0) {
     return { route: "create_lead" };
   }
 
@@ -169,6 +219,129 @@ function classifyNode(state: typeof GraphState.State): Partial<typeof GraphState
   }
 
   return { route: "no_action" };
+}
+
+function startNewLeadSessionNode(): Partial<typeof GraphState.State> {
+  return {
+    result: {
+      runtime: "langgraph",
+      action: {
+        type: "start_new_lead_session",
+        reason: "The message explicitly asks to start a new lead but does not contain enough source material yet."
+      },
+      responseText: "LangGraph will start a new lead session and wait for source material."
+    }
+  };
+}
+
+function routeCrmLangGraphDecision(
+  input: CrmLangGraphMessageInput,
+  decision: CrmOrchestratorDecision
+): Partial<typeof GraphState.State> {
+  const targetLeadId = input.replyToLeadId ?? input.selectedLeadId ?? null;
+
+  if (decision.status === "need_clarification" || decision.intent === "CLARIFICATION_REQUIRED") {
+    return {
+      route: "clarify",
+      clarificationQuestion: decision.message
+    };
+  }
+
+  switch (decision.intent) {
+    case "START_NEW_LEAD_SESSION":
+      return { route: "start_new_lead_session" };
+    case "CREATE_LEAD":
+      return { route: "create_lead" };
+    case "SEARCH_LEAD":
+      return { route: "search_leads" };
+    case "UPDATE_LEAD":
+      return targetLeadId
+        ? { route: "update_lead" }
+        : {
+            route: "clarify",
+            clarificationQuestion: decision.message || "Which lead should I update?"
+          };
+    case "CREATE_REMINDER":
+      return targetLeadId
+        ? { route: "create_reminder" }
+        : {
+            route: "clarify",
+            clarificationQuestion: decision.message || "Which lead should I add this reminder to?"
+          };
+    case "SUPPORT_REQUEST":
+      return {
+        route: "no_action",
+        noActionMessage: decision.message
+      };
+  }
+}
+
+function createCrmLangGraphChannelMessage(input: CrmLangGraphMessageInput): AssistantChannelMessage {
+  const selectedRecordIds = [input.selectedLeadId].filter((value): value is string => Boolean(value));
+  const contextLines = [
+    input.activeMode ? `Active Telegram mode: ${input.activeMode}` : "",
+    input.replyToLeadId ? `Reply target lead: ${input.replyToLeadId}` : "",
+    input.selectedLeadId ? `Selected lead in this Telegram chat: ${input.selectedLeadId}` : ""
+  ].filter(Boolean);
+
+  return {
+    channel: input.channel,
+    threadId: input.chatId ? `${input.channel}-${input.chatId}` : `${input.channel}-thread`,
+    messageId: input.messageId ?? `${input.channel}-${Date.now()}`,
+    content: [...contextLines, "", input.text].filter((line) => line !== "").join("\n"),
+    receivedAt: input.receivedAt ?? new Date().toISOString(),
+    context: {
+      workspaceId: input.workspaceId,
+      userId: input.chatId ? `${input.channel}:${input.chatId}` : `${input.channel}:unknown`,
+      role: "admin",
+      route: `/${input.channel}`,
+      module: "assistant",
+      selectedRecordIds
+    },
+    attachments: (input.attachments ?? []).map((attachment) => ({
+      id: attachment.id ?? attachment.fileName ?? "attachment",
+      kind: toAssistantChannelAttachmentKind(attachment.kind),
+      fileName: attachment.fileName ?? "attachment",
+      mimeType: toAssistantChannelAttachmentMimeType(attachment.kind)
+    })),
+    ...(input.replyToLeadId
+      ? {
+          replyTo: {
+            sourceChannel: input.channel,
+            sourceMessageId: input.messageId ?? "",
+            leadId: input.replyToLeadId
+          }
+        }
+      : {})
+  };
+}
+
+function toAssistantChannelAttachmentKind(kind: CrmLangGraphAttachment["kind"]): AssistantChannelMessage["attachments"][number]["kind"] {
+  if (kind === "image") {
+    return "photo";
+  }
+
+  if (kind === "pdf") {
+    return "pdf";
+  }
+
+  return "other";
+}
+
+function toAssistantChannelAttachmentMimeType(kind: CrmLangGraphAttachment["kind"]): string {
+  if (kind === "image") {
+    return "image/jpeg";
+  }
+
+  if (kind === "pdf") {
+    return "application/pdf";
+  }
+
+  if (kind === "audio") {
+    return "audio/ogg";
+  }
+
+  return "application/octet-stream";
 }
 
 function createLeadNode(state: typeof GraphState.State): Partial<typeof GraphState.State> {
@@ -293,29 +466,31 @@ function searchLeadsNode(state: typeof GraphState.State): Partial<typeof GraphSt
 }
 
 function clarifyNode(state: typeof GraphState.State): Partial<typeof GraphState.State> {
+  const question = state.clarificationQuestion ?? "Which lead should I update? Search for the lead first, open its Telegram card, and reply to that card.";
   return {
     result: {
       runtime: "langgraph",
       action: {
         type: "clarify",
-        question: "Which lead should I update? Search for the lead first, open its Telegram card, and reply to that card.",
+        question,
         reason: "The message asks for a CRM mutation but does not target a lead."
       },
-      responseText: "Which lead should I update? Search for the lead first, open its Telegram card, and reply to that card."
+      responseText: question
     }
   };
 }
 
-function noActionNode(): Partial<typeof GraphState.State> {
+function noActionNode(state: typeof GraphState.State): Partial<typeof GraphState.State> {
+  const message = state.noActionMessage ?? "I can help create leads, search leads, update a replied lead, add reminders, or save context notes.";
   return {
     result: {
       runtime: "langgraph",
       action: {
         type: "no_action",
-        message: "I can help create leads, search leads, update a replied lead, add reminders, or save context notes.",
+        message,
         reason: "No supported Telegram CRM action was detected."
       },
-      responseText: "I can help create leads, search leads, update a replied lead, add reminders, or save context notes."
+      responseText: message
     }
   };
 }
@@ -397,8 +572,17 @@ function normalizeLeadMaterialInstruction(text: string, leadRef: string | undefi
 }
 
 function hasNewLeadSignal(text: string): boolean {
-  return /(^|\s)(\/newlead|new lead|new client|next client|create lead)\b|(?:новый\s+(?:лид|клиент)|следующий\s+(?:лид|клиент|потенциальный\s+клиент)|создай\s+лид)/i.test(
+  return /(^|\s)(\/newlead|new lead|new client|next client|create lead)\b|(?:(?:еще|ещё)\s+новый\s+(?:лид|клиент)|новый\s+(?:лид|клиент)|следующий\s+(?:лид|клиент|потенциальный\s+клиент)|создай\s+лид)/i.test(
     text
+  );
+}
+
+function isBareNewLeadSessionRequest(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    /^(?:\/newlead(?:@\w+)?|\/new(?:@\w+)?\s+lead|new\s+lead)\s*$/i.test(trimmed) ||
+    /^(?:хочу\s+)?(?:создать|добавить|завести|открыть)\s+(?:нов(?:ый|ого)\s+)?(?:лид|клиент|контакт)\s*$/iu.test(trimmed) ||
+    /^(?:нов(?:ый|ого)\s+)?(?:лид|клиент|контакт)\s*$/iu.test(trimmed)
   );
 }
 
