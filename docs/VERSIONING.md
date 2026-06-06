@@ -4,7 +4,7 @@ The CRM project uses SemVer before the public `1.0.0` release.
 
 ## Current Stable Baseline
 
-Current stable version: `0.4.27`
+Current stable version: `0.4.28`
 
 Stable tag format:
 
@@ -31,6 +31,7 @@ v0.4.3
 v0.4.25
 v0.4.26
 v0.4.27
+v0.4.28
 ```
 
 ## Branch Workflow
@@ -157,6 +158,16 @@ The empty history state also exposes an accessible label that names the current 
 The `Release workflow` panel summarizes the selected version as a lightweight checklist: captured feedback, remaining planning work, release notes review, and Markdown export readiness.
 
 The `Release readiness` panel shows whether the selected version is blocked or ready for release note review, including actionable counts, planned counts, draft item counts, and explicit blockers.
+
+## 0.4.28
+
+LangGraph Telegram search and material attachment:
+
+- Telegram LangGraph runtime can route lead search requests and show the latest 6 leads before a query.
+- Search results can open Telegram lead cards for reply-based updates, notes, reminders, and source-material additions.
+- Forwarded WhatsApp, Mail, voice, image, PDF, or document material can be attached to an existing lead with captions such as `к лиду 009` or `to lead L-2026-009`.
+- Explicit lead references are resolved before intake; unresolved or ambiguous references ask for clarification instead of creating a new lead.
+- Telegram help, the shared assistant capability message, and the CRM Orchestrator default prompt now document this workflow.
 
 ## 0.4.27
 
