@@ -57,6 +57,50 @@ describe("crm langgraph orchestrator", () => {
     });
   });
 
+  it("routes forwarded material with a short lead reference to lead material attachment", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "16",
+      text: "к лиду 009, возьми BGF отсюда",
+      receivedAt: "2026-06-05T10:00:00.000Z",
+      attachments: [{ id: "voice-file", kind: "audio", fileName: "whatsapp-audio.ogg" }]
+    });
+
+    expect(result.action).toMatchObject({
+      type: "attach_material_to_lead",
+      leadId: null,
+      leadRef: "к лиду 009",
+      materialKinds: ["audio"],
+      fieldCommand: {
+        field: "bgfM2",
+        sourceScope: "any",
+        only: false
+      }
+    });
+  });
+
+  it("routes material with a resolved selected lead to lead material attachment", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "17",
+      selectedLeadId: "L-2026-009",
+      text: "к лиду 009, добавь это к заявке",
+      receivedAt: "2026-06-05T10:00:00.000Z",
+      attachments: [{ id: "photo-file", kind: "image", fileName: "whatsapp-screen.jpg" }]
+    });
+
+    expect(result.action).toMatchObject({
+      type: "attach_material_to_lead",
+      leadId: "L-2026-009",
+      leadRef: "к лиду 009",
+      materialKinds: ["image"]
+    });
+  });
+
   it("routes a replied follow-up request to reminder creation", async () => {
     const result = await runCrmLangGraphOrchestrator({
       workspaceId: "workspace-demo",
@@ -92,6 +136,38 @@ describe("crm langgraph orchestrator", () => {
       type: "add_context_note",
       leadId: "L-2026-777",
       note: expect.stringContaining("Oktoberfest")
+    });
+  });
+
+  it("routes natural lead search requests to the search tool", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "14",
+      text: "find client Schneider lake",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "search_leads",
+      query: "find client Schneider lake"
+    });
+  });
+
+  it("routes recent-list search requests to the search tool", async () => {
+    const result = await runCrmLangGraphOrchestrator({
+      workspaceId: "workspace-demo",
+      channel: "telegram",
+      chatId: "410",
+      messageId: "15",
+      text: "show last 10 leads",
+      receivedAt: "2026-06-05T10:00:00.000Z"
+    });
+
+    expect(result.action).toMatchObject({
+      type: "search_leads",
+      query: "show last 10 leads"
     });
   });
 });

@@ -104,6 +104,24 @@ describe("lead search/filter agent", () => {
     expect(filterLeadSearchRecords(records, emailRequest)).toEqual([records[1]]);
   });
 
+  it("filters leads by short numeric area fragments", () => {
+    const areaLead: LeadSearchRecord = {
+      id: "lead-6",
+      leadId: "L-2026-006",
+      createdDate: "2026-06-04T10:00:00.000Z",
+      status: "new",
+      clientName: "Artur Grauberger",
+      requestType: "Potential developer",
+      bgfM2: 45
+    };
+    const request = parseLeadSearchFilterRequest("search 45", {
+      now: new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    expect(request.filters.query).toBe("45");
+    expect(filterLeadSearchRecords([...records, areaLead], request)).toEqual([areaLead]);
+  });
+
   it("finds leads by human title fragments instead of exact full names", () => {
     const titleLead: LeadSearchRecord = {
       id: "lead-5",

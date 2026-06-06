@@ -16,6 +16,17 @@ export type LeadSearchRecord = {
   phone?: string | null;
   displayName?: string | null;
   searchTags?: string[] | null;
+  rawInput?: string | null;
+  summary?: string | null;
+  bgfM2?: number | string | null;
+  budgetEur?: number | string | null;
+  desiredStart?: string | null;
+  desiredMoveIn?: string | null;
+  urgency?: string | null;
+  source?: string | null;
+  messenger?: string | null;
+  communicationChannel?: string | null;
+  missingData?: string[] | null;
 };
 
 export type LeadSearchDatePreset = "last_month" | "current_month" | null;
@@ -206,12 +217,22 @@ export function createLeadSearchFilterSubmissionResult(
 }
 
 function formatLeadSearchLine(record: LeadSearchRecord): string {
-  const details = [record.displayName, record.clientName, record.requestType, record.projectAddress, record.temperature, record.status]
+  const clientName = record.clientName?.trim();
+  const safeLeadId = escapeLeadSearchHtml(record.leadId);
+  const details = [
+    clientName ? `<b>${escapeLeadSearchHtml(clientName)}</b>` : null,
+    record.displayName,
+    record.requestType,
+    record.projectAddress,
+    record.temperature,
+    record.status
+  ]
     .filter(Boolean)
+    .map((value) => (String(value).startsWith("<b>") ? String(value) : escapeLeadSearchHtml(String(value))))
     .join(" · ");
   const compactDetails = truncateSearchResultDetails(details);
 
-  return compactDetails ? `<b>${record.leadId}</b> · ${compactDetails}` : `<b>${record.leadId}</b>`;
+  return compactDetails ? `${safeLeadId} · ${compactDetails}` : safeLeadId;
 }
 
 function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
@@ -226,6 +247,17 @@ function doesLeadMatchQuery(record: LeadSearchRecord, query: string): boolean {
     record.projectAddress,
     record.email,
     record.phone,
+    record.rawInput,
+    record.summary,
+    record.bgfM2 === undefined || record.bgfM2 === null ? null : String(record.bgfM2),
+    record.budgetEur === undefined || record.budgetEur === null ? null : String(record.budgetEur),
+    record.desiredStart,
+    record.desiredMoveIn,
+    record.urgency,
+    record.source,
+    record.messenger,
+    record.communicationChannel,
+    ...(record.missingData ?? []),
     ...(record.searchTags ?? [])
   ]
     .filter((value): value is string => Boolean(value))
@@ -278,6 +310,14 @@ function truncateButtonTitle(title: string): string {
   const lastSpace = head.lastIndexOf(" ");
   const trimmedHead = lastSpace >= 20 ? head.slice(0, lastSpace) : head;
   return `${trimmedHead.trimEnd()}...`;
+}
+
+function escapeLeadSearchHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function doesSearchTokenMatch(token: string, haystackValues: string[]): boolean {
@@ -364,8 +404,8 @@ function detectSearchQuery(content: string, options: { hasStructuredFilters: boo
   }
 
   const explicit =
-    /\b(?:find|search|show|list|open|pull\s+up)\s+(?:leads?|projects?|clients?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about|named|by\s+name|by\s+title)\s+)?([A-Za-z0-9_ -]{3,80})/i.exec(trimmed) ??
-    /(?:найди|покажи|найти|ищи|открой)\s+(?:лид[а-яё]*|проект[а-яё]*|клиент[а-яё]*)?\s*(?:(по\s+тегу|с\s+тегом|про|по\s+названию|по\s+имени)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{3,80})/i.exec(trimmed) ??
+    /\b(?:find|search|show|list|open|pull\s+up)\s+(?:leads?|projects?|clients?\s+)?(?:(tagged|with\s+tag|by\s+tag|for|about|named|by\s+name|by\s+title)\s+)?([A-Za-z0-9_ -]{2,80})/i.exec(trimmed) ??
+    /(?:найди|покажи|найти|ищи|открой)\s+(?:лид[а-яё]*|проект[а-яё]*|клиент[а-яё]*)?\s*(?:(по\s+тегу|с\s+тегом|про|по\s+названию|по\s+имени)\s+)?([A-Za-zА-Яа-яЁё0-9_ -]{2,80})/i.exec(trimmed) ??
     null;
 
   if (!explicit) {

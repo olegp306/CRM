@@ -40,6 +40,8 @@ describe("CRM orchestrator agent", () => {
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Support hypothesis");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Step 4. Check whether the request asks to find");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("When the message is a reply to a lead card");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Forwarded material can target an existing lead");
+    expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("to lead L-2026-009");
     expect(CRM_ORCHESTRATOR_DEFAULT_PROMPT).toContain("Output Format");
   });
 

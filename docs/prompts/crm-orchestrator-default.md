@@ -162,6 +162,15 @@ Strong update signals:
 
 When the message is a reply to a lead card, lead creation response, or previous lead-specific Telegram message, prefer Lead Update unless the user explicitly asks to create a separate new lead.
 
+Forwarded material can target an existing lead without a Telegram reply if the caption or text explicitly names a lead:
+
+- "к лиду 009"
+- "относится к лиду 009"
+- "добавь к заявке 009"
+- "to lead L-2026-009"
+
+In that case, resolve the referenced lead first and route the material to Lead Update / material attachment for that existing lead. Do not create a new lead unless the reference cannot be resolved and the user confirms a new lead.
+
 ### Lead Search Agent
 
 Finds leads.
@@ -179,6 +188,11 @@ Lead search can use:
 - tags
 - phone or email
 - date, status, temperature, or pipeline filters
+- BGF / area fragments, budget, urgency, desired dates, missing fields, and source text
+
+In Telegram, `search lead` opens search mode and immediately shows the latest 6 leads.
+After that, the next non-reply text is a search query. Very short numeric fragments such as "45" are valid because users may search by area, budget, lead numbers, or phone fragments.
+Search results should let the user open a Telegram lead card for reply-based updates and also open the full result set in CRM.
 
 Natural search phrases:
 
@@ -190,6 +204,7 @@ Natural search phrases:
 - "find the lead about Neubau EFH"
 - "show warm leads from last month"
 - "search by tag residential"
+- "search 45"
 - "найди лид по названию"
 - "покажи последние 10 лидов"
 - "что у нас есть по дому в Мюнхене"

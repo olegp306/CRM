@@ -15,6 +15,7 @@ import {
   createCrmEntityPersistencePlan,
   createOpenAiCrmEntityExtractor,
   createOpenAiCrmOrchestrator,
+  extractExplicitLeadReference,
   runCrmLangGraphOrchestrator,
   createLeadReminderDraft,
   createReminderHistorySummary,
@@ -272,9 +273,11 @@ const telegramUndoneActionMemory = new Set<string>();
 const telegramSearchModeMemory = new Set<string>();
 const telegramBotCommandMenuMemory = new Set<string>();
 const TELEGRAM_BOT_COMMANDS = [
-  { command: "newlead", description: "new lead" },
-  { command: "searchlead", description: "search lead" }
+  { command: "newlead", description: "create a new lead" },
+  { command: "searchlead", description: "search leads" }
 ];
+const TELEGRAM_SEARCH_MODE_PAGE_SIZE = 6;
+const TELEGRAM_SEARCH_MODE_MIN_QUERY_LENGTH = 2;
 
 type TelegramLeadUndoActionType = "create_lead" | "update_lead";
 
@@ -444,6 +447,22 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
       continue;
     }
 
+    if (isTelegramSearchModeActive(config.workspaceId, message.chatId) && !isExplicitTelegramHelpCommand(message)) {
+      const searchFilterResponse = await createTelegramSearchFilterResponse(config, client, message);
+      if (searchFilterResponse) {
+        await sendWorkerTelegramMessage({
+          botToken: config.botToken,
+          chatId: message.chatId,
+          text: searchFilterResponse.text,
+          parseMode: "HTML",
+          replyMarkup: createTelegramResponseReplyMarkup(searchFilterResponse.buttons, config.crmBaseUrl),
+          fetchImpl
+        });
+        skipped += message.sourceMessageIds.length;
+        continue;
+      }
+    }
+
     if (isTelegramHelpRequest(message)) {
       await sendWorkerTelegramMessage({
         botToken: config.botToken,
@@ -479,8 +498,10 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         summary: message.text
       })
     );
+    const explicitLeadReferenceResolution = await resolveLeadByTelegramExplicitReference(client, config.workspaceId, message.text);
     const repliedLead =
       (message.replyToMessageId ? await findLeadByTelegramReplyContext(client, config.workspaceId, message) : null) ??
+      (explicitLeadReferenceResolution.kind === "single" ? explicitLeadReferenceResolution.lead : null) ??
       (await findLeadByTelegramTextContext(client, config.workspaceId, message.text));
     const replyLeadFlowDecision = repliedLead
       ? decideLeadFlow(
@@ -519,6 +540,43 @@ export async function processTelegramUpdates(updates: TelegramUpdate[], config: 
         skipped += message.sourceMessageIds.length;
         continue;
       }
+    }
+
+    if (langGraphResultForMessage?.action.type === "search_leads") {
+      const searchFilterResponse = await createTelegramLeadSearchResponse(
+        config,
+        client,
+        langGraphResultForMessage.action.query ?? `show last ${TELEGRAM_SEARCH_MODE_PAGE_SIZE} leads`
+      );
+      await sendWorkerTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: searchFilterResponse.text,
+        parseMode: "HTML",
+        replyMarkup: createTelegramResponseReplyMarkup(searchFilterResponse.buttons, config.crmBaseUrl),
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
+    }
+
+    if (langGraphResultForMessage?.action.type === "attach_material_to_lead" && !repliedLead) {
+      await sendWorkerTelegramMessage({
+        botToken: config.botToken,
+        chatId: message.chatId,
+        text: createTelegramExplicitLeadReferenceResolutionMessage(langGraphResultForMessage.action.leadRef, explicitLeadReferenceResolution),
+        parseMode: "HTML",
+        replyMarkup:
+          explicitLeadReferenceResolution.kind === "multiple"
+            ? createTelegramResponseReplyMarkup(
+                explicitLeadReferenceResolution.leads.map((lead) => ({ label: lead.leadId, action: "open_lead" as const, value: lead.leadId })),
+                config.crmBaseUrl
+              )
+            : undefined,
+        fetchImpl
+      });
+      skipped += message.sourceMessageIds.length;
+      continue;
     }
 
     if (
@@ -2269,7 +2327,9 @@ function createTelegramLangGraphResponseText(result: CrmLangGraphResult): string
 function createTelegramLangGraphReplyMarkup(result: CrmLangGraphResult, crmBaseUrl: string | undefined): unknown | undefined {
   const action = result.action;
   const leadId =
-    action.type === "update_lead" || action.type === "create_reminder" || action.type === "add_context_note" ? action.leadId : null;
+    action.type === "update_lead" || action.type === "create_reminder" || action.type === "add_context_note" || action.type === "attach_material_to_lead"
+      ? action.leadId
+      : null;
 
   if (!leadId) {
     return undefined;
@@ -2283,7 +2343,9 @@ function shouldExecuteTelegramLangGraphActionWithExistingTools(result: CrmLangGr
     result.action.type === "create_lead" ||
     result.action.type === "update_lead" ||
     result.action.type === "create_reminder" ||
-    result.action.type === "add_context_note"
+    result.action.type === "add_context_note" ||
+    result.action.type === "attach_material_to_lead" ||
+    result.action.type === "search_leads"
   );
 }
 
@@ -2479,6 +2541,16 @@ function isTelegramHelpRequest(message: Pick<AllowedTelegramMessage, "text" | "a
   );
 }
 
+function isExplicitTelegramHelpCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
+  const text = message.text.trim();
+
+  return (
+    (message.attachments?.length ?? 0) === 0 &&
+    message.replyToMessageId === undefined &&
+    /^\/(start|help|about)(@\w+)?$/i.test(text)
+  );
+}
+
 function isTelegramSearchModeStartCommand(message: Pick<AllowedTelegramMessage, "text" | "attachments" | "replyToMessageId">): boolean {
   const text = message.text.trim();
   return (
@@ -2509,8 +2581,11 @@ function isTelegramSearchCapabilityQuestion(message: Pick<AllowedTelegramMessage
 function createTelegramSearchCapabilityMessage(): string {
   return [
     "Search works.",
-    "Use search lead to enter search mode, then send a name, title, tag, phone, email, or location.",
-    "Examples: show last 10 leads; find Schneider lake; search by tag residential."
+    "Use search lead to enter search mode. I show the latest 6 leads first, then you can send any query.",
+    "I search across lead title, client name, address, request, tags, phone, email, status, dates, budget, BGF, missing fields, and source text.",
+    "Short numeric searches work too, for example 45 for an area fragment.",
+    "Each result can be opened as a Telegram lead card, and the full result set can be opened in CRM.",
+    "Examples: show last 10 leads; find Schneider lake; search by tag residential; search 45."
   ].join("\n");
 }
 
@@ -2584,7 +2659,9 @@ function createTelegramSharedHelpMessage(workspaceId: string, chatId: string, co
     "",
     "Quick guide:",
     "- new lead: create a lead, then send text, PDF, photos, screenshots, voice, or audio.",
-    "- search lead: find a lead, open its Telegram card, then reply to update it.",
+    "- search lead: I show the latest 6 leads first, then you can search across all lead fields. Open a result as a Telegram card, then reply to update it.",
+    "- forwarded WhatsApp/Mail material: add a caption like к лиду 009 or to lead L-2026-009, and I attach it to that lead instead of creating a new one.",
+    "- search examples: Schneider, Gartenweg, warm, +49 160, 45, show last 10 leads.",
     "- One reply = one action: update a field, add a note, or add a reminder.",
     "Use the Guide button for the full instruction with copyable examples."
   ].join("\n");
@@ -2630,10 +2707,10 @@ async function createTelegramSearchModeStartedResponse(
   offset = 0
 ) {
   const records = (await findTelegramLeadSearchRecords(config, client)).map(toTelegramLeadSearchRecord);
-  const pageSize = 5;
+  const pageSize = TELEGRAM_SEARCH_MODE_PAGE_SIZE;
   const safeOffset = Math.max(0, offset);
   const page = records.slice(safeOffset, safeOffset + pageSize);
-  const response = createLeadSearchFilterResponse("show last 5 leads", page, {
+  const response = createLeadSearchFilterResponse(`show last ${pageSize} leads`, page, {
     includeCrmButtons: true,
     telegramLeadButtons: true,
     limit: pageSize
@@ -2641,9 +2718,9 @@ async function createTelegramSearchModeStartedResponse(
   const hasNext = records.length > safeOffset + pageSize;
   const buttons = [
     ...createTelegramLeadIdButtonLabels(response.buttons),
-    ...(hasNext ? [{ label: "next 5", action: "search_next", value: String(safeOffset + pageSize) }] : [])
+    ...(hasNext ? [{ label: `next ${pageSize}`, action: "search_next", value: String(safeOffset + pageSize) }] : [])
   ];
-  const rangeLabel = safeOffset === 0 ? "latest five leads" : `leads ${safeOffset + 1}-${safeOffset + page.length}`;
+  const rangeLabel = safeOffset === 0 ? `latest ${pageSize} leads` : `leads ${safeOffset + 1}-${safeOffset + page.length}`;
   const foundLabel = records.length === 0 ? "no leads found" : `${page.length} of ${records.length} leads found`;
 
   return {
@@ -2672,6 +2749,13 @@ async function createTelegramSearchFilterResponse(
     return null;
   }
 
+  if (isSearchMode && !isTelegramSearchOrFilterRequest(message.text) && isTelegramSearchModeQueryTooShort(message.text)) {
+    return {
+      text: `Search query is too short. Send at least ${TELEGRAM_SEARCH_MODE_MIN_QUERY_LENGTH} characters, for example: Schneider, Gartenweg, +49 160 or warm.`,
+      buttons: []
+    };
+  }
+
   const searchText = isSearchMode && !isTelegramSearchOrFilterRequest(message.text) ? `search ${message.text}` : message.text;
   if (!isSearchMode) {
     const decision = routeCrmOrchestratorRequest(createTelegramAssistantChannelMessage(config.workspaceId, { ...message, text: searchText }));
@@ -2680,6 +2764,23 @@ async function createTelegramSearchFilterResponse(
     }
   }
 
+  return createTelegramLeadSearchResponse(config, client, searchText);
+}
+
+function isTelegramSearchModeQueryTooShort(text: string): boolean {
+  const normalized = text
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+  return normalized.length > 0 && normalized.length < TELEGRAM_SEARCH_MODE_MIN_QUERY_LENGTH;
+}
+
+async function createTelegramLeadSearchResponse(
+  config: Pick<TelegramWorkerConfig, "workspaceId">,
+  client: TelegramWorkerPrismaLike,
+  searchText: string
+) {
   const records = await findTelegramLeadSearchRecords(config, client);
 
   const response = createLeadSearchFilterResponse(searchText, records.map(toTelegramLeadSearchRecord), {
@@ -2708,11 +2809,18 @@ async function findTelegramLeadSearchRecords(config: Pick<TelegramWorkerConfig, 
       leadId: true,
       displayName: true,
       searchTags: true,
+      rawInput: true,
       createdDate: true,
       status: true,
       temperature: true,
       requestType: true,
       projectAddress: true,
+      bgfM2: true,
+      budgetEur: true,
+      desiredStart: true,
+      desiredMoveIn: true,
+      urgency: true,
+      missingData: true,
       client: {
         select: {
           name: true,
@@ -2734,6 +2842,13 @@ function toTelegramLeadSearchRecord(record: {
   temperature?: string | null;
   requestType?: string | null;
   projectAddress?: string | null;
+  rawInput?: string | null;
+  bgfM2?: number | null;
+  budgetEur?: number | string | null;
+  desiredStart?: Date | string | null;
+  desiredMoveIn?: Date | string | null;
+  urgency?: string | null;
+  missingData?: string[] | null;
   email?: string | null;
   phone?: string | null;
   client?: { name?: string | null; email?: string | null; phone?: string | null } | null;
@@ -2749,10 +2864,25 @@ function toTelegramLeadSearchRecord(record: {
     temperature: record.temperature,
     requestType: record.requestType,
     projectAddress: record.projectAddress,
+    rawInput: record.rawInput,
+    bgfM2: record.bgfM2,
+    budgetEur: record.budgetEur,
+    desiredStart: formatTelegramSearchDateValue(record.desiredStart),
+    desiredMoveIn: formatTelegramSearchDateValue(record.desiredMoveIn),
+    urgency: record.urgency,
+    missingData: record.missingData,
     clientName: record.client?.name ?? record.clientName ?? null,
     email: record.client?.email ?? record.email ?? null,
     phone: record.client?.phone ?? record.phone ?? null
   };
+}
+
+function formatTelegramSearchDateValue(value?: Date | string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value instanceof Date ? value.toISOString() : value;
 }
 
 function normalizeTelegramLeadSearchTags(value: unknown): string[] | null {
@@ -3524,6 +3654,54 @@ async function findLeadByTelegramTextContext(
   return findLeadByLeadId(client, workspaceId, leadId);
 }
 
+type TelegramExplicitLeadReferenceResolution =
+  | { kind: "none"; leadRef: string | null }
+  | { kind: "not_found"; leadRef: string }
+  | { kind: "single"; leadRef: string; lead: Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number] }
+  | { kind: "multiple"; leadRef: string; leads: Array<Awaited<ReturnType<TelegramWorkerPrismaLike["lead"]["findMany"]>>[number]> };
+
+async function resolveLeadByTelegramExplicitReference(
+  client: TelegramWorkerPrismaLike,
+  workspaceId: string,
+  text: string
+): Promise<TelegramExplicitLeadReferenceResolution> {
+  const reference = extractExplicitLeadReference(text);
+  if (!reference) {
+    return { kind: "none", leadRef: null };
+  }
+
+  if (reference.leadId) {
+    const lead = await findLeadByLeadId(client, workspaceId, reference.leadId);
+    return lead ? { kind: "single", leadRef: reference.raw, lead } : { kind: "not_found", leadRef: reference.raw };
+  }
+
+  const numericSuffix = reference.numericSuffix;
+  if (!numericSuffix) {
+    return { kind: "not_found", leadRef: reference.raw };
+  }
+
+  const leads = await client.lead.findMany({
+    where: { workspaceId },
+    select: createTelegramLeadLookupSelect()
+  });
+  const matches = leads.filter((lead) => doesTelegramLeadIdMatchNumericSuffix(lead.leadId, numericSuffix));
+
+  if (matches.length === 1) {
+    return { kind: "single", leadRef: reference.raw, lead: matches[0] };
+  }
+
+  if (matches.length > 1) {
+    return { kind: "multiple", leadRef: reference.raw, leads: matches.slice(0, 6) };
+  }
+
+  return { kind: "not_found", leadRef: reference.raw };
+}
+
+function doesTelegramLeadIdMatchNumericSuffix(leadId: string, suffix: string): boolean {
+  const tail = /-(\d+)$/.exec(leadId)?.[1];
+  return Boolean(tail && tail.replace(/^0+/, "").padStart(3, "0") === suffix);
+}
+
 async function findLeadByLeadId(
   client: TelegramWorkerPrismaLike,
   workspaceId: string,
@@ -3534,30 +3712,52 @@ async function findLeadByLeadId(
       workspaceId,
       leadId
     },
-    select: {
-      id: true,
-      leadId: true,
-      displayName: true,
-      status: true,
-      rawInput: true,
-      clientRecordId: true,
-      client: { select: { id: true, name: true, email: true, phone: true } },
-      requestType: true,
-      projectAddress: true,
-      bgfM2: true,
-      budgetEur: true,
-      desiredStart: true,
-      desiredMoveIn: true,
-      missingData: true,
-      kpSentDate: true
-    }
+    select: createTelegramLeadLookupSelect()
   });
 
   return leads.find((lead) => lead.leadId === leadId) ?? null;
 }
 
+function createTelegramLeadLookupSelect() {
+  return {
+    id: true,
+    leadId: true,
+    displayName: true,
+    status: true,
+    temperature: true,
+    rawInput: true,
+    clientRecordId: true,
+    client: { select: { id: true, name: true, email: true, phone: true } },
+    requestType: true,
+    projectAddress: true,
+    bgfM2: true,
+    budgetEur: true,
+    desiredStart: true,
+    desiredMoveIn: true,
+    missingData: true,
+    kpSentDate: true
+  };
+}
+
 function extractLeadIdFromTelegramText(text: string | undefined): string | null {
   return /\b(L-\d{4}-\d+)\b/i.exec(text ?? "")?.[1]?.toUpperCase() ?? null;
+}
+
+function createTelegramExplicitLeadReferenceResolutionMessage(
+  leadRef: string,
+  resolution: TelegramExplicitLeadReferenceResolution
+): string {
+  if (resolution.kind === "multiple") {
+    return [
+      `I found several leads for <b>${escapeHtml(leadRef)}</b>.`,
+      "Open the correct lead card below, then reply to that card with the material again."
+    ].join("\n");
+  }
+
+  return [
+    `I could not find lead <b>${escapeHtml(leadRef)}</b>.`,
+    "Please send the full lead number, for example <b>L-2026-009</b>, or use <b>search lead</b> first."
+  ].join("\n");
 }
 
 function createTelegramLeadSessionFromExistingLead(
